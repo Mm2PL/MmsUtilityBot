@@ -1,0 +1,372 @@
+import subprocess as sp
+import time
+import typing
+from typing import List
+
+import twitchirc
+
+with open('password', 'r') as f:
+    passwd = f.readline().replace('\n', '')
+bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
+                    storage=twitchirc.JsonStorage('storage.json', auto_save=True, default={
+                        'permissions': {
+
+                        }
+                    }))
+del passwd
+bot.storage: twitchirc.JsonStorage
+try:
+    bot.storage.load()
+except twitchirc.CannotLoadError:
+    bot.storage.save()
+bot.permissions.update(bot.storage['permissions'])
+cooldowns = {
+    # 'global_{cmd}': time.time() + 1,
+    # '{user}': time.time()
+}
+
+
+class DebugDict(dict):
+    def __setitem__(self, key, value):
+        print(f'DEBUG DICT: SET {key} = {value}')
+        return super().__setitem__(key, value)
+
+    def __getitem__(self, item):
+        print(f'DEBUG DICT: {item}')
+        return super().__getitem__(item)
+
+
+def _is_mod(msg: str):
+    return 'moderator/1' in msg or 'broadcaster/1' in msg
+
+
+def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
+                global_cooldown: int = 1.5 * 60, local_cooldown: int = 2 * 60) -> bool:
+    if not bot.check_permissions(msg, ['util.no_cooldown'], enable_local_bypass=True):
+        cooldowns[f'global_{cmd}'] = time.time()
+        cooldowns[msg.user] = time.time()
+        return False
+    if _is_mod(msg.text):
+        return False
+    if f'global_{cmd}' not in cooldowns:
+        cooldowns[f'global_{cmd}'] = time.time() + global_cooldown
+        cooldowns[msg.user] = time.time() + local_cooldown
+        return False
+    if cooldowns[f'global_{cmd}'] > time.time():
+        return True
+    local_name = f'local_{cmd}_{msg.user}'
+    if local_name not in cooldowns:
+        cooldowns[local_name] = time.time() + global_cooldown
+        cooldowns[local_name] = time.time() + local_cooldown
+        return False
+    if cooldowns[local_name] > time.time():
+        return True
+
+    cooldowns[f'global_{cmd}'] = time.time() + global_cooldown
+    cooldowns[local_name] = time.time() + local_cooldown
+    return False
+
+
+current_vote = None
+
+
+@bot.add_command('vote', required_permissions=['util.vote'])
+def vote_command(msg: twitchirc.ChannelMessage):
+    global current_vote
+    # cd_state = do_cooldown(cmd='vote', msg=msg)
+    # if cd_state:
+    #     return
+    a = msg.text[len(bot.prefix):].replace('vote ', '', 1)
+    print(a)
+    if a in ['stop', 'end', 's', 'e', 'sotp']:
+        # bot.send(msg.reply('Calculating results...'))
+        votes = {}
+        # print('\n' * 3)
+        for k, v in current_vote['votes'].items():
+            print(k, v, v.text)
+            num = int(v.text)
+            if num not in votes:
+                votes[num] = 0
+            votes[num] += 1
+        # print('\n' * 3)
+        current_vote = None
+        bot.send(
+            msg.reply(
+                f'Results (choice -> number of people who voted for it): '
+                f'{", ".join([f"{k} -> {v}" for k, v in votes.items()])}'
+            )
+        )
+    else:
+        current_vote = {'start': time.time(), 'votes': {}}
+        bot.send(msg.reply(f'Setup a new vote.'))
+
+
+def new_echo_command(command_name: str, echo_data: str) -> typing.Callable[[twitchirc.ChannelMessage], None]:
+    @bot.add_command(command_name)
+    def echo_command(msg: twitchirc.ChannelMessage):
+        cd_state = do_cooldown(cmd=command_name, msg=msg)
+        if cd_state:
+            return
+        msg.reply(echo_data.replace('${user}', msg.user)
+                  .replace('${cmd}', command_name))
+
+    return echo_command
+
+
+def _is_pleb(msg: twitchirc.ChannelMessage) -> bool:
+    print(msg.flags['badges'])
+    for i in (msg.flags['badges'] if isinstance(msg.flags['badges'], list) else [msg.flags['badges']]):
+        # print(i)
+        if i.startswith('subscriber'):
+            return False
+    return True
+
+
+plebs = {
+    # '{chat_name}': {
+    # '{username}': time.time() + 60 * 60  # Expiration time
+    # }
+}
+subs = {
+    # '{chat_name}': {
+    # '{username}': time.time() + 60 * 60  # Expiration time
+    # }
+}
+
+
+def fix_pleb_list(chat: str):
+    global plebs
+    rem_count = 0
+    if chat not in plebs:
+        plebs[chat] = {}
+        return
+    print(f'plebs: {plebs[chat]}')
+    for k, v in plebs[chat].copy().items():
+        if v < time.time():
+            del plebs[chat][k]
+            rem_count += 1
+    print(f'Removed {rem_count} expired pleb entries.')
+
+
+def fix_sub_list(chat: str):
+    global subs
+    rem_count = 0
+    # print(f'plebs: {subs}')
+    if chat not in subs:
+        subs[chat] = {}
+        return
+    for k, v in subs[chat].copy().items():
+        if v < time.time():
+            del subs[chat][k]
+            rem_count += 1
+    print(f'Removed {rem_count} expired sub entries.')
+
+
+@bot.add_command('count_subs')
+def count_subs_command(msg: twitchirc.ChannelMessage):
+    global subs
+    cd_state = do_cooldown(cmd='count_subs', msg=msg)
+    if cd_state:
+        return
+    fix_sub_list(msg.channel)
+    bot.send(msg.reply(
+        f'@{msg.flags["display-name"]} Counted {len(subs[msg.channel])} subs active in chat during the last hour.'))
+
+
+@bot.add_command('raw')
+def raw_command(msg: twitchirc.ChannelMessage):
+    bot.send(msg.reply(
+        f'plebs = {plebs}, subs = {subs}'
+    ))
+
+
+@bot.add_command('count_plebs')
+def count_pleb_command(msg: twitchirc.ChannelMessage):
+    global plebs
+    cd_state = do_cooldown(cmd='count_plebs', msg=msg)
+    if cd_state:
+        return
+    fix_pleb_list(msg.channel)
+    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel])} '
+                       f'plebs active in chat during the last hour.'))
+
+
+counters = {}
+
+
+def new_counter_command(counter_name, counter_message):
+    global counters
+    counters[counter_name] = {}
+
+    @bot.add_command(counter_name)
+    def command(msg: twitchirc.ChannelMessage):
+        global counters
+        cd_state = do_cooldown(counter_name, msg, global_cooldown=30, local_cooldown=0)
+        if cd_state:
+            return
+        c = counters[counter_name]
+        if msg.channel not in c:
+            c[msg.channel] = 0
+        text = msg.text[len(bot.prefix):].replace(counter_name + ' ', '')
+        modified = False
+        old_val = c[msg.channel]
+        print(repr(text), msg.text)
+        if text.startswith('+1'):
+            c[msg.channel] += 1
+            modified = True
+        elif text.startswith('-1'):
+            c[msg.channel] -= 1
+            modified = True
+        elif text.startswith('='):
+            text = text[1:]
+            print(text)
+            if text.isnumeric() or text[0].startswith('-') and text[1:].isnumeric():
+                c[msg.channel] = int(text)
+                modified = True
+            else:
+                bot.send(msg.reply(f'Not a number: {text}'))
+
+        val = c[msg.channel]
+        if c[msg.channel] < 0:
+            val = 'a lot of'
+        print(val)
+        if modified:
+            bot.send(msg.reply(counter_message[True].format(name=counter_name, old_val=old_val,
+                                                            new_val=val)))
+        else:
+            bot.send(msg.reply(counter_message[False].format(name=counter_name, val=val)))
+
+
+new_counter_command('bonk', {
+    True: 'Bonk counter (from {old_val}) => {new_val}',
+    False: 'Strimer has {name}ed {val} times.'
+})
+tasks: List[typing.Dict[
+    str, typing.Union[sp.Popen, str, twitchirc.ChannelMessage]
+]] = []
+
+
+def add_alias(bot_obj, alias):
+    def decorator(command):
+        if hasattr(command, 'aliases'):
+            command.aliases.append(alias)
+        else:
+            command.aliases = [alias]
+
+        @bot_obj.add_command(alias)
+        def alias_func(msg: twitchirc.ChannelMessage):
+            return command(msg)
+
+        return command
+
+    return decorator
+
+
+@add_alias(bot, 'qc')
+@bot.add_command('quick_clip', required_permissions=['util.clip'])
+def command_quick_clip(msg: twitchirc.ChannelMessage):
+    cd_state = do_cooldown(cmd='quick_clip', msg=msg)
+    if cd_state:
+        return
+    bot.send(msg.reply(f'@{msg.flags["display-name"]}: Clip is on the way!'))
+    qc_proc = sp.Popen(['python3.7', 'clip.py', '-cC', msg.channel], stdout=sp.PIPE)
+    tasks.append({'proc': qc_proc, 'owner': msg.user, 'msg': msg})  # hack to make replying easier
+
+
+def check_quick_clips():
+    for i in tasks.copy():
+        if i['proc'].poll() is not None:  # process exited.
+            if i['proc'].poll() not in [0, 2]:
+                more_info = (" Check the logs for more information"
+                             if not bot.check_permissions(i["msg"], permissions=['group.bot_admin'])
+                             else '')
+                bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
+                                        f'creation of your clip. '
+                                        f'Exit code: {i["proc"].poll()}.'
+                                        f'{more_info}'))
+                print('=' * 80)
+                print(b''.join(i['proc'].stdout.readlines()).decode('utf-8', 'replace'))
+                print('=' * 80)
+            elif i['proc'].poll() == 2:
+                next_line = ''
+                error_name = ''
+                error_message = ''
+                print('=' * 80)
+                for line in i['proc'].stdout.readlines():
+                    line = line.decode('utf-8', errors='ignore').replace('\n', '')
+                    print(line)
+                    if line == '@error':
+                        next_line = 'name'
+                        continue
+                    if next_line == 'message':
+                        error_message = line
+                    if next_line == 'name':
+                        error_name = line
+                        next_line = 'message'
+                print('=' * 80)
+                bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
+                                        f'creation of your clip. Error name: {error_name}, message: {error_message}'))
+            else:
+                clip_url = 'CLIP URL UNKNOWN'
+                print('=' * 80)
+                for line in i['proc'].stdout.readlines():
+                    line = line.decode('utf-8', errors='ignore').replace('\n', '')
+                    print(line)
+                    if line.startswith('#'):
+                        continue
+                    clip_url = line
+                print('=' * 80)
+
+                if clip_url == 'CLIP URL UNKNOWN':
+                    more_info = (" Check the logs for more information"
+                                 if not bot.check_permissions(i["msg"], permissions=['group.bot_admin'])
+                                 else '')
+                    bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
+                                            f'creation of your clip. Error name: NO_URL, '
+                                            f'message: The sub-program responsible for creating the clip didn\'t '
+                                            f'give a url back.{more_info}'))
+                bot.send(i['msg'].reply(f'@{i["msg"].user}, Your clip is here: {clip_url}'))
+            tasks.remove(i)
+
+
+def any_msg_handler(event: str, msg: twitchirc.Message, *args):
+    del event, msg, args
+    check_quick_clips()
+
+
+def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
+    global plebs
+    # print(event, msg, args)
+    if _is_pleb(msg):
+        if msg.channel not in plebs:
+            plebs[msg.channel] = {}
+        plebs[msg.channel][msg.user] = time.time() + 60 * 60
+        print(event, '(pleb)', msg)
+    else:
+        if msg.channel not in subs:
+            subs[msg.channel] = {}
+        subs[msg.channel][msg.user] = time.time() + 60 * 60
+        print(event, '(sub)', msg)
+    if current_vote:
+        if msg.text.isnumeric():
+            current_vote['votes'][msg.user] = msg
+
+
+bot.handlers['chat_msg'].append(chat_msg_handler)
+bot.handlers['any_msg'].append(any_msg_handler)
+twitchirc.get_join_command(bot)
+twitchirc.get_part_command(bot)
+twitchirc.get_perm_command(bot)
+twitchirc.get_no_permission_generator(bot)
+twitchirc.get_quit_command(bot)
+if 'counters' in bot.storage.data:
+    counters = bot.storage['counters']
+bot.twitch_mode()
+bot.join(bot.username.lower())
+try:
+    bot.run()
+finally:
+    bot.storage['counters'] = counters
+    bot.storage['permissions'].update(bot.permissions.users)
+    bot.storage['permissions'].update(bot.permissions.groups)
+    bot.storage.save()
