@@ -1,0 +1,39 @@
+[
+  {
+    "name": "ned",
+    "message": "Ned is a god PogU Clap",
+    "type": "echo",
+    "channel": "nedaiej"
+  },
+  {
+    "name": "bonk",
+    type: "counter",
+    message: {
+      "true": 'Bonk counter (from {old_val}) => {new_val}',
+      "false": 'Strimer has {name}ed {val} times.'
+    }
+  },
+  {
+    "name": "tea",
+    "type": "echo",
+    "message": "Go to sleep {+} linkusZ",
+    "channel": ["grandpatitan", "mm_sutilitybot"]
+  },
+  {
+    "name": "mb.familytree",
+    "type": "echo",
+    message: "@{user} https://pbs.twimg.com/media/D97woXoXoAYEKj2?format=jpg&name=medium",
+    channel: [
+      "mm_sutilitybot",
+      "mm2pl"
+    ]
+  },
+  {
+    "name": "notPG",
+    "type": "counter",
+    message: {
+      "true": "Strimer has said something non-PG {new_val} times (from {old_val})",
+      "false": "Strimer has said something non-PG {val} times"
+    }
+  }
+]

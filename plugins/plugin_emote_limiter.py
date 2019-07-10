@@ -1,0 +1,198 @@
+import datetime
+import time
+from typing import Dict, Union
+
+try:
+    # noinspection PyPackageRequirements
+    import main
+
+except ImportError:
+    import util_bot as main
+
+    exit()
+import twitchirc
+
+__meta_data__ = {
+    'name': 'plugin_emote_limiter.py/Emote limiter',
+    'commands': []
+}
+log = main.make_log_function('auto_load')
+emotes = {
+    'monkaS': {
+        'limit': 50,
+        'emotes': {
+            'monkaS': 1,
+            'monkaW': 2,
+            'monkaEXTREME': 5
+        }
+    },
+}
+users: Dict[str, Dict[str, Union[int, float]]] = {
+    # 'user': {
+    #     'limit_name': 1,  # amount left
+    #     '_last_regen': time.time()  # time of last regen
+    # }
+}
+REGEN_TIME = 30
+REGEN_AMOUNT = 20
+
+
+def _calculate_message_cost(msg: twitchirc.ChannelMessage) -> Dict[str, int]:
+    cost = {}
+    for limit_name, limit_data in emotes.items():
+        cost[limit_name] = 0
+        for emote, emote_cost in limit_data['emotes'].items():
+            cost[limit_name] += emote_cost * msg.text.count(emote)
+    for k, v in cost.copy().items():
+        if v == 0:
+            del cost[k]
+    return cost
+
+
+def _check_message_cost(msg: twitchirc.ChannelMessage, cost: Dict[str, int]):
+    c = users[msg.user]
+    for limit in cost:
+        # limit remaining after the message was sent
+        # <=
+        # 0
+        if c[limit] - cost[limit] < 0:
+            return False, limit, cost[limit]
+    return True, None, 0
+
+
+def _subtract_cost(msg: twitchirc.ChannelMessage, cost: Dict[str, int]):
+    global users
+    for limit_name, limit_cost in cost.items():
+        users[msg.user][limit_name] -= limit_cost
+
+
+def _regenerate_emotes():
+    curr_time = time.time()
+    for us_name, us_data in users.items():
+        # Regenerate emotes unless the `time of last regen + time to regenerate` (time the emotes should be regenerated)
+        # is bigger than the current time
+        if us_data['_last_regen'] + REGEN_TIME > curr_time:
+            continue  # skip this channel
+        us_data['_last_regen'] = curr_time
+        # ↓ Regenerate
+        for emote_limit in us_data.keys():
+            if emote_limit == '_last_regen':
+                continue
+            us_data[emote_limit] += REGEN_AMOUNT
+            if us_data[emote_limit] > emotes[emote_limit]['limit']:
+                us_data[emote_limit] = emotes[emote_limit]['limit']
+
+
+def any_msg_handler(event, msg: twitchirc.Message):
+    _regenerate_emotes()
+
+
+def make_new_user(name):
+    users[name] = {}
+    for i in emotes:
+        users[name][i] = emotes[i]['limit']
+    users[name]['_last_regen'] = time.time()
+
+
+def msg_handler(event, msg: twitchirc.ChannelMessage):
+    if msg.text.startswith(main.bot.prefix):
+        return  # Ignore commands
+
+    if msg.user not in users:
+        make_new_user(msg.user)
+    log('info', users[msg.user])
+    cost = _calculate_message_cost(msg)
+    result, limit_blocking, limit_blocking_amount = _check_message_cost(msg, cost)
+    if result:
+        _subtract_cost(msg, cost)
+    else:
+        main.bot.send(msg.reply(f'/timeout {msg.user} 1'))
+        main.bot.send(msg.reply(f'@{msg.user} You run out of {limit_blocking} and cannot post that message, '
+                                f'your message cost {limit_blocking_amount} {limit_blocking}, but you only have '
+                                f'{users[msg.user][limit_blocking]} {limit_blocking}'))
+
+
+ALLOWED_CHANNELS = {
+    'emote_cost': ['mm_sutilitybot', 'mm2pl'],
+    'find_limit': ['mm_sutilitybot', 'mm2pl'],
+    'show_limits': ['mm_sutilitybot', 'mm2pl']
+}
+
+
+def check_if_command_is_allowed(command_name, channel) -> bool:
+    return channel in ALLOWED_CHANNELS[command_name]
+
+
+@main.bot.add_command('find_limit')
+def command_find_limit(msg: twitchirc.ChannelMessage):
+    is_allowed = check_if_command_is_allowed('find_limit', msg.channel)
+    if not is_allowed:
+        return
+    argv = msg.text.split(' ')
+    if '' in argv:
+        argv.remove('')
+    if len(argv) == 1:
+        main.bot.send(msg.reply(f'@{msg.user} Usage: !find_limit (emote), NOTE commands are exempt '
+                                f'from emote costs'))
+        return
+    for limit_name, limit_data in emotes.items():
+        if argv[1] in limit_data['emotes']:
+            main.bot.send(msg.reply(f'@{msg.user} Emote {argv[1]} belongs to limit {limit_name}.'))
+            return
+    main.bot.send(msg.reply(f'@{msg.user} Failed to find which limit {argv[1]} belongs to. :('))
+
+
+@main.bot.add_command('emote_cost')
+def command_show_emote_cost(msg: twitchirc.ChannelMessage):
+    is_allowed = check_if_command_is_allowed('emote_cost', msg.channel)
+    if not is_allowed:
+        return
+
+    argv = msg.text.split(' ')
+    if '' in argv:
+        argv.remove('')
+    if len(argv) == 1:
+        main.bot.send(msg.reply(f'@{msg.user} Usage: !emote_cost (limit)'))
+        return
+    if argv[1] in emotes:
+        text = []
+        for k, v in emotes[argv[1]]['emotes'].items():
+            text.append(f'{k} ({v})')
+        main.bot.send(msg.reply(f'@{msg.user} Emotes in the {argv[1]} limit with their cost: {", ".join(text)}'))
+    else:
+        main.bot.send(msg.reply(f'@{msg.user} {argv[1]!r}: No such emote limit.'))
+
+
+@main.bot.add_command('show_limits')
+def command_show_limits(msg: twitchirc.ChannelMessage):
+    is_allowed = check_if_command_is_allowed('show_limits', msg.channel)
+    if not is_allowed:
+        return
+
+    argv = msg.text.split(' ')
+    if '' in argv:
+        argv.remove('')
+    user = msg.user
+    if len(argv) > 1:
+        user = argv[1]
+    text = []
+    for limit_name, limit_data in users[user].items():
+        if limit_name == '_last_regen':
+            continue
+        text.append(f'{limit_data} {limit_name}')
+    # datetime.datetime.now().strftime("%H:%M:%S")
+    regen_time = (datetime.datetime.fromtimestamp(users[user]['_last_regen'] + REGEN_TIME).strftime('%Y-%m-%d '
+                                                                                                    '%H:%M:%S '
+                                                                                                    'CEST(UTC+1h)'))
+    main.bot.send(msg.reply(f'@{msg.user} You have {", ".join(text)}, your limits will regenerate on '
+                            f'{regen_time}'))
+
+
+# for limit in emotes:
+#     for emote in emotes[limit]:
+#         if emote in msg.text:
+#             print(msg.flags, msg.text, msg.flags['id'])
+
+
+main.bot.handlers['chat_msg'].append(msg_handler)
+main.bot.handlers['any_msg'].append(any_msg_handler)

@@ -1,0 +1,59 @@
+{
+  $schema: "http://json-schema.org/draft-07/schema",
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      name: {
+        type: "string"
+      },
+      channel: {
+        type: "string"
+      },
+      type: {
+        enum: [
+          "echo",
+          "counter"
+        ]
+      }
+    },
+    if: {
+      properties: {
+        "type": {
+          const: "echo"
+        }
+      }
+    },
+    then: {
+      properties: {
+        message: {
+          type: "string",
+          "x-intellij-html-description": "A String for echo commands. <br/>\nPlaceholders:\n<ol>\n    <li>\n        {user} The user that executed the command.\n    </li>\n    <li>\n        {cmd} The command that was executed.\n    </li>\n    <li>\n        {1}, {2}, etc. Arguments given to the command\n    </li>\n    <li>\n        {+} all the arguments given. Warning: this placeholder can use the arguments by number\n    </li>\n</ol>"
+        }
+      }
+    },
+    else: {
+      properties: {
+        message: {
+          type: "object",
+          "x-intellij-html-description": "An object for counters <br/>\n<ol>\n    <li>\n        true, counters value was changed.\n        <ol>\n            <li>\n                {name} Counter name\n            </li>\n            <li>\n                {old_val} Old value\n            </li>\n            <li>\n                {new_val} New value\n            </li>\n        </ol>\n    </li>\n    <li>\n        false, counter value didn't change\n        <ol>\n            <li>\n                {name} Counter name\n            </li>\n            <li>\n                {val} Current value\n            </li>\n        </ol>\n    </li>\n</ol>",
+          properties: {
+            "\"true\"": {
+              type: "string",
+              additionalProperties: false,
+              description: "Counters value changed"
+            },
+            "\"false\"": {
+              type: "string",
+              additionalProperties: false,
+              description: "Counters value didnt change"
+            }
+          },
+          additionalProperties: false
+        }
+      }
+    },
+
+    additionalProperties: false
+  }
+}
