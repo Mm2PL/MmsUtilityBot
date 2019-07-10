@@ -3,3 +3,4 @@ twitch_api
 venv/
 storage.json
 .idea/
+plugins/__pycache__/
