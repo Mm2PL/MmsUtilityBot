@@ -58,4 +58,4 @@ def command_load_plugin(msg: twitchirc.ChannelMessage):
         pl = main.load_file(argv[0])
         main.bot.send(msg.reply(f'Successfully loaded plugin: {pl.name}'))
     except Exception as e:
-        main.bot.send(msg.reply(f'An exception was encountered: {e}'))
+        main.bot.send(msg.reply(f'An exception was encountered: {e!r}'))

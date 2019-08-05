@@ -19,12 +19,17 @@ import datetime
 import importlib.util
 import os
 import subprocess as sp
+import sys
 import time
 import typing
+from dataclasses import dataclass
 from typing import List, Dict
+import argparse
 
 import json5 as json
-import twitchirc
+import twitchirc.debug_bot
+
+import twitch_auth
 
 LOG_LEVELS = {
     'info': '\x1b[32minfo\x1b[m',
@@ -35,12 +40,19 @@ LOG_LEVELS = {
     'debug': 'debug'
 }
 
-with open('password', 'r') as f:
-    passwd = f.readline().replace('\n', '')
 
+@dataclass
+class Args:
+    escalate: bool
+
+
+p = argparse.ArgumentParser()
+p.add_argument('-e', '--escalate', help='Escalate warns, WARNs to ERRs and ERRs to fatals', action='store_true',
+               dest='escalate')
+prog_args = p.parse_args()
 twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
 twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
-
+passwd = 'oauth:' + twitch_auth.json_data['access_token']
 bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
                     storage=twitchirc.JsonStorage('storage.json', auto_save=True, default={
                         'permissions': {
@@ -76,9 +88,21 @@ def _is_mod(msg: str):
 
 
 def make_log_function(plugin_name: str):
-    def log(level, *data):
+    def log(level, *data, **kwargs):
+        if prog_args.escalate:
+            if level in ['warn', 'WARN']:
+                level = 'err'
+            elif level in ['err']:
+                level = 'fat'
+        if level == 'fat':
+            print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
+                  f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
+                  **kwargs)
+            bot.stop()
+            exit(1)
         return print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
-                     f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}')
+                     f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
+                     **kwargs)
 
     return log
 
@@ -111,47 +135,6 @@ def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
 
 
 current_vote = None
-
-
-# auction_parser = twitchirc.ArgumentParser('!auction', add_help=False)
-# auction_parser.add_argument('')
-# @bot.add_command('auction')
-# def command_auction(msg: twitchirc.ChannelMessage):
-#     cd_state = do_cooldown(cmd='auction', msg=msg)
-#     if cd_state:
-#         return
-#     args = msg.text[len(bot.prefix)+len('auction'):]
-
-
-@bot.add_command('vote', required_permissions=['util.vote'])
-def vote_command(msg: twitchirc.ChannelMessage):
-    global current_vote
-    # cd_state = do_cooldown(cmd='vote', msg=msg)
-    # if cd_state:
-    #     return
-    a = msg.text[len(bot.prefix):].replace('vote ', '', 1)
-    print(a)
-    if a in ['stop', 'end', 's', 'e', 'sotp']:
-        # bot.send(msg.reply('Calculating results...'))
-        votes = {}
-        # print('\n' * 3)
-        for k, v in current_vote['votes'].items():
-            print(k, v, v.text)
-            num = int(v.text)
-            if num not in votes:
-                votes[num] = 0
-            votes[num] += 1
-        # print('\n' * 3)
-        current_vote = None
-        bot.send(
-            msg.reply(
-                f'Results (choice -> number of people who voted for it): '
-                f'{", ".join([f"{k} -> {v}" for k, v in votes.items()])}'
-            )
-        )
-    else:
-        current_vote = {'start': time.time(), 'votes': {}}
-        bot.send(msg.reply(f'Setup a new vote.'))
 
 
 def new_echo_command(command_name: str, echo_data: str,
@@ -259,7 +242,55 @@ def count_pleb_command(msg: twitchirc.ChannelMessage):
                        f'plebs active in chat during the last hour.'))
 
 
+@bot.add_command('count_chatters')
+def count_chatters(msg: twitchirc.ChannelMessage):
+    global plebs, subs
+    cd_state = do_cooldown(cmd='count_chatters', msg=msg)
+    if cd_state:
+        return
+    fix_pleb_list(msg.channel)
+    fix_sub_list(msg.channel)
+    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel]) + len(subs[msg.channel])}'
+                       f'chatters active here in the last hour.'))
+
+
 counters = {}
+
+
+def _counter_difference(text, counter):
+    if text.startswith('-'):
+        text = text[1:]
+        print(text)
+        if text.isnumeric():
+            return counter - int(text)
+        else:
+            return None
+    elif text.startswith('+'):
+        text = text[1:]
+        print(text)
+        if text.isnumeric():
+            return counter + int(text)
+        else:
+            return None
+    elif text.startswith('='):
+        text = text[1:]
+        print(text)
+        if text.isnumeric() or text[0].startswith('-') and text[1:].isnumeric():
+            return int(text)
+        else:
+            return None
+    return counter
+
+
+def _show_counter_status(old_val, val, counter_name, counter_message, msg):
+    if val < 0:
+        val = 'a lot of'
+    print(val)
+    if old_val != val:
+        bot.send(msg.reply(counter_message['true'].format(name=counter_name, old_val=old_val,
+                                                          new_val=val)))
+    else:
+        bot.send(msg.reply(counter_message['false'].format(name=counter_name, val=val)))
 
 
 def new_counter_command(counter_name, counter_message, limit_to_channel: typing.Optional[str] = None,
@@ -270,9 +301,6 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
     @bot.add_command(counter_name)
     def command(msg: twitchirc.ChannelMessage):
         global counters
-        # if (limit_to_channel != msg.channel
-        #         or (isinstance(limit_to_channel, list) or msg.channel not in limit_to_channel)):
-        #     return
         if isinstance(limit_to_channel, (str, list)):
             if isinstance(limit_to_channel, list) and msg.channel not in limit_to_channel:
                 return
@@ -286,33 +314,16 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
         if msg.channel not in c:
             c[msg.channel] = 0
         text = msg.text[len(bot.prefix):].replace(counter_name + ' ', '')
-        modified = False
         old_val = c[msg.channel]
         print(repr(text), msg.text)
-        if text.startswith('+1'):
-            c[msg.channel] += 1
-            modified = True
-        elif text.startswith('-1'):
-            c[msg.channel] -= 1
-            modified = True
-        elif text.startswith('='):
-            text = text[1:]
-            print(text)
-            if text.isnumeric() or text[0].startswith('-') and text[1:].isnumeric():
-                c[msg.channel] = int(text)
-                modified = True
-            else:
-                bot.send(msg.reply(f'Not a number: {text}'))
-
-        val = c[msg.channel]
-        if c[msg.channel] < 0:
-            val = 'a lot of'
-        print(val)
-        if modified:
-            bot.send(msg.reply(counter_message['true'].format(name=counter_name, old_val=old_val,
-                                                              new_val=val)))
+        new_counter_value = _counter_difference(text, c[msg.channel])
+        if new_counter_value is None:
+            bot.send(msg.reply(f'Not a number: {text}'))
+            return
         else:
-            bot.send(msg.reply(counter_message['false'].format(name=counter_name, val=val)))
+            c[msg.channel] = new_counter_value
+        val = c[msg.channel]
+        _show_counter_status(val, old_val, counter_name, counter_message, msg)
 
     command.source = command_source
     return command
@@ -374,7 +385,7 @@ def command_not_active(msg: twitchirc.ChannelMessage):
             del subs[msg.channel][text[0]]
             rem_count += 1
         if not rem_count:
-            bot.send(msg.reply(f'@{msg.user} {text[0]!r}: No such pleb or sub found.'))
+            bot.send(msg.reply(f'@{msg.user} {text[0]!r}: No such chatter found.'))
         else:
             bot.send(msg.reply(f'@{msg.user} {text[0]!r}: Marked person as not active.'))
 
@@ -442,7 +453,7 @@ def check_quick_clips():
 
 
 def any_msg_handler(event: str, msg: twitchirc.Message, *args):
-    del event, msg, args
+    del event, args, msg
     check_quick_clips()
 
 
@@ -458,9 +469,52 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
             subs[msg.channel] = {}
         subs[msg.channel][msg.user] = time.time() + 60 * 60
         print(event, '(sub)', msg)
-    if current_vote:
-        if msg.text.isnumeric():
-            current_vote['votes'][msg.user] = msg
+    # if current_vote:
+    #     if msg.text.isnumeric():
+    #         current_vote['votes'][msg.user] = msg
+
+
+class Plugin:
+    @property
+    def name(self) -> str:
+        return self.meta['name']
+
+    @property
+    def commands(self) -> typing.List[str]:
+        return self.meta['commands']
+
+    @property
+    def no_reload(self) -> str:
+        return self.meta['no_reload'] if 'no_reload' in self.meta else False
+
+    @property
+    def on_reload(self):
+        if hasattr(self.module, 'on_reload'):
+            return self.module['on_reload']
+        else:
+            return None
+
+    def __init__(self, module, source):
+        self.module = module
+        self.meta = module.__meta_data__
+        self.source = source
+
+
+def reload_plugin(plugin: Plugin):
+    if plugin.no_reload:
+        return False, 'no_reload'
+
+    pl_mod = plugin.module
+    pl_mod_name: typing.Optional[str] = None
+    for mod_name, module in sys.modules.items():
+        if module is pl_mod:
+            pl_mod_name = mod_name
+            break
+    if pl_mod_name is not None:
+        pl_mod = importlib.reload(pl_mod)
+        sys.modules[pl_mod_name] = pl_mod
+        return True, None
+    return False, 'not_found'
 
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'])
@@ -476,7 +530,11 @@ def command_reload(msg: twitchirc.ChannelMessage):
     load_commands()
     print('DONE!')
     print('=' * 80)
-    bot.send(msg.reply(f'@{msg.user} Reloaded all of the custom echo commands.'))
+    print(f'[1/2] @{msg.user} reloaded all of the custom echo and counter commands.')
+    for plugin in plugins.values():
+        reload_plugin(plugin)
+    print(f'[2/2] @{msg.user} reloaded all plugins')
+    bot.send(msg.reply(f'@{msg.user} Reloaded all of the custom echo and counter commands and all reloadable plugins.'))
 
 
 def new_command_from_command_entry(entry: typing.Dict[str, str]):
@@ -485,6 +543,7 @@ def new_command_from_command_entry(entry: typing.Dict[str, str]):
             if entry['type'] == 'echo':
                 new_echo_command(entry['name'], entry['message'], entry['channel'], command_source='commands.json')
             elif entry['type'] == 'counter':
+                print(entry)
                 new_counter_command(entry['name'], entry['message'], entry['channel'], command_source='commands.json')
         else:
             if entry['type'] == 'echo':
@@ -503,27 +562,26 @@ def load_commands():
             new_command_from_command_entry(i)
 
 
-class Plugin:
-    @property
-    def name(self):
-        return self.meta['name']
-
-    @property
-    def commands(self):
-        return self.meta['commands']
-
-    def __init__(self, module, source):
-        self.module = module
-        self.meta = module.__meta_data__
-        self.source = source
-
-
 plugins: Dict[str, Plugin] = {}
+
+
+class PluginNotLoadedException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+    def __repr__(self):
+        return f'PluginNotLoadedException({self.args})'
+
+    def __str__(self):
+        return self.__repr__()
 
 
 def custom_import(name, globals_=None, locals_=None, fromlist=None, level=None):
     if name.startswith('plugin.'):
-        return plugins[name.replace('plugin.', '', 1)].module
+        plugin_name = name.replace('plugin.', '', 1)
+        if plugin_name not in plugins:
+            raise ImportError(f'Cannot request non-loaded plugin: {plugin_name}')
+        return plugins[plugin_name].module
     if name not in ['main']:
         return __import__(name, globals_, locals_, fromlist, level)
     else:
@@ -537,6 +595,7 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
     file_name = os.path.abspath(file_name)
 
     for name, pl_obj in plugins.items():
+        print(name, pl_obj)
         if pl_obj.source == file_name:
             return
 
@@ -551,8 +610,8 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
 
     spec.loader.exec_module(module)
     pl = Plugin(module, source=file_name)
-    module.__builtins__['print'] = lambda *args, **kwargs: make_log_function(pl.name)('info', *args, str(kwargs))
-    plugins[pl.name] = pl.name
+    module.__builtins__['print'] = lambda *args, **kwargs: make_log_function(pl.name)('info', *args, **kwargs)
+    plugins[pl.name] = pl
     return pl
 
 

@@ -3,7 +3,9 @@
     "name": "ned",
     "message": "Ned is a god PogU Clap",
     "type": "echo",
-    "channel": "nedaiej"
+    "channel": [
+      "nedaiej"
+    ]
   },
   {
     "name": "bonk",
@@ -17,7 +19,10 @@
     "name": "tea",
     "type": "echo",
     "message": "Go to sleep {+} linkusZ",
-    "channel": ["grandpatitan", "mm_sutilitybot"]
+    "channel": [
+      "grandpatitan",
+      "mm_sutilitybot"
+    ]
   },
   {
     "name": "mb.familytree",
@@ -35,5 +40,25 @@
       "true": "Strimer has said something non-PG {new_val} times (from {old_val})",
       "false": "Strimer has said something non-PG {val} times"
     }
+  },
+  {
+    "name": "subs",
+    "type": "counter",
+    "message": {
+      "true": "Set counter value from {old_val} to {new_val}",
+      "false": "Linkus has gotten {val} NEW subs"
+    },
+    "channel": [
+      "linkus7",
+      "mm_sutilitybot"
+    ]
+  },
+  {
+    name: "motd",
+    type: "echo",
+    message: "Spam monkaS all you want. Testing the emote limiter.",
+    channel: [
+      "mm_sutilitybot"
+    ]
   }
 ]

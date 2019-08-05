@@ -49,6 +49,9 @@ channels: Dict[str, Dict[str, Union[int, float]]] = {
     #     '_last_regen': time.time()  # time of last regen
     # }
 }
+channels_exclude = [
+
+]
 REGEN_TIME = 30
 REGEN_AMOUNT = 20
 
@@ -110,9 +113,13 @@ def make_new_channel(name):
     channels[name]['_last_regen'] = time.time()
 
 
+def check_if_command_is_allowed(command_name, channel) -> bool:
+    return channel in ALLOWED_CHANNELS[command_name]
+
+
 def msg_handler(event, msg: twitchirc.ChannelMessage):
-    if msg.text.startswith(main.bot.prefix):
-        return  # Ignore commands
+    if not check_if_command_is_allowed('EMOTE_LIMITER', msg.channel) or msg.text.startswith(main.bot.prefix):
+        return  # Ignore commands and non active channels
 
     if msg.channel not in channels:
         make_new_channel(msg.channel)
@@ -129,14 +136,11 @@ def msg_handler(event, msg: twitchirc.ChannelMessage):
 
 
 ALLOWED_CHANNELS = {
-    'emote_cost': ['mm_sutilitybot', 'mm2pl'],
-    'find_limit': ['mm_sutilitybot', 'mm2pl'],
-    'show_limits': ['mm_sutilitybot', 'mm2pl']
+    'emote_cost': [],
+    'find_limit': [],
+    'show_limits': [],
+    'EMOTE_LIMITER': []
 }
-
-
-def check_if_command_is_allowed(command_name, channel) -> bool:
-    return channel in ALLOWED_CHANNELS[command_name]
 
 
 @main.bot.add_command('find_limit')
@@ -188,18 +192,21 @@ def command_show_limits(msg: twitchirc.ChannelMessage):
     argv = msg.text.split(' ')
     if '' in argv:
         argv.remove('')
-    user = msg.user
+    channel = msg.channel
     if len(argv) > 1:
-        user = argv[1]
+        channel = argv[1]
     text = []
-    for limit_name, limit_data in channels[user].items():
+    if channel not in channels:
+        main.bot.send(msg.reply(f"@{msg.user} Channel {channel} isn't registered in this bot or doesn't exist."))
+        return
+    for limit_name, limit_data in channels[channel].items():
         if limit_name == '_last_regen':
             continue
         text.append(f'{limit_data} {limit_name}')
     # datetime.datetime.now().strftime("%H:%M:%S")
-    regen_time = (datetime.datetime.fromtimestamp(channels[user]['_last_regen'] + REGEN_TIME).strftime('%Y-%m-%d '
-                                                                                                    '%H:%M:%S '
-                                                                                                    'CEST(UTC+1h)'))
+    regen_time = (datetime.datetime.fromtimestamp(channels[channel]['_last_regen'] + REGEN_TIME).strftime('%Y-%m-%d '
+                                                                                                          '%H:%M:%S '
+                                                                                                          'CEST(UTC+1h)'))
     main.bot.send(msg.reply(f'@{msg.user} You have {", ".join(text)}, your limits will regenerate on '
                             f'{regen_time}'))
 
@@ -212,3 +219,14 @@ def command_show_limits(msg: twitchirc.ChannelMessage):
 
 main.bot.handlers['chat_msg'].append(msg_handler)
 main.bot.handlers['any_msg'].append(any_msg_handler)
+
+if 'emote_limiter' in main.bot.storage.data:
+    el_config = main.bot.storage['emote_limiter']
+    if 'channels' in el_config:
+        ALLOWED_CHANNELS = el_config['channels']
+else:
+    main.bot.storage['emote_limiter'] = {
+        'channels': [
+
+        ]
+    }
