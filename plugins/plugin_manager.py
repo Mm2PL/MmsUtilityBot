@@ -17,6 +17,7 @@ import traceback
 import typing
 
 import twitchirc
+
 try:
     # noinspection PyPackageRequirements
     import main
@@ -24,14 +25,6 @@ except ImportError:
     import util_bot as main
 
     exit()
-
-main.load_file('plugins/plugin_prefixes.py')
-try:
-    import plugin_plugin_prefixes as plugin_prefixes
-except ImportError:
-    import plugins.plugin_prefixes
-
-
 
 __meta_data__ = {
     'name': 'plugin_manager',
