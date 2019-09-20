@@ -196,8 +196,7 @@ def remind(reminder, channel):
         reminder['timestamp'] = time.time() + reminder['seconds']
 
 
-def reminder_handler(event_name, msg: twitchirc.Message):
-    del msg, event_name
+def reminder_handler():
     current_time = time.time()
     for channel in reminders:
         for r in reminders[channel].copy():
@@ -208,4 +207,4 @@ def reminder_handler(event_name, msg: twitchirc.Message):
 
 
 # main.bot.handlers['any_msg'].append(reminder_handler)
-main.bot.schedule_repeated_event(0.11, 5, reminder_handler, (None, None), {})
+main.bot.schedule_repeated_event(0.11, 5, reminder_handler, (), {})

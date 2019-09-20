@@ -151,8 +151,8 @@ def _check_downtime_2_request(i):
     main.bot.send(i['msg'].reply(f'@{i["msg"].user} {i["msg"].channel} has been offline for {offline_for}'))
 
 
-def check_on_requests(event_name: str, *args):
-    del args, event_name
+def check_on_requests(*args):
+    del args
     for i in reqs.copy():
         if i['type'] == 'uptime':
             _check_uptime_request(i)
@@ -181,5 +181,5 @@ def _check_uptime_request(i):
         main.bot.send(i['msg'].reply(f'@{i["msg"].user} {i["msg"].channel} is not live.'))
 
 
-main.bot.schedule_repeated_event(1, 5, check_on_requests, (None, None), {})
+main.bot.schedule_repeated_event(1, 5, check_on_requests, (), {})
 # main.bot.handlers['any_msg'].append(check_on_requests)
