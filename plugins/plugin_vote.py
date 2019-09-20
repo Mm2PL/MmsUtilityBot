@@ -25,7 +25,7 @@ except ImportError:
 
     exit()
 try:
-    import plugin.Su as plugin_su
+    import plugin.plugin_su as plugin_su
 except ImportError:
     plugin_su = None  # plugin not enabled, don't have to worry about real usernames
 
@@ -33,10 +33,10 @@ except ImportError:
 import twitchirc
 
 __meta_data__ = {
-    'name': 'Votes',
+    'name': 'plugin_votes',
     'commands': [
         'vote',
-        'vote_admin'
+        'poll'
     ]
 }
 log = main.make_log_function('votes')
@@ -104,7 +104,7 @@ def command_vote(msg: twitchirc.ChannelMessage):
     if msg.user in ['__vote_info', '__vote_results']:
         main.bot.send(msg.reply(f'@{get_user_name(msg)} No crashing the bot for you ;)'))
         return
-    cd_state = main.do_cooldown('vote', msg)
+    cd_state = main.do_cooldown('vote', msg, global_cooldown=0, local_cooldown=1 * 60)
     if cd_state:
         return
 
@@ -133,7 +133,7 @@ def command_vote(msg: twitchirc.ChannelMessage):
                 else:
                     main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully voted for {user_votes!r}'))
             else:
-                
+
                 if len(invalid_votes) == 1:
                     main.bot.send(msg.reply(f'@{get_user_name(msg)} Invalid option: {invalid_votes[0]!r}'))
                 else:
@@ -214,21 +214,37 @@ def _load_template(template_name):
 @main.bot.add_command('poll', required_permissions=['poll.manage'], enable_local_bypass=True)
 def command_vote_admin(msg: twitchirc.ChannelMessage):
     args = vote_admin_parser.parse_args(shlex.split(msg.text.replace('!poll', '', 1)))
+
     print(msg.channel, msg.user, args)
     if args is None:
         usage = re.sub('\n +', ' ', vote_admin_parser.format_usage())
         main.bot.send(msg.reply(f"@{get_user_name(msg)} {usage}"))
         return
-    if args.new_template:
+    if not args.new_template and not args.new_from_template and not args.end and not args.new:
+        usage = re.sub('\n +', ' ', vote_admin_parser.format_usage())
+        main.bot.send(msg.reply(f"@{get_user_name(msg)} {usage}"))
+        return
+
+    elif args.new_template:
         _ensure_plugin_data()
         main.bot.storage['plugin_vote']['templates'][args.new_template[0]] = args.new_template
         main.bot.storage.save()
-    if args.new_from_template:
+    elif args.new_from_template:
         template = _load_template(args.new_from_template)
         if template is None:
             main.bot.send(msg.reply(f'@{get_user_name(msg)} Cannot retrieve template: {args.new_from_template!r}'))
             return
         args.new = template
+    elif args.end:
+        if msg.channel not in votes:
+            main.bot.send(msg.reply(f"@{get_user_name(msg)} There's no on-going vote in this channel."))
+            return
+        vote_obj: Vote = votes[msg.channel]['__vote_info']
+        results = vote_obj.close()
+
+        main.bot.send(msg.reply(f'@{get_user_name(msg)} The results are: '
+                                f'{_calculate_votes(results)}'))
+
     if args.new:
         if msg.channel in votes and not votes[msg.channel]['__vote_info'].closed:
             main.bot.send(msg.reply(f"@{get_user_name(msg)} There's already a un-closed poll in this channel. "
@@ -241,15 +257,6 @@ def command_vote_admin(msg: twitchirc.ChannelMessage):
         main.bot.send(msg.reply(f'@{get_user_name(msg)} Created new poll {args.new[0]!r} with options '
                                 f'{args.new[1].split(",")!r}.'
                                 f'{" Allowing voting for multiple options" if args.multiple else ""}'))
-    if args.end:
-        if msg.channel not in votes:
-            main.bot.send(msg.reply(f"@{get_user_name(msg)} There's no on-going vote in this channel."))
-            return
-        vote_obj: Vote = votes[msg.channel]['__vote_info']
-        results = vote_obj.close()
-
-        main.bot.send(msg.reply(f'@{get_user_name(msg)} The results are: '
-                                f'{_calculate_votes(results)}'))
 
 
 command_vote_admin: twitchirc.Command

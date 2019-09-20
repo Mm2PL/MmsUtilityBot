@@ -22,9 +22,10 @@ except ImportError:
     import util_bot as main
 
     exit()
+
 __meta_data__ = {
-    'name': 'Su',
-    'commands': ['su']
+    'name': 'plugin_su',
+    'commands': ['mb.su', 'mb.whoami']
 }
 
 import shlex
@@ -60,13 +61,18 @@ def _call_command_handlers(msg: twitchirc.ChannelMessage):
     old_handler(msg)
 
 
+def on_reload():
+    main.bot._call_command_handlers = old_handler
+    # restore the previous handler to avoid weird things.
+
+
 main.bot._call_command_handlers = _call_command_handlers
 su_parser = twitchirc.ArgumentParser(prog='!su', add_help=False, message_handler=print)
 su_group_1 = su_parser.add_mutually_exclusive_group()
 su_group_1.add_argument('-h', '--help', dest='help', help='Request help', nargs='?', default=None,
                         const='usage', action='store')
 su_group_2 = su_group_1.add_argument_group()
-su_group_1.add_argument('-L', '--logout', dest='logout', help='Return to your account')
+su_group_1.add_argument('-L', '--logout', dest='logout', help='Return to your account', action='store_true')
 su_group_2.add_argument('-c', '--command', dest='command', metavar='COMMAND')
 
 su_group_2.add_argument('-m', '-p', '--preserve-environment', dest='do_nothing', help='Do nothing.',
@@ -101,8 +107,10 @@ SU_HELP = {
 }
 
 
-@main.bot.add_command('mb.su', required_permissions=['su.su'])
+@main.bot.add_command('mb.su')
 def command_su(msg: twitchirc.ChannelMessage):
+    if not hasattr(msg, 'real_user') and bool(main.bot.check_permissions(msg, ['su.su'])):
+        return
     args = su_parser.parse_args(shlex.split(msg.args.replace(main.bot.prefix + command_su.chat_command + ' ', '')))
     if args is None:
         main.bot.send(msg.reply(f'@{msg.user} {su_parser.format_usage()}'))
@@ -117,6 +125,19 @@ def command_su(msg: twitchirc.ChannelMessage):
             main.bot.send(msg.reply(f'@{msg.user} No such help topic found. Try !{command_su.chat_command} -h usage'
                                     f'(1)'))
     else:
+        if args.logout:
+            if hasattr(msg, 'real_user'):
+                if msg.real_user not in su_ed_users:
+                    main.bot.send(msg.reply(f'@{msg.real_user} You are not su-ed FeelsDankMan'))
+                else:
+                    del su_ed_users[msg.real_user]
+            else:
+                if msg.user not in su_ed_users:
+                    main.bot.send(msg.reply(f'@{msg.user} You are not su-ed FeelsDankMan'))
+                else:
+                    del su_ed_users[msg.user]
+            return
+
         if args.command:
             new_msg = twitchirc.ChannelMessage(args.command, args.user,
                                                msg.channel if args.channel is None else args.channel)

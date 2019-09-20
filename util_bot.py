@@ -17,17 +17,20 @@
 import builtins
 import datetime
 import importlib.util
+import importlib.abc
 import os
 import subprocess as sp
 import sys
 import time
 import typing
 from dataclasses import dataclass
+from types import ModuleType
 from typing import List, Dict
 import argparse
 
+import twitchirc
 import json5 as json
-import twitchirc.debug_bot
+from twitchirc import Command
 
 import twitch_auth
 
@@ -44,23 +47,39 @@ LOG_LEVELS = {
 @dataclass
 class Args:
     escalate: bool
+    debug: bool
+    restart_from: typing.List[str]
 
 
-p = argparse.ArgumentParser()
-p.add_argument('-e', '--escalate', help='Escalate warns, WARNs to ERRs and ERRs to fatals', action='store_true',
-               dest='escalate')
-prog_args = p.parse_args()
 twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
 twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
-passwd = 'oauth:' + twitch_auth.json_data['access_token']
-bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
-                    storage=twitchirc.JsonStorage('storage.json', auto_save=True, default={
-                        'permissions': {
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('-e', '--escalate', help='Escalate warns, WARNs to ERRs and ERRs to fatals', action='store_true',
+                   dest='escalate')
+    p.add_argument('--debug', help='Run in a debug environment.', action='store_true',
+                   dest='debug')
+    p.add_argument('--_restart_from', help=argparse.SUPPRESS, nargs=2, dest='restart_from')
+    prog_args = p.parse_args()
 
-                        }
-                    }))
+passwd = 'oauth:' + twitch_auth.json_data['access_token']
+if prog_args.debug:
+    storage = twitchirc.JsonStorage('storage_debug.json', auto_save=True, default={
+        'permissions': {
+
+        }
+    })
+else:
+    storage = twitchirc.JsonStorage('storage.json', auto_save=True, default={
+        'permissions': {
+
+        }
+    })
+bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
+                    storage=storage)
 bot.prefix = '!'
 del passwd
+# noinspection PyTypeHints
 bot.storage: twitchirc.JsonStorage
 try:
     bot.storage.load()
@@ -109,27 +128,35 @@ def make_log_function(plugin_name: str):
 
 def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
                 global_cooldown: int = 1.5 * 60, local_cooldown: int = 2 * 60) -> bool:
+    global cooldowns
+
+    global_name = f'global_{msg.channel}_{cmd}'
+    local_name = f'local_{cmd}_{msg.user}'
+    # bot.check_permissions returns a list of missing permissions.
+    # if the list is not empty, user has permissions run the code.
     if not bot.check_permissions(msg, ['util.no_cooldown'], enable_local_bypass=True):
-        cooldowns[f'global_{cmd}'] = time.time()
-        cooldowns[msg.user] = time.time()
+        cooldowns[global_name] = time.time() + global_cooldown
+        cooldowns[local_name] = time.time() + local_cooldown
         return False
     if _is_mod(msg.text):
         return False
-    if f'global_{cmd}' not in cooldowns:
-        cooldowns[f'global_{cmd}'] = time.time() + global_cooldown
-        cooldowns[msg.user] = time.time() + local_cooldown
+    if msg.user in cooldowns:  # user is timeout from the bot.
+        return cooldowns[msg.user] > time.time()
+    if f'global_{msg.channel}_{cmd}' not in cooldowns:
+        cooldowns[global_name] = time.time() + global_cooldown
+        cooldowns[local_name] = time.time() + local_cooldown
         return False
-    if cooldowns[f'global_{cmd}'] > time.time():
+    if cooldowns[global_name] > time.time():
         return True
-    local_name = f'local_{cmd}_{msg.user}'
+
     if local_name not in cooldowns:
-        cooldowns[local_name] = time.time() + global_cooldown
+        cooldowns[global_cooldown] = time.time() + global_cooldown
         cooldowns[local_name] = time.time() + local_cooldown
         return False
     if cooldowns[local_name] > time.time():
         return True
 
-    cooldowns[f'global_{cmd}'] = time.time() + global_cooldown
+    cooldowns[global_name] = time.time() + global_cooldown
     cooldowns[local_name] = time.time() + local_cooldown
     return False
 
@@ -143,12 +170,6 @@ def new_echo_command(command_name: str, echo_data: str,
         -> typing.Callable[[twitchirc.ChannelMessage], None]:
     @bot.add_command(command_name)
     def echo_command(msg: twitchirc.ChannelMessage):
-        if isinstance(limit_to_channel, (str, list)):
-            if isinstance(limit_to_channel, list) and msg.channel not in limit_to_channel:
-                return
-            if isinstance(limit_to_channel, str) and msg.channel != limit_to_channel:
-                return
-
         cd_state = do_cooldown(cmd=command_name, msg=msg)
         if cd_state:
             return
@@ -160,6 +181,8 @@ def new_echo_command(command_name: str, echo_data: str,
         data = data.replace('{+}', '')
         bot.send(msg.reply(data))
 
+    echo_command: Command
+    echo_command.limit_to_channels = limit_to_channel
     echo_command.source = command_source
 
     return echo_command
@@ -250,7 +273,7 @@ def count_chatters(msg: twitchirc.ChannelMessage):
         return
     fix_pleb_list(msg.channel)
     fix_sub_list(msg.channel)
-    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel]) + len(subs[msg.channel])}'
+    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel]) + len(subs[msg.channel])} '
                        f'chatters active here in the last hour.'))
 
 
@@ -490,7 +513,7 @@ class Plugin:
     @property
     def on_reload(self):
         if hasattr(self.module, 'on_reload'):
-            return self.module['on_reload']
+            return getattr(self.module, 'on_reload')
         else:
             return None
 
@@ -499,22 +522,75 @@ class Plugin:
         self.meta = module.__meta_data__
         self.source = source
 
+    def __repr__(self):
+        return f'<Plugin {self.name} from {self.source}>'
+
 
 def reload_plugin(plugin: Plugin):
     if plugin.no_reload:
         return False, 'no_reload'
 
+    print(f'Attempt to unload plugin {plugin.name} {plugin}')
+    for c_name in plugin.commands:
+        print(f'  Attempt to unload command {c_name}')
+        for comm in bot.commands.copy():
+            if comm.chat_command == c_name:
+                print(f'    Unload command {c_name}/{comm}')
+                bot.commands.remove(comm)
     pl_mod = plugin.module
-    pl_mod_name: typing.Optional[str] = None
-    for mod_name, module in sys.modules.items():
-        if module is pl_mod:
-            pl_mod_name = mod_name
+    # print(f'      {pl_mod}')
+    plugin_name = os.path.split(plugin.source)[1].replace('.py', '')
+    print(plugin_name, pl_mod, plugin)
+    pl_mod.__name__ = plugin_name
+
+    old = plugin_meta_path[pl_mod]
+
+    if plugin.on_reload:
+        plugin.on_reload()
+    # tell the plugin that it will be reloaded
+    pl_mod = importlib.reload(pl_mod)
+    sys.modules[plugin_name] = pl_mod
+    plugin.module = pl_mod
+    plugin_meta_path[pl_mod] = [
+        old[0],
+        pl_mod
+    ]
+    del old
+
+    print('-' * 80)
+    return True, None
+
+
+def _exec(path, args):
+    print(f'Running {path!r} with args {args!r}')
+    os.execvp(path, args)
+
+
+@bot.add_command('mb.restart', required_permissions=['util.restart'])
+def command_restart(msg: twitchirc.ChannelMessage):
+    if 'debug' in msg.text and not prog_args.debug:
+        return
+    bot.send(msg.reply(f'Restarting MrDestructoid {chr(128299)}'))
+    # Restaring MrDestructoid :gun:
+    print('.')
+    while 1:
+        print(f'\033[A\033[KFlushing queues... Non-empty queues: {list(filter(lambda i: bool(i), bot.queue))}')
+        bot.flush_queue(1000)
+        all_empty = True
+        for q in bot.queue:
+            if bot.queue[q]:
+                all_empty = False
+        if all_empty:
             break
-    if pl_mod_name is not None:
-        pl_mod = importlib.reload(pl_mod)
-        sys.modules[pl_mod_name] = pl_mod
-        return True, None
-    return False, 'not_found'
+    print('\033[A\033[KFlushing queues: DONE!')
+    time.sleep(1)
+
+    bot.stop()
+    python = f'python{sys.version_info.major}.{sys.version_info.minor}'
+    if prog_args.debug:
+        _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel, '--debug'])
+    else:
+        _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel])
 
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'])
@@ -530,11 +606,17 @@ def command_reload(msg: twitchirc.ChannelMessage):
     load_commands()
     print('DONE!')
     print('=' * 80)
-    print(f'[1/2] @{msg.user} reloaded all of the custom echo and counter commands.')
+    print(f'{msg.user} reloaded all of the custom echo and counter commands.')
     for plugin in plugins.values():
-        reload_plugin(plugin)
+
+        r = reload_plugin(plugin)
+        if r[0]:
+            print(f'  Unload successful')
+        else:
+            print(f'  Unload unsuccessful: {r[1]}')
     print(f'[2/2] @{msg.user} reloaded all plugins')
-    bot.send(msg.reply(f'@{msg.user} Reloaded all of the custom echo and counter commands and all reloadable plugins.'))
+    print('=' * 80)
+    bot.send(msg.reply(f'@{msg.user} Reloaded all of the custom echo and counter commands.'))
 
 
 def new_command_from_command_entry(entry: typing.Dict[str, str]):
@@ -577,8 +659,8 @@ class PluginNotLoadedException(Exception):
 
 
 def custom_import(name, globals_=None, locals_=None, fromlist=None, level=None):
-    if name.startswith('plugin.'):
-        plugin_name = name.replace('plugin.', '', 1)
+    if name.startswith('plugin_'):
+        plugin_name = name.replace('plugin_', '', 1)
         if plugin_name not in plugins:
             raise ImportError(f'Cannot request non-loaded plugin: {plugin_name}')
         return plugins[plugin_name].module
@@ -590,17 +672,59 @@ def custom_import(name, globals_=None, locals_=None, fromlist=None, level=None):
 
 # __import__(name, globals, locals, fromlist, level) -> module
 
+class WayTooDank(BaseException):
+    def __init__(self, message):
+        self.message = message
+
+    def __repr__(self):
+        return f'<WAYTOODANK {self.message}>'
+
+    def __str__(self):
+        return repr(self)
+
+
+# noinspection PyProtectedMember
+plugin_meta_path: Dict[str, List[typing.Union[importlib._bootstrap.ModuleSpec, ModuleType]]] = {
+    # 'path': [
+    #     'spec',
+    #     'module'
+    # ]
+}
+
+
+class PluginMetaPathFinder(importlib.abc.MetaPathFinder):
+    def __init__(self):
+        print(f'Create meta path finder')
+
+    def find_spec(self, fullname, path, target=None):
+        print('find spec')
+        print(f'{" " * 4}{fullname}\n{" " * 4}{path}\n{" " * 4}{target}')
+        if target is None:
+            print(f'MEGADANK: target None')
+        if target in plugin_meta_path:
+            return plugin_meta_path[target][0]
+
+    def find_module(self, fullname, path):
+        print('find module')
+        print(f'{" " * 4}{fullname}\n{" " * 4}{path}')
+
+
+sys.meta_path.append(PluginMetaPathFinder())
+
 
 def load_file(file_name: str) -> typing.Optional[Plugin]:
     file_name = os.path.abspath(file_name)
+    print(f'Loading file {file_name}.')
 
     for name, pl_obj in plugins.items():
-        print(name, pl_obj)
         if pl_obj.source == file_name:
-            return
+            print(' -> ALREADY LOADED')
+            return None
 
+    plugin_name = os.path.split(file_name)[1].replace('.py', '')
+    print(f' -> Name: {plugin_name}')
     # noinspection PyProtectedMember
-    spec: importlib._bootstrap.ModuleSpec = importlib.util.spec_from_file_location(file_name, file_name)
+    spec: importlib._bootstrap.ModuleSpec = importlib.util.spec_from_file_location(plugin_name, file_name)
 
     module = importlib.util.module_from_spec(spec)
 
@@ -610,9 +734,33 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
 
     spec.loader.exec_module(module)
     pl = Plugin(module, source=file_name)
+
     module.__builtins__['print'] = lambda *args, **kwargs: make_log_function(pl.name)('info', *args, **kwargs)
+    plugin_meta_path[pl.module] = [
+        spec,
+        pl.module
+    ]
+    sys.modules[plugin_name] = pl.module
     plugins[pl.name] = pl
+    print(f' -> OKAY')
     return pl
+
+
+@bot.add_command('mb.crash', required_permissions=['util.crash'], enable_local_bypass=False)
+def command_generate_exception(msg: twitchirc.ChannelMessage):
+    raise Exception(f'This is a test exception: {msg.text}')
+
+
+def black_list_user(user, time_to_black_list):
+    global cooldowns
+    cooldowns[user] = time.time() + time_to_black_list
+
+
+start_time = datetime.datetime.now()
+
+
+def uptime() -> datetime.timedelta:
+    return datetime.datetime.now() - start_time
 
 
 try:
@@ -644,10 +792,33 @@ if 'channels' in bot.storage.data:
             print(f'Skipping joining channel: {i}: Already connected.')
             continue
         bot.join(i)
+# make sure that the plugin manager loads before everything else.
+load_file('plugins/plugin_manager.py')
+
 load_file('plugins/auto_load.py')
+
+if prog_args.restart_from:
+    msg = twitchirc.ChannelMessage(
+        user='OUTGOING',
+        channel=prog_args.restart_from[1],
+        text=(f'@{prog_args.restart_from[0]} Restart OK. (debug)'
+              if prog_args.debug else f'@{prog_args.restart_from[0]} Restart OK.')
+    )
+    msg.outgoing = True
+
+
+    def _send_restart_message(*a):
+        del a
+        bot.send(msg, queue='misc')
+        bot.flush_queue(1000)
+
+
+    bot.schedule_event(1, 15, _send_restart_message, (), {})
+
 try:
     bot.run()
 finally:
+    print('finally')
     bot.storage.auto_save = False
     bot.storage['channels'] = bot.channels_connected
     bot.storage['counters'] = counters

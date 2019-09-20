@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import traceback
 
 try:
     # noinspection PyPackageRequirements
@@ -44,7 +45,9 @@ if 'plugins' in main.bot.storage.data:
         try:
             main.load_file(i)
         except Exception as e:
-            log('warn', f'Failed to load: {e}')
+            log('err', f'Failed to load: {e}')
+            for i in traceback.format_exc(30).split('\n'):
+                log('err', i)
 else:
     main.bot.storage['plugins'] = []
 

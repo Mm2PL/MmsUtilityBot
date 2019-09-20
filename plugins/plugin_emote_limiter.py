@@ -29,10 +29,10 @@ except ImportError:
 import twitchirc
 
 __meta_data__ = {
-    'name': 'plugin_emote_limiter.py/Emote limiter',
+    'name': 'plugin_emote_limiter',
     'commands': []
 }
-log = main.make_log_function('auto_load')
+log = main.make_log_function('emote_limiter')
 emotes = {
     'monkaS': {
         'limit': 50,
@@ -206,15 +206,10 @@ def command_show_limits(msg: twitchirc.ChannelMessage):
     # datetime.datetime.now().strftime("%H:%M:%S")
     regen_time = (datetime.datetime.fromtimestamp(channels[channel]['_last_regen'] + REGEN_TIME).strftime('%Y-%m-%d '
                                                                                                           '%H:%M:%S '
-                                                                                                          'CEST(UTC+1h)'))
+                                                                                                          'CEST('
+                                                                                                          'UTC+1h)'))
     main.bot.send(msg.reply(f'@{msg.user} You have {", ".join(text)}, your limits will regenerate on '
                             f'{regen_time}'))
-
-
-# for limit in emotes:
-#     for emote in emotes[limit]:
-#         if emote in msg.text:
-#             print(msg.flags, msg.text, msg.flags['id'])
 
 
 main.bot.handlers['chat_msg'].append(msg_handler)
