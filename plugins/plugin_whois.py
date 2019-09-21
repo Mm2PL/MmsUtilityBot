@@ -60,6 +60,10 @@ g.add_argument('-n', '--name', help='Use the username', dest='name', type=str)
 @plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
 @main.bot.add_command('mb.whois')
 def command_whois(msg: twitchirc.ChannelMessage):
+    cd_state = main.do_cooldown('whois', msg, global_cooldown=30,
+                                local_cooldown=60)
+    if cd_state:
+        return
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = whois_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
