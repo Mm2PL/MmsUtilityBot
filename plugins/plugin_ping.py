@@ -16,6 +16,7 @@
 
 # noinspection PyUnresolvedReferences
 import twitchirc
+import datetime
 
 try:
     # noinspection PyPackageRequirements
@@ -59,6 +60,7 @@ def command_ping_simple(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('ping', msg, global_cooldown=int(1.5 * 60), local_cooldown=2 * 60)
     if cd_state:
         return
-    main.bot.send(msg.reply(f'@{msg.user} PONG! Bot has been running for {main.uptime()}. '
+    main.bot.send(msg.reply(f'@{msg.user} PONG! Bot has been running for '
+                            f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))}. '
                             f'{len(main.bot.commands)} '
                             f'commands registered. {_blacklist_info(msg.channel)}'))

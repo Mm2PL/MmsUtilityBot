@@ -822,8 +822,9 @@ finally:
     bot.storage.auto_save = False
     bot.storage['channels'] = bot.channels_connected
     bot.storage['counters'] = counters
-    bot.storage['permissions'].update(bot.permissions.users)
-    bot.storage['permissions'].update(bot.permissions.groups)
+    bot.permissions.fix()
+    for i in bot.permissions:
+        bot.storage['permissions'][i] = bot.permissions[i]
     bot.storage['plebs'] = plebs
     bot.storage['subs'] = subs
     bot.storage.save()
