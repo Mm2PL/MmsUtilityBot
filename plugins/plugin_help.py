@@ -16,6 +16,7 @@
 import argparse
 import shlex
 import typing
+from typing import Dict, Any, Callable
 
 import twitchirc
 
@@ -45,6 +46,7 @@ log = main.make_log_function('help')
 all_help = {
 
 }
+MSG_LEN_LIMIT = 200
 
 
 def _create_topic(topic, help_):
@@ -53,6 +55,21 @@ def _create_topic(topic, help_):
     else:
         all_help[topic] = help_
     print(f'Created help topic {topic}')
+
+
+def _help_topic_from_action(command_name, i):
+    print(i)
+    # noinspection PyProtectedMember
+    if isinstance(i, (argparse._StoreAction, argparse._AppendAction, argparse._CountAction,
+                      argparse._AppendConstAction, argparse._StoreFalseAction, argparse._StoreTrueAction,
+                      argparse._StoreConstAction, argparse._SubParsersAction)):
+        if not i.option_strings:
+            for j in [i.dest, i.metavar]:
+                topic = command_name + ' ' + j
+                _create_topic(topic, i.help)
+        for j in i.option_strings:
+            topic = command_name + ' ' + j
+            _create_topic(topic, i.help)
 
 
 def auto_help_parser(parser: typing.Union[argparse.ArgumentParser, twitchirc.ArgumentParser],
@@ -73,19 +90,22 @@ def auto_help_parser(parser: typing.Union[argparse.ArgumentParser, twitchirc.Arg
     return decorator
 
 
-def _help_topic_from_action(command_name, i):
-    print(i)
-    # noinspection PyProtectedMember
-    if isinstance(i, (argparse._StoreAction, argparse._AppendAction, argparse._CountAction,
-                      argparse._AppendConstAction, argparse._StoreFalseAction, argparse._StoreTrueAction,
-                      argparse._StoreConstAction, argparse._SubParsersAction)):
-        if not i.option_strings:
-            for j in [i.dest, i.metavar]:
-                topic = command_name + ' ' + j
-                _create_topic(topic, i.help)
-        for j in i.option_strings:
-            topic = command_name + ' ' + j
-            _create_topic(topic, i.help)
+def add_manual_help_using_command(help_, aliases=None):
+    def decorator(command: twitchirc.Command):
+        nonlocal aliases
+        if aliases is None:
+            aliases = []
+        aliases.append(command.chat_command)
+        for i in aliases:
+            _create_topic(i, help_)
+        return command
+
+    return decorator
+
+
+def manual_help_topics(help_, names):
+    for i in names:
+        _create_topic(i, help_)
 
 
 command_help_parser = twitchirc.ArgumentParser(prog='help')
@@ -105,8 +125,74 @@ def command_help(msg: twitchirc.ChannelMessage):
 
     topic = ' '.join(args.topic).replace('\"', '').replace("\'", '')
     # let the user quote the topic
+    print(repr(topic))
+    if topic.lower() in ['all', 'topics', 'help topics']:
+        msgs = []
+        new_msg = ''
+        for i in all_help.keys():
+            if len(new_msg) + len(i) > MSG_LEN_LIMIT:
+                msgs.append(new_msg)
+                new_msg = ''
+            else:
+                new_msg += i + ', '
+        new_msg = new_msg[:-2]
+        if msgs:
+            for num, i in enumerate(msgs):
+                main.bot.send(msg.reply(f'@{msg.user} ({num + 1}/{len(msgs)}) {i}'))
+        else:
+            main.bot.send(msg.reply(f'@{msg.user} All help topics: {new_msg}'))
+    elif topic.lower() == 'commands':
+        all_commands: Dict[str, Callable[..., Any]] = {}
+        for command in main.bot.commands:
+            if command.chat_command not in all_help:
+                continue
+            if command.function in all_commands.values():
+                continue
+            else:
+                if command.limit_to_channels is not None and msg.channel in command.limit_to_channels:
+                    all_commands[command.chat_command] = command.function
+                elif command.limit_to_channels is None:
+                    all_commands[command.chat_command] = command.function
+        msgs = []
+        new_msg = ''
+        for i in all_commands.keys():
+            if len(new_msg) + len(i) > MSG_LEN_LIMIT:
+                msgs.append(new_msg)
+                new_msg = ''
+            else:
+                new_msg += i + ', '
+        new_msg = new_msg[:-2]
+        if msgs:
+            for num, i in enumerate(msgs):
+                main.bot.send(msg.reply(f'@{msg.user} All documented commands: (p{num + 1}/{len(msgs)}) {i}'))
+        else:
+            main.bot.send(msg.reply(f'@{msg.user} All documented commands: {new_msg}'))
 
-    if topic not in all_help:
+    elif topic.lower() == 'all commands':
+        all_commands: Dict[str, Callable[..., Any]] = {}
+        for command in main.bot.commands:
+            if command.function in all_commands.values():
+                continue
+            else:
+                if command.limit_to_channels is not None and msg.channel in command.limit_to_channels:
+                    all_commands[command.chat_command] = command.function
+                elif command.limit_to_channels is None:
+                    all_commands[command.chat_command] = command.function
+        msgs = []
+        new_msg = ''
+        for i in all_commands.keys():
+            if len(new_msg) + len(i) > MSG_LEN_LIMIT:
+                msgs.append(new_msg)
+                new_msg = ''
+            else:
+                new_msg += i + ', '
+        new_msg = new_msg[:-2]
+        if msgs:
+            for num, i in enumerate(msgs):
+                main.bot.send(msg.reply(f'@{msg.user} ({num + 1}/{len(msgs)}) {i}'))
+        else:
+            main.bot.send(msg.reply(f'@{msg.user} All commands: {new_msg}'))
+    elif topic not in all_help:
         main.bot.send(msg.reply(f'@{msg.user} No such topic found'))
     else:
         main.bot.send(msg.reply(f'@{msg.user} {topic!r}: {all_help[topic]}'))

@@ -14,9 +14,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import datetime
+
 # noinspection PyUnresolvedReferences
 import twitchirc
-import datetime
 
 try:
     # noinspection PyPackageRequirements
@@ -39,6 +40,13 @@ try:
 except ImportError:
     import plugins.plugin_prefixes as plugin_prefixes
 
+main.load_file('plugins/plugin_help.py')
+
+try:
+    import plugin_plugin_help as plugin_help
+except ImportError:
+    import plugins.plugin_help as plugin_help
+
 __meta_data__ = {
     'name': 'plugin_ping',
     'commands': []
@@ -54,6 +62,17 @@ def _blacklist_info(channel: str):
         return ''
 
 
+def _channel_info():
+    if main.prog_args.debug:
+        return f' Running on channel debug.'
+    else:
+        return ''
+
+
+@plugin_help.add_manual_help_using_command('Show that the bot is running, how long has it been running for, '
+                                           'the amount of registered commands and if possible how many commands are '
+                                           'blacklisted',
+                                           aliases=['ping'])
 @plugin_manager.add_conditional_alias('ping', plugin_prefixes.condition_prefix_exists)
 @main.bot.add_command('mb.ping')
 def command_ping_simple(msg: twitchirc.ChannelMessage):
@@ -63,4 +82,4 @@ def command_ping_simple(msg: twitchirc.ChannelMessage):
     main.bot.send(msg.reply(f'@{msg.user} PONG! Bot has been running for '
                             f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))}. '
                             f'{len(main.bot.commands)} '
-                            f'commands registered. {_blacklist_info(msg.channel)}'))
+                            f'commands registered. {_blacklist_info(msg.channel)}{_channel_info()}'))

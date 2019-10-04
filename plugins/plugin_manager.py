@@ -93,6 +93,8 @@ def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Comm
             if condition(command, msg):
                 return command(msg)
 
+        return command
+
     return decorator
 
 

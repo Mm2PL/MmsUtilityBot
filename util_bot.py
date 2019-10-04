@@ -53,6 +53,7 @@ class Args:
 
 twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
 twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
+debug = False
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('-e', '--escalate', help='Escalate warns, WARNs to ERRs and ERRs to fatals', action='store_true',
@@ -64,6 +65,7 @@ if __name__ == '__main__':
 
 passwd = 'oauth:' + twitch_auth.json_data['access_token']
 if prog_args.debug:
+    debug = True
     storage = twitchirc.JsonStorage('storage_debug.json', auto_save=True, default={
         'permissions': {
 

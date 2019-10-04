@@ -38,13 +38,6 @@ args = p.parse_args()
 
 def refresh():
     twitch_auth.refresh()
-    # rr = requests.post('https://id.twitch.tv/oauth2/token', params={
-    #     'grant_type': 'refresh_token',
-    #     'refresh_token': json_data['refresh_token'],
-    #     'client_id': json_data['client_id'],
-    #     'client_secret': json_data['client_secret']
-    # })
-    # json_data.update(rr.json())
 
 
 if args.refresh:
