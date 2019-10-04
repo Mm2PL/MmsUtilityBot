@@ -56,4 +56,6 @@ def job_active():
         log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
 
 
-main.bot.schedule_repeated_event(60 * 60 * 0.5, 10, job_active, (), {})
+job_active()
+if not kill_job:
+    main.bot.schedule_repeated_event(60 * 60 * 0.5, 10, job_active, (), {})
