@@ -160,6 +160,7 @@ def check_on_requests(*args):
             _check_downtime_request(i)
         elif i['type'] == 'downtime_1':
             _check_downtime_2_request(i)
+        main.bot.flush_queue(100)
         reqs.remove(i)
 
 
