@@ -44,7 +44,7 @@ def job_active():
     r = requests.put('https://supinic.com/api/bot/active',
                      headers={
                          'Authorization': f'Basic {supibot_auth["id"]}:{supibot_auth["key"]}',
-                         'User-Agent': 'Mm\'s Utility Bot (by Mm2PL), Twitch chat bot'
+                         'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
                      })
     if r.status_code == 400:
         log('err', 'Sent Supibot active call, not a bot :(, won\'t attempt again.')
