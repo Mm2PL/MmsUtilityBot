@@ -33,6 +33,8 @@ try:
 except ImportError:
     import plugins.plugin_manager as plugin_manager
 
+main.load_file('plugins/plugin_prefixes.py')
+
 try:
     import plugin_plugin_prefixes as plugin_prefixes
 except ImportError:
@@ -64,7 +66,7 @@ def _help_topic_from_action(command_name, i):
                       argparse._AppendConstAction, argparse._StoreFalseAction, argparse._StoreTrueAction,
                       argparse._StoreConstAction, argparse._SubParsersAction)):
         if not i.option_strings:
-            for j in [i.dest, i.metavar]:
+            for j in (i.dest, i.metavar, i.metavar.lower()):
                 topic = command_name + ' ' + j
                 _create_topic(topic, i.help)
         for j in i.option_strings:
@@ -76,6 +78,7 @@ def auto_help_parser(parser: typing.Union[argparse.ArgumentParser, twitchirc.Arg
                      aliases=None):
     # noinspection PyProtectedMember
     def decorator(command: twitchirc.Command):
+        global all_help
         nonlocal aliases
         if aliases is None:
             aliases = []
@@ -118,14 +121,11 @@ command_help_parser.add_argument('topic', metavar='TOPIC', help='The topic you w
 @main.bot.add_command('mb.help')
 def command_help(msg: twitchirc.ChannelMessage):
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
-    args = command_help_parser.parse_args(argv[1:] if len(argv) > 1 else [])
-    if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {command_help_parser.format_usage()}'))
-        return
-
-    topic = ' '.join(args.topic).replace('\"', '').replace("\'", '')
+    args = argv[1:] if len(argv) else []
+    topic = ' '.join(args).replace('\"', '').replace("\'", '')
     # let the user quote the topic
-    print(repr(topic))
+    if topic == '':  # no arguments given
+        topic = 'mb.help'
     if topic.lower() in ['all', 'topics', 'help topics']:
         msgs = []
         new_msg = ''
