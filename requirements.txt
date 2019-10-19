@@ -1,3 +1,6 @@
+sqlalchemy
 json5
 requests
 twitchirc==1.2.2
+alembic
+srcomapi

@@ -5,4 +5,4 @@ storage.json
 .idea/
 plugins/__pycache__/
 twitch_api.json
-supibot_auth_key
+supibot_auth.json
