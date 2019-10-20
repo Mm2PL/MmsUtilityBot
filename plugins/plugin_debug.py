@@ -54,6 +54,6 @@ log = main.make_log_function('say')
 
 @plugin_help.add_manual_help_using_command('Say something.', aliases=['say'])
 @plugin_manager.add_conditional_alias('say', plugin_prefixes.condition_prefix_exists)
-@main.bot.add_command('mb.say', required_permissions=['util.admin.say'])
+@main.bot.add_command('mb.say', required_permissions=['util.admin.say'], enable_local_bypass=False)
 def command_say(msg: twitchirc.ChannelMessage):
     main.bot.send(msg.reply(msg.text.split(' ', 1)[1]))
