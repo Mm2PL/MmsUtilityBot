@@ -50,20 +50,22 @@ def _refresh_category(stream_title, channel, picked=None):
     if len(fitting) > 1:
         if isinstance(picked, int):
             current_categories[channel] = fitting[picked]
-            return True
+            return True, current_categories[channel].category.name
         elif isinstance(picked, str):
             for i in fitting:
                 if i.category.name == picked:
                     current_categories[channel] = i
-                    return True
+                    return True, current_categories[channel].category.name
             for i in fitting:
                 if picked in i.category.name:
                     current_categories[channel] = i
-                    return True
+                    return True, current_categories[channel].category.name
+        else:
+            return False, 'multiple_found'
     elif len(fitting) == 1:
         current_categories[channel] = fitting[0]
-        return True
-    return False
+        return True, fitting[0].category.name
+    return False, 'not_found'
 
 
 def _refresh_game(channel, picked=None):
@@ -130,13 +132,13 @@ def _refresh_game(channel, picked=None):
                     print('set', res[0])
                 else:
                     return False, 'Game not found, weird.', 'game_not_found'
-            cat_found = _refresh_category(data['title'], channel)
+            cat_found, err_name = _refresh_category(data['title'], channel)
             if cat_found:
                 return (True, f'{current_games[channel].name} and set category to '
                               f'{current_categories[channel].category.name}',
                         'update_both')
             else:
-                return True, f"{current_games[channel].name}, couldn't update category", 'update_game'
+                return True, f"{current_games[channel].name}, couldn\'t update category: {err_name}", 'update_game'
 
         else:
             return False, f'monkaS {chr(128073)} API didn\'t return anything.', 'api_empty'
@@ -216,12 +218,21 @@ def command_update_cat(msg: twitchirc.ChannelMessage):
                 if data['type'] == '':
                     main.bot.send(msg.reply(f'@{msg.user} monkaS {chr(127073)} API error.'))
                     return
-                _refresh_category(stream['title'], msg.channel, picked)
+                o, err_name = _refresh_category(stream['title'], msg.channel, picked)
+                if o:
+                    main.bot.send(msg.reply(f'@{msg.user} Okay, set category to {picked}'))
+                else:
+                    main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out.'))
             else:
                 main.bot.send(msg.reply(f'@{msg.user} Stream not found.'))
     else:
-        o = _refresh_category(picked, msg.channel, picked)
+        cat_name, filter_ = picked.split(';', 1)
+        if filter_ == '':
+            filter_ = None
+        elif filter_.isnumeric():
+            filter_ = int(filter_)
+        o, name = _refresh_category(cat_name, msg.channel, filter_)
         if o:
             main.bot.send(msg.reply(f'@{msg.user} Okay, set category to {picked}'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} error.'))
+            main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out.'))
