@@ -42,6 +42,18 @@ log = main.make_log_function('uptime')
 reqs: typing.List[typing.Dict[str, typing.Union[twitchirc.ChannelMessage, requests.Request]]] = []
 
 
+@main.bot.add_command('title')
+def command_title(msg: twitchirc.ChannelMessage):
+    cd_state = main.do_cooldown('title', msg, global_cooldown=30, local_cooldown=60)
+    if cd_state:
+        return
+    r, status_code = main.twitch_auth.new_api.get_streams(user_login=msg.channel, wait_for_result=True)
+    if status_code == 200 and 'data' in r and len(r['data']) > 0:
+        main.bot.send(f'@{msg.user} {r["data"]["title"]}')
+    else:
+        main.bot.send(f'@{msg.user} eShrug Stream not found.')
+
+
 @main.bot.add_command('uptime')
 def command_uptime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('uptime', msg, global_cooldown=30, local_cooldown=60)
