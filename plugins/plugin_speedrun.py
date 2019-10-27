@@ -37,6 +37,12 @@ current_games: typing.Dict[str, srcomapi.datatypes.Game] = {
 current_categories: typing.Dict[str, srcomapi.datatypes.Leaderboard] = {
     # 'channel': srcomapi.datatypes.Leaderboard()
 }
+current_categories_queries: typing.Dict[str, str] = {
+
+}
+current_games_queries: typing.Dict[str, str] = {
+
+}
 
 
 def _refresh_category(stream_title, channel, picked=None):
@@ -49,21 +55,27 @@ def _refresh_category(stream_title, channel, picked=None):
             fitting.append(cat.records[0])
     if len(fitting) > 1:
         if isinstance(picked, int):
-            current_categories[channel] = fitting[picked]
-            return True, current_categories[channel].category.name
+            if len(fitting) >= (picked - 1) >= 0:
+                current_categories[channel] = fitting[picked - 1]
+                current_games_queries[channel] = stream_title+';'+str(picked)
+                return True, current_categories[channel].category.name
+            return False, 'bad_number'
         elif isinstance(picked, str):
             for i in fitting:
                 if i.category.name == picked:
                     current_categories[channel] = i
+                    current_games_queries[channel] = stream_title + ';' + str(picked)
                     return True, current_categories[channel].category.name
             for i in fitting:
                 if picked in i.category.name:
                     current_categories[channel] = i
+                    current_games_queries[channel] = stream_title + ';' + str(picked)
                     return True, current_categories[channel].category.name
         else:
             return False, 'multiple_found'
     elif len(fitting) == 1:
         current_categories[channel] = fitting[0]
+        current_games_queries[channel] = stream_title
         return True, fitting[0].category.name
     return False, 'not_found'
 
@@ -204,7 +216,7 @@ def command_update_cat(msg: twitchirc.ChannelMessage):
     if msg.channel not in current_games:
         main.bot.send(msg.reply(f'@{msg.user} Cannot update category, there\'s no game set.'))
         return
-    picked = (msg.text + ' ').split(' ', 1)[1]
+    picked = (msg.text + ' ').split(' ', 1)[1].rstrip(' ')
 
     if picked == '':
         picked = None
@@ -235,4 +247,4 @@ def command_update_cat(msg: twitchirc.ChannelMessage):
         if o:
             main.bot.send(msg.reply(f'@{msg.user} Okay, set category to {picked}'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out.'))
+            main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out. ({name})'))
