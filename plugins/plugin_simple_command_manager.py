@@ -24,6 +24,10 @@ from typing import Dict
 
 import json5
 
+LOCAL_COMMAND = '!!LOCAL'
+
+TIME_DELETION = 60
+
 try:
     # noinspection PyPackageRequirements
     import main
@@ -44,9 +48,8 @@ add_echo_command_parser = twitchirc.ArgumentParser(prog='mb.add_echo_command')
 add_echo_command_parser.add_argument('name', metavar='NAME', help='Name of the command')
 add_echo_command_parser.add_argument('-s', '--scope', metavar='SCOPE', help='Channels this commands will run in. '
                                                                             'You need special permissions to have it '
-                                                                            'run in '
-                                                                            'channels you don\'t own',
-                                     default='!!LOCAL')
+                                                                            'run in channels you don\'t own',
+                                     default=LOCAL_COMMAND)
 add_echo_command_parser.add_argument('data', metavar='TEXT', nargs=argparse.REMAINDER, help='Text to be returned.')
 
 
@@ -56,10 +59,11 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = add_echo_command_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {add_echo_command_parser.format_usage()}'))
+        usage = add_echo_command_parser.format_usage().replace('\n', '')
+        main.bot.send(msg.reply(f'@{msg.user} {usage}'))
         return
     print(args)
-    if args.scope == '!!LOCAL':
+    if args.scope == LOCAL_COMMAND:
         scope = [msg.channel]
     else:
         scope = args.scope.split(',')
@@ -75,6 +79,7 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
                                         f'Offending entry: {i!r}. If you still want to do it create a local command '
                                         f'and use "mb.enable_command {args.name}" to enable it there '
                                         f'(mod rights are required).'))
+                # todo: make mb.enable_command, you absolute dumb-ass.
                 return
 
     for j in main.bot.commands:
@@ -109,7 +114,7 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
 @dataclass
 class Deletion:
     user: str
-    command_to_delete: str
+    command_to_delete: twitchirc.Command
     expiration_time: datetime.datetime
 
 
@@ -133,33 +138,30 @@ def _delete_custom_command(cmd: twitchirc.Command) -> bool:
     return False
 
 
-def _delete_command(command_to_delete, channel, is_global=False) -> typing.Tuple[int, str]:
-    if command_to_delete in [i.chat_command for i in main.bot.commands]:
-        cmd = main.bot.commands[command_to_delete]
-        if is_global:
-            main.bot.remove(cmd)
-            if hasattr(cmd, 'source'):
-                _delete_custom_command(cmd)
-            return 0, ''
-        elif channel in cmd.limit_to_channels:
+def _delete_command(cmd, channel, is_global=False) -> typing.Tuple[int, str]:
+    if is_global:
+        main.bot.commands.remove(cmd)
+        if hasattr(cmd, 'source'):
+            _delete_custom_command(cmd)
+        return 0, ''
+    elif channel in cmd.limit_to_channels:
+        if isinstance(cmd.limit_to_channels, list):
             cmd.limit_to_channels.remove(channel)
-            # noinspection PySimplifyBooleanCheck
-            if cmd.limit_to_channels == []:
-                # this can be None, don't fall for not cmd.limit_to_channels.
+            if not cmd.limit_to_channels:
                 main.bot.commands.remove(cmd)
             return 0, ''
         else:
-            return 1, f'Command {command_to_delete} isn\'t active in channel {channel}'
+            return 1, f'Command {cmd.chat_command} cannot be deleted, you have blacklist it.'
     else:
-        return 1, f"Command {command_to_delete} doesn't exist."
+        return 1, f'Command {cmd.chat_command} isn\'t active in channel {channel}'
 
 
 delete_command_parser = twitchirc.ArgumentParser(prog='mb.delete_command')
 delete_command_parser.add_argument('--global', help='Delete the command globally, not only in this channel.',
-                                   dest='is_global')
+                                   dest='is_global', action='store_true')
 
 g2 = delete_command_parser.add_mutually_exclusive_group()
-g2.add_argument('--delete', metavar='TARGET', help='Command to delete.')
+g2.add_argument('--delete', dest='target', metavar='TARGET', help='Command to delete.')
 
 g2.add_argument('--confirm-delete', metavar='COMMAND', help='Confirm deletion of command COMMAND.',
                 dest='confirm')
@@ -170,46 +172,73 @@ def delete_command(msg: twitchirc.ChannelMessage):
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = delete_command_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {delete_command_parser.format_usage()}'))
+        usage = delete_command_parser.format_usage().replace('\n', '')
+        main.bot.send(msg.reply(f'@{msg.user} {usage}'))
         return
 
     if args.confirm:
         if msg.user in delete_list:
-            del delete_list[msg.user]
             delete_action = delete_list[msg.user]
+            del delete_list[msg.user]
             if delete_action.expiration_time < datetime.datetime.now():
                 main.bot.send(msg.reply(f'@{msg.user} Your request has expired.'))
                 return
-            if delete_action.command_to_delete != args.confirm:
+            if delete_action.command_to_delete.chat_command != args.confirm:
                 main.bot.send(msg.reply(f'@{msg.user} Cannot confirm deletion of command '
-                                        f'{delete_action.command_to_delete!r}. You typed {args.confirm!r}.'))
+                                        f'{delete_action.command_to_delete.chat_command!r}. '
+                                        f'You typed {args.confirm!r}.'))
                 return 1
             else:
                 exit_code, message = _delete_command(delete_action.command_to_delete, msg.channel, args.is_global)
                 if exit_code != 0:
                     main.bot.send(msg.reply(f'@{msg.user} Failed to delete command: {message}'))
                 else:
-                    main.bot.send(msg.reply(f'@{msg.user} Deleted command {delete_action.command_to_delete!r}'
-                                            f'successfully.'))
+                    main.bot.send(msg.reply(f'@{msg.user} Deleted command '
+                                            f'{delete_action.command_to_delete.chat_command!r} successfully.'))
                 return
         else:
             main.bot.send(msg.reply(f'@{msg.user} You don\'t have an action to confirm.'))
     else:
-        if args.target in [i.chat_command for i in main.bot.commands]:
+        t = args.target.rstrip().split('#')
+        if len(t) == 2:
+            target, t_info = t
+        else:
+            target = t[0]
+            t_info = None
+
+        if target in [i.chat_command for i in main.bot.commands]:
             cmd = None
+            candidates = []
             for i in main.bot.commands:
-                if i.chat_command == args.target and not args.is_global and (i.limit_to_channels is not None and
-                                                                             msg.channel in i.limit_to_channels):
-                    cmd = i
-            if cmd is None:
-                main.bot.send(msg.reply(f'@{msg.user} Command {args.target!r} doesn\'t exist in this scope.'))
+                if i.chat_command.lower() == target.lower():
+                    if args.is_global:
+                        candidates.append(i)
+                    elif i.limit_to_channels is not None and msg.channel in i.limit_to_channels:
+                        candidates.append(i)
+            if len(candidates) == 1:
+                cmd = candidates[0]
+            elif len(candidates) == 0:
+                main.bot.send(msg.reply(f'@{msg.user} Command {target!r} doesn\'t exist in this scope.'))
                 return
+            else:
+                if t_info.isnumeric():
+                    t_info = int(t_info) + 1
+                    if t_info > len(candidates) or t_info < 1:
+                        main.bot.send(msg.reply(f'@{msg.user} Cannot pick number {t_info} of '
+                                                f'{", ".join([i.chat_command for i in candidates])}'))
+                        return
+                    cmd = candidates[t_info - 1]
+                else:
+                    targets = ", ".join([f"{i.chat_command} (ch: {i.limit_to_channels})" for i in candidates])
+                    main.bot.send(msg.reply(f'@{msg.user} Multiple possible target commands: '
+                                            f'{targets}'))
+                    return
             delete_list[msg.user] = Deletion(
-                msg.user, args.target, datetime.datetime.now() + datetime.timedelta(seconds=30)
+                msg.user, cmd, datetime.datetime.now() + datetime.timedelta(seconds=TIME_DELETION)
             )
-            scope = 'in the global scope.' if args.is_global else f'in the scope of this channel (#{msg.channel})'
-            main.bot.send(msg.reply(f'@{msg.user} Confirm you want to delete command {args.target!r} in '
-                                    f'{scope} using (prefix)mb.delete_command --confirm-delete COMMAND_NAME.'
-                                    f'You have 30 seconds to do this.'))
+            scope = 'the global scope.' if args.is_global else f'the scope of this channel (#{msg.channel})'
+            main.bot.send(msg.reply(f'@{msg.user} Confirm you want to delete command {target!r} in '
+                                    f'{scope} using (prefix)mb.delete_command --confirm-delete COMMAND_NAME. '
+                                    f'You have {TIME_DELETION} seconds to do this.'))
         else:
             main.bot.send(msg.reply(f'@{msg.user} Command {args.target} doesn\'t exist.'))

@@ -22,7 +22,13 @@ except ImportError:
     import util_bot as main
 
     exit()
+main.load_file('plugins/plugin_help.py')
+try:
+    import plugin_plugin_help as plugin_help
+except ImportError:
+    import plugins.plugin_help as plugin_help
 
+    exit()
 __meta_data__ = {
     'name': 'plugin_su',
     'commands': ['mb.su', 'mb.whoami']
@@ -75,38 +81,12 @@ su_group_2 = su_group_1.add_argument_group()
 su_group_1.add_argument('-L', '--logout', dest='logout', help='Return to your account', action='store_true')
 su_group_2.add_argument('-c', '--command', dest='command', metavar='COMMAND')
 
-su_group_2.add_argument('-m', '-p', '--preserve-environment', dest='do_nothing', help='Do nothing.',
-                        action='store_true')
-su_group_2.add_argument('-s', '--shell', dest='do_nothing', help='Do nothing.', metavar='SHELL')
-su_group_2.add_argument('-l', '-', '--login', dest='do_nothing', help='Do nothing.', action='store_true')
 su_group_2.add_argument('-C', '--channel', dest='channel', help='Make as if all commands are run on CHANNEL',
                         metavar='CHANNEL')
-
-su_group_2.add_argument('user', metavar='USER')
-
-SU_HELP = {
-    'c': 'Specify a command that will be invoked.',
-    'command': 'Specify a command that will be invoked.',
-
-    'h': 'Requesting help for help? LOL',
-    'help': 'Requesting help for help? LOL',
-
-    'm': 'Do nothing. Just here for compatibility',
-    'p': 'Do nothing. Just here for compatibility',
-    'preserve-environment': 'Do nothing. Just here for compatibility',
-
-    'minus': 'Do nothing. Just here for compatibility',
-    'l': 'Do nothing. Just here for compatibility',
-    'login': 'Do nothing. Just here for compatibility',
-    'shell': 'Do nothing. Just here for compatibility',
-    's': 'Do nothing. Just here for compatibility',
-
-    'L': 'Log out',
-    'logout': 'Log out, duh'
-
-}
+su_group_2.add_argument('-l', '--login', help='Account name you want to use.')
 
 
+@plugin_help.auto_help_parser(su_parser)
 @main.bot.add_command('mb.su')
 def command_su(msg: twitchirc.ChannelMessage):
     if not hasattr(msg, 'real_user') and bool(main.bot.check_permissions(msg, ['su.su'])):

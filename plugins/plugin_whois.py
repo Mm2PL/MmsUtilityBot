@@ -64,7 +64,11 @@ def command_whois(msg: twitchirc.ChannelMessage):
                                 local_cooldown=60)
     if cd_state:
         return
-    argv = shlex.split(msg.text.replace('\U000e0000', ''))
+    try:
+        argv = shlex.split(msg.text.replace('\U000e0000', ''))
+    except ValueError as e:
+        main.bot.send(msg.reply(f'@{msg.user} FeelsWeirdMan {e.args}'))
+
     args = whois_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
         main.bot.send(msg.reply(f'@{msg.user} {whois_parser.format_usage()}'))

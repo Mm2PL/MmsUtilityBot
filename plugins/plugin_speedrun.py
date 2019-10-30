@@ -139,6 +139,8 @@ def _refresh_game(channel, picked=None):
                                     del current_categories[channel]
                                 print('set', i)
                                 break
+                    else:
+                        return False, f'multiple found, bad `picked`: {picked}', 'multiple'
                 elif len(res) == 1:
                     current_games[channel] = res[0]
                     print('set', res[0])
