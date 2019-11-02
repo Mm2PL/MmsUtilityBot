@@ -13,8 +13,11 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+import atexit
 import builtins
+import contextlib
+import threading
+import urllib.parse
 import datetime
 import importlib.util
 import importlib.abc
@@ -27,10 +30,15 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import List, Dict
 import argparse
+import queue
 
+import sqlalchemy
 import twitchirc
 import json5 as json
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from twitchirc import Command
+from sqlalchemy.ext.declarative import declarative_base
 
 import twitch_auth
 
@@ -61,6 +69,7 @@ if __name__ == '__main__':
     p.add_argument('--debug', help='Run in a debug environment.', action='store_true',
                    dest='debug')
     p.add_argument('--_restart_from', help=argparse.SUPPRESS, nargs=2, dest='restart_from')
+    p.add_argument('--base-addr', help='Address of database.', dest='base_addr')
     prog_args = p.parse_args()
 
 passwd = 'oauth:' + twitch_auth.json_data['access_token']
@@ -77,6 +86,17 @@ else:
 
         }
     })
+
+Base = declarative_base()
+if prog_args.base_addr:
+    db_engine = create_engine(prog_args.base_addr)
+else:
+    if 'database_passwd' not in storage.data:
+        raise RuntimeError('Please define a database password in storage.json.')
+
+    db_engine = create_engine(f'mysql+pymysql://mm_sbot:{urllib.parse.quote(storage["database_passwd"])}'
+                              f'@localhost/mm_sbot')
+
 bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
                     storage=storage)
 bot.prefix = '!'
@@ -94,6 +114,41 @@ cooldowns = {
 }
 
 
+def _committer_thread(queue: queue.Queue):
+    while 1:
+        elem = queue.get(True)
+        if elem is None:
+            return
+        try:
+            print(f'Committer thread: Commit.')
+            elem.commit()
+        finally:
+            print(f'Committer thread: Expunge all and close.')
+            elem.expunge_all()
+            elem.close()
+        queue.task_done()
+
+
+committer_queue = queue.Queue()
+committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue,), kwargs={})
+committer_thread.start()
+
+
+@contextlib.contextmanager
+def session_scope():
+    """Provide a transactional scope around a series of operations."""
+    session = Session()
+    session.expire_on_commit = False
+    print('Create session.')
+    try:
+        yield session
+    except:
+        print('Roll back.')
+        session.rollback()
+        raise
+    committer_queue.put(session, block=False)
+
+
 class DebugDict(dict):
     def __setitem__(self, key, value):
         print(f'DEBUG DICT: SET {key} = {value}')
@@ -104,8 +159,8 @@ class DebugDict(dict):
         return super().__getitem__(item)
 
 
-def _is_mod(msg: str):
-    return 'moderator/1' in msg or 'broadcaster/1' in msg
+def _is_mod(msg: twitchirc.ChannelMessage):
+    return 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']
 
 
 def make_log_function(plugin_name: str):
@@ -140,7 +195,7 @@ def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
         cooldowns[global_name] = time.time() + global_cooldown
         cooldowns[local_name] = time.time() + local_cooldown
         return False
-    if _is_mod(msg.text):
+    if _is_mod(msg):
         return False
     if msg.user in cooldowns:  # user is timeout from the bot.
         return cooldowns[msg.user] > time.time()
@@ -161,9 +216,6 @@ def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
     cooldowns[global_name] = time.time() + global_cooldown
     cooldowns[local_name] = time.time() + local_cooldown
     return False
-
-
-current_vote = None
 
 
 def new_echo_command(command_name: str, echo_data: str,
@@ -211,6 +263,115 @@ subs = {
 }
 
 
+class User(Base):
+    __tablename__ = 'users'
+    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
+    twitch_id = sqlalchemy.Column(sqlalchemy.Integer)
+    last_known_username = sqlalchemy.Column(sqlalchemy.Text)
+
+    mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
+    sub_in_raw = sqlalchemy.Column(sqlalchemy.Text)
+
+    last_active = sqlalchemy.Column(sqlalchemy.DateTime)
+    last_message = sqlalchemy.Column(sqlalchemy.UnicodeText)
+    last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
+
+    @staticmethod
+    def get_by_message(msg: twitchirc.ChannelMessage, no_create=False):
+        with session_scope() as session:
+            user: User = (session.query(User)
+                          .filter(User.twitch_id == msg.flags['user-id'])
+                          .first())
+
+            if user is None and not no_create:
+                user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
+                            sub_in_raw='')
+                session.add(user)
+            session.expunge_all()
+            return user
+
+    @staticmethod
+    def get_by_id(id_: int):
+        with session_scope() as session:
+            user: User = session.query(User).filter(User.twitch_id == id_).first()
+            if user is not None:
+                session.refresh(user)
+            return user
+
+    @staticmethod
+    def get_by_name(name: str) -> typing.List[typing.Any]:
+        with session_scope() as session:
+            users: typing.List[User] = session.query(User).filter(User.last_known_username == name).all()
+            for user in users:
+                session.refresh(user)
+            return users
+
+    def update(self, msg: twitchirc.ChannelMessage):
+        with session_scope() as session:
+            self.last_active = datetime.datetime.now()
+            self.last_message = msg.text
+            self.last_message_channel = msg.channel
+            if _is_mod(msg):
+                self.add_mod_in(msg.channel)
+            else:
+                self.remove_mod_in(msg.channel)
+            if _is_pleb(msg):
+                self.remove_sub_in(msg.channel)
+            else:
+                self.add_sub_in(msg.channel)
+            if msg.user != self.last_known_username:
+                other_users = User.get_by_name(msg.user)
+                self.last_known_username = msg.user
+                for user in other_users:
+                    user: User
+                    user.last_known_username = '<UNKNOWN_USERNAME>'
+                    session.add(user)
+            session.add(self)
+
+    @property
+    def mod_in(self):
+        return [] if self.mod_in_raw == '' else self.mod_in_raw.replace(', ', ',').split(',')
+
+    @property
+    def sub_in(self):
+        return [] if self.sub_in_raw == '' else self.sub_in_raw.replace(', ', ',').split(',')
+
+    def add_sub_in(self, channel):
+        channel = channel.lower()
+        if channel in self.sub_in:
+            return
+        sub_in = self.sub_in
+        sub_in.append(channel)
+        self.sub_in_raw = ', '.join(sub_in)
+
+    def remove_sub_in(self, channel):
+        channel = channel.lower()
+        if channel not in self.sub_in:
+            return
+        sub_in = self.sub_in
+        sub_in.remove(channel)
+        self.sub_in_raw = ', '.join(sub_in)
+
+    def remove_mod_in(self, channel):
+        channel = channel.lower()
+        if channel not in self.mod_in:
+            return
+        mod_in = self.mod_in
+        mod_in.remove(channel)
+        self.mod_in_raw = ', '.join(mod_in)
+
+    def add_mod_in(self, channel):
+        channel = channel.lower()
+        if channel in self.mod_in:
+            return
+        mod_in = self.mod_in
+        mod_in.append(channel)
+        self.mod_in_raw = ', '.join(mod_in)
+
+    def __repr__(self):
+        return f'<User {self.last_known_username}, alias {self.id}>'
+
+
 def fix_pleb_list(chat: str):
     global plebs
     rem_count = 0
@@ -243,6 +404,10 @@ def fix_sub_list(chat: str):
             del subs[chat][k]
             rem_count += 1
     print(f'Removed {rem_count} expired sub entries.')
+
+
+def delete_spammer_chrs(text):
+    return text.replace('\U000e0000', '')
 
 
 @bot.add_command('count_subs')
@@ -484,6 +649,9 @@ def any_msg_handler(event: str, msg: twitchirc.Message, *args):
 
 def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
     global plebs
+    user = User.get_by_message(msg, no_create=False)
+    user.update(msg)
+
     if _is_pleb(msg):
         if msg.channel not in plebs:
             plebs[msg.channel] = {}
@@ -494,9 +662,39 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
             subs[msg.channel] = {}
         subs[msg.channel][msg.user] = time.time() + 60 * 60
         print(event, '(sub)', msg)
-    # if current_vote:
-    #     if msg.text.isnumeric():
-    #         current_vote['votes'][msg.user] = msg
+
+
+class PluginStorage:
+    def __repr__(self):
+        return f'PluginStorage(plugin={self.plugin!r}, storage={self.storage!r})'
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __init__(self, plugin, storage: twitchirc.JsonStorage):
+        self.plugin = plugin
+        self.storage = storage
+
+    def load(self):
+        self.storage.load()
+
+    def save(self, is_auto_save=False):
+        self.storage.save(is_auto_save)
+
+    def __getitem__(self, item):
+        return self.storage[self.plugin.name][item]
+
+    def __setitem__(self, key, value):
+        self.storage[self.plugin.name][key] = value
+
+    def __contains__(self, item):
+        return self.data.__contains__(item)
+
+    @property
+    def data(self):
+        if self.plugin.name not in self.storage.data:
+            self.storage.data[self.plugin.name] = {}
+        return self.storage.data[self.plugin.name]
 
 
 class Plugin:
@@ -589,10 +787,15 @@ def command_restart(msg: twitchirc.ChannelMessage):
 
     bot.stop()
     python = f'python{sys.version_info.major}.{sys.version_info.minor}'
-    if prog_args.debug:
-        _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel, '--debug'])
-    else:
-        _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel])
+
+    @atexit.register
+    def run_on_shutdown():
+        if prog_args.debug:
+            _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel, '--debug'])
+        else:
+            _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel])
+
+    raise SystemExit('restart.')
 
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'])
@@ -735,7 +938,10 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
     module.__builtins__['__import__'] = custom_import
 
     spec.loader.exec_module(module)
-    pl = Plugin(module, source=file_name)
+    if hasattr(module, 'Plugin'):
+        pl = module.Plugin(module, source=file_name)
+    else:
+        pl = Plugin(module, source=file_name)
 
     module.__builtins__['print'] = lambda *args, **kwargs: make_log_function(pl.name)('info', *args, **kwargs)
     plugin_meta_path[pl.module] = [
@@ -771,6 +977,13 @@ except FileNotFoundError:
     with open('commands.json', 'w') as f:
         json.dump({}, f)
 
+# make sure that the plugin manager loads before everything else.
+load_file('plugins/plugin_manager.py')
+
+load_file('plugins/auto_load.py')
+
+Base.metadata.create_all(db_engine)
+Session = sessionmaker(bind=db_engine)
 bot.handlers['chat_msg'].append(chat_msg_handler)
 bot.handlers['any_msg'].append(any_msg_handler)
 twitchirc.get_join_command(bot)
@@ -794,10 +1007,6 @@ if 'channels' in bot.storage.data:
             print(f'Skipping joining channel: {i}: Already connected.')
             continue
         bot.join(i)
-# make sure that the plugin manager loads before everything else.
-load_file('plugins/plugin_manager.py')
-
-load_file('plugins/auto_load.py')
 
 if prog_args.restart_from:
     msg = twitchirc.ChannelMessage(
@@ -816,11 +1025,13 @@ if prog_args.restart_from:
 
 
     bot.schedule_event(1, 15, _send_restart_message, (), {})
-
 try:
     bot.run()
 finally:
     print('finally')
+    print('Committing all changes left. Stopping committer thread.')
+    committer_queue.put(None, block=True)
+    print('Done.')
     bot.storage.auto_save = False
     bot.storage['channels'] = bot.channels_connected
     bot.storage['counters'] = counters

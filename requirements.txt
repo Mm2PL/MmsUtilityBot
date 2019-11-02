@@ -1,6 +1,6 @@
 sqlalchemy
 json5
 requests
-twitchirc==1.3
-alembic
+twitchirc==1.4
 srcomapi
+pymysql

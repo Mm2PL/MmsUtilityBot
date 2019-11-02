@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import os
 import traceback
 
 try:
@@ -40,14 +41,24 @@ log = main.make_log_function('auto_load')
 log('info', 'Plugin `auto_load` loaded')
 
 if 'plugins' in main.bot.storage.data:
-    for i in main.bot.storage['plugins']:
-        log('info', f'Trying to load file: {i}')
-        try:
-            main.load_file(i)
-        except Exception as e:
-            log('err', f'Failed to load: {e}')
-            for i in traceback.format_exc(30).split('\n'):
-                log('err', i)
+    if main.bot.storage['plugins'] == 'auto':
+        for i in os.listdir('plugins'):
+            log('info', f'Trying to load file: {i}')
+            try:
+                main.load_file(i)
+            except Exception as e:
+                log('err', f'Failed to load: {e}')
+                for i in traceback.format_exc(30).split('\n'):
+                    log('err', i)
+    else:
+        for i in main.bot.storage['plugins']:
+            log('info', f'Trying to load file: {i}')
+            try:
+                main.load_file(i)
+            except Exception as e:
+                log('err', f'Failed to load: {e}')
+                for i in traceback.format_exc(30).split('\n'):
+                    log('err', i)
 else:
     main.bot.storage['plugins'] = []
 
