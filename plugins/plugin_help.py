@@ -120,6 +120,10 @@ command_help_parser.add_argument('topic', metavar='TOPIC', help='The topic you w
 @auto_help_parser(command_help_parser, ['help'])
 @main.bot.add_command('mb.help')
 def command_help(msg: twitchirc.ChannelMessage):
+    cd_state = main.do_cooldown('help', msg, global_cooldown=10, local_cooldown=20,)
+    if cd_state:
+        return
+
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = argv[1:] if len(argv) else []
     topic = ' '.join(args).replace('\"', '').replace("\'", '')
