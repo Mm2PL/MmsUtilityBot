@@ -18,7 +18,6 @@ import builtins
 import contextlib
 import threading
 import urllib.parse
-import datetime
 import importlib.util
 import importlib.abc
 import os
@@ -27,8 +26,9 @@ import sys
 import time
 import typing
 from dataclasses import dataclass
+import datetime
 from types import ModuleType
-from typing import List, Dict
+from typing import List, Dict, Union
 import argparse
 import queue
 
@@ -37,10 +37,12 @@ import twitchirc
 import json5 as json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from twitchirc import Command
+from twitchirc import Command, ChannelMessage
 from sqlalchemy.ext.declarative import declarative_base
 
 import twitch_auth
+
+CACHE_EXPIRE_TIME = 60
 
 LOG_LEVELS = {
     'info': '\x1b[32minfo\x1b[m',
@@ -59,8 +61,8 @@ class Args:
     restart_from: typing.List[str]
 
 
-twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
-twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
+# twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
+# twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
 debug = False
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
@@ -114,7 +116,7 @@ cooldowns = {
 }
 
 
-def _committer_thread(queue: queue.Queue):
+def _committer_thread(queue: queue.Queue, close_queue: queue.Queue):
     while 1:
         elem = queue.get(True)
         if elem is None:
@@ -124,29 +126,53 @@ def _committer_thread(queue: queue.Queue):
             elem.commit()
         finally:
             print(f'Committer thread: Expunge all and close.')
-            elem.expunge_all()
-            elem.close()
+            close_queue.put(elem)
+            # elem.expunge_all()
+            # elem.close()
+            print('Done.')
         queue.task_done()
 
 
 committer_queue = queue.Queue()
-committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue,), kwargs={})
+committer_close_queue = queue.Queue()
+committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue, committer_close_queue), kwargs={})
 committer_thread.start()
 
 
+# @contextlib.contextmanager
+# def session_scope():
+#     """Provide a transactional scope around a series of operations."""
+#     session = Session()
+#     session.expire_on_commit = False
+#     print('Create threaded session.')
+#     try:
+#         yield session
+#     except:
+#         print('TS: Roll back.')
+#         session.rollback()
+#         raise
+#     committer_queue.put(session, block=False)
+
 @contextlib.contextmanager
-def session_scope():
+def session_scope_local_thread():
     """Provide a transactional scope around a series of operations."""
     session = Session()
     session.expire_on_commit = False
-    print('Create session.')
+    print('Create local session.')
     try:
         yield session
+        session.commit()
     except:
-        print('Roll back.')
+        print('LS: Roll back.')
         session.rollback()
         raise
-    committer_queue.put(session, block=False)
+    finally:
+        print('LS: Expunge all and close')
+        session.expunge_all()
+        session.close()
+
+
+session_scope = session_scope_local_thread
 
 
 class DebugDict(dict):
@@ -176,11 +202,16 @@ def make_log_function(plugin_name: str):
                   **kwargs)
             bot.stop()
             exit(1)
-        return print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
-                     f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
-                     **kwargs)
+        return _print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
+                      f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
+                      **kwargs)
 
     return log
+
+
+log = make_log_function('main')
+_print = print
+print = lambda *args, **kwargs: log('info', *args, **kwargs)
 
 
 def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
@@ -262,11 +293,20 @@ subs = {
     # }
 }
 
+cached_users: Dict[int, Dict[str, Union[datetime.datetime, int, ChannelMessage]]] = {
+    # base_id
+    # 123: {
+    #     'last_active': datetime.datetime.now(),
+    #     'msg': twitchirc.ChannelMessage(),
+    #     'expire_time': time.time() + CACHE_EXPIRE_TIME
+    # }
+}
+
 
 class User(Base):
     __tablename__ = 'users'
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    twitch_id = sqlalchemy.Column(sqlalchemy.Integer)
+    twitch_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
     last_known_username = sqlalchemy.Column(sqlalchemy.Text)
 
     mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
@@ -276,27 +316,55 @@ class User(Base):
     last_message = sqlalchemy.Column(sqlalchemy.UnicodeText)
     last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
 
-    @staticmethod
-    def get_by_message(msg: twitchirc.ChannelMessage, no_create=False):
-        with session_scope() as session:
-            user: User = (session.query(User)
-                          .filter(User.twitch_id == msg.flags['user-id'])
-                          .first())
+    first_active = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
 
-            if user is None and not no_create:
-                user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
-                            sub_in_raw='')
-                session.add(user)
-            session.expunge_all()
-            return user
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.first_active = datetime.datetime.now()
 
     @staticmethod
-    def get_by_id(id_: int):
+    def _get_by_message(msg, no_create, session):
+        user: User = (session.query(User)
+                      .filter(User.twitch_id == msg.flags['user-id'])
+                      .first())
+
+        if user is None and not no_create:
+            user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
+                        sub_in_raw='')
+            session.add(user)
+        session.expunge(user)
+        return user
+
+    @staticmethod
+    def get_by_message(msg: twitchirc.ChannelMessage, no_create=False, session=None):
+        if session is None:
+            with session_scope() as s:
+                return User._get_by_message(msg, no_create, s)
+        else:
+            return User._get_by_message(msg, no_create, session)
+
+    @staticmethod
+    def get_by_twitch_id(id_: int):
         with session_scope() as session:
             user: User = session.query(User).filter(User.twitch_id == id_).first()
             if user is not None:
                 session.refresh(user)
             return user
+
+    @staticmethod
+    def _get_by_local_id(id_: int, session=None):
+        user: User = session.query(User).filter(User.id == id_).first()
+        if user is not None:
+            session.refresh(user)
+        return user
+
+    @staticmethod
+    def get_by_local_id(id_: int, s=None):
+        if s is None:
+            with session_scope() as session:
+                return User._get_by_local_id(id_, session)
+        else:
+            return User._get_by_local_id(id_, s)
 
     @staticmethod
     def get_by_name(name: str) -> typing.List[typing.Any]:
@@ -306,27 +374,43 @@ class User(Base):
                 session.refresh(user)
             return users
 
-    def update(self, msg: twitchirc.ChannelMessage):
-        with session_scope() as session:
-            self.last_active = datetime.datetime.now()
-            self.last_message = msg.text
-            self.last_message_channel = msg.channel
-            if _is_mod(msg):
-                self.add_mod_in(msg.channel)
-            else:
-                self.remove_mod_in(msg.channel)
-            if _is_pleb(msg):
-                self.remove_sub_in(msg.channel)
-            else:
-                self.add_sub_in(msg.channel)
-            if msg.user != self.last_known_username:
-                other_users = User.get_by_name(msg.user)
-                self.last_known_username = msg.user
-                for user in other_users:
-                    user: User
-                    user.last_known_username = '<UNKNOWN_USERNAME>'
-                    session.add(user)
-            session.add(self)
+    def _update(self, msg, update, session):
+        self.last_active = update['last_active']
+        self.last_message = msg.text
+        self.last_message_channel = msg.channel
+        if _is_mod(msg):
+            self.add_mod_in(msg.channel)
+        else:
+            self.remove_mod_in(msg.channel)
+        if _is_pleb(msg):
+            self.remove_sub_in(msg.channel)
+        else:
+            self.add_sub_in(msg.channel)
+        if msg.user != self.last_known_username:
+            other_users = User.get_by_name(msg.user)
+            self.last_known_username = msg.user
+            for user in other_users:
+                user: User
+                user.last_known_username = '<UNKNOWN_USERNAME>'
+                session.add(user)
+        session.add(self)
+
+    def update(self, update, s=None):
+        # update = cached_users[self.id]
+        msg = update['msg']
+        if s is None:
+            with session_scope_local_thread() as session:
+                self._update(msg, update, session)
+        else:
+            self._update(msg, update, s)
+
+    def schedule_update(self, msg: twitchirc.ChannelMessage):
+        global cached_users
+        cached_users[self.id] = {
+            'last_active': datetime.datetime.now(),
+            'msg': msg,
+            'expire_time': time.time() + CACHE_EXPIRE_TIME
+        }
 
     @property
     def mod_in(self):
@@ -650,7 +734,7 @@ def any_msg_handler(event: str, msg: twitchirc.Message, *args):
 def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
     global plebs
     user = User.get_by_message(msg, no_create=False)
-    user.update(msg)
+    user.schedule_update(msg)
 
     if _is_pleb(msg):
         if msg.channel not in plebs:
@@ -662,6 +746,55 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
             subs[msg.channel] = {}
         subs[msg.channel][msg.user] = time.time() + 60 * 60
         print(event, '(sub)', msg)
+
+
+users_lock = threading.Lock()
+
+
+def flush_users():
+    # print('flush users: pre lock')
+    if users_lock.locked():
+        return
+    # print('flush users: post lock')
+    users_lock.acquire()
+    current_time = int(time.time())
+    to_update = {}
+    for db_id, user in cached_users.copy().items():
+        if user['expire_time'] <= current_time:
+            print(f'flush user {db_id}')
+            to_update[db_id] = user
+    if to_update:
+        # print(f'updating users: {to_update}')
+        print(f'users cache is of length {len(cached_users)}, {len(to_update)} are going to be removed from the '
+              f'cache.')
+
+        def _update_users():
+            try:
+                with session_scope_local_thread() as session:
+                    for db_id, update in to_update.copy().items():
+                        print(db_id, 'updating dankCircle')
+                        if db_id is None:
+                            print('create new')
+                            user = User.get_by_message(update['msg'])
+                            user.update(update, session)
+                            continue
+                        
+                        user = User.get_by_local_id(db_id)
+                        user.update(update, session)
+                print('Deleting to_updates.')
+                for db_id in to_update:
+                    del cached_users[db_id]
+            finally:
+                print('release lock.')
+                users_lock.release()
+
+        t = threading.Thread(target=_update_users, args=(), kwargs={})
+        t.start()
+    else:
+        users_lock.release()
+
+
+bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
 
 
 class PluginStorage:
@@ -964,6 +1097,19 @@ def black_list_user(user, time_to_black_list):
     cooldowns[user] = time.time() + time_to_black_list
 
 
+def closing_handler():
+    try:
+        while 1:
+            elem = committer_close_queue.get(False)
+            print('Closer: Expunge all and close')
+            elem.expunge_all()
+            elem.close()
+            print('Closer: done')
+    except queue.Empty:
+        return
+
+
+bot.schedule_repeated_event(0.1, 100, closing_handler, args=(), kwargs={})
 start_time = datetime.datetime.now()
 
 
@@ -982,6 +1128,8 @@ load_file('plugins/plugin_manager.py')
 
 load_file('plugins/auto_load.py')
 
+twitchirc.logging.log = make_log_function('TwitchIRC')
+twitchirc.log = make_log_function('TwitchIRC')
 Base.metadata.create_all(db_engine)
 Session = sessionmaker(bind=db_engine)
 bot.handlers['chat_msg'].append(chat_msg_handler)
@@ -1029,6 +1177,13 @@ try:
     bot.run()
 finally:
     print('finally')
+
+    users_lock.acquire()
+    for k, v in cached_users.items():
+        cached_users[k]['expire_time'] = 0
+    users_lock.release()
+    flush_users()
+
     print('Committing all changes left. Stopping committer thread.')
     committer_queue.put(None, block=True)
     print('Done.')

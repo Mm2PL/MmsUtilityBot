@@ -13,8 +13,12 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import requests
 import json
+import threading
+import time
+import atexit
+
+import requests
 
 try:
     # noinspection PyPackageRequirements
@@ -33,32 +37,39 @@ log = main.make_log_function('supibot_is_alive')
 with open('supibot_auth.json', 'r') as f:
     supibot_auth = json.load(f)
 
-kill_job = False
+killer_lock = threading.Lock()
 
 
-def job_active():
-    global kill_job
-    if kill_job:
-        return
+def job_active(job_kill_lock: threading.Lock):
+    while 1:
+        if job_kill_lock.locked():
+            break
+        r = requests.put('https://supinic.com/api/bot/active',
+                         headers={
+                             'Authorization': f'Basic {supibot_auth["id"]}:{supibot_auth["key"]}',
+                             'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
+                         })
+        if r.status_code == 400:
+            log('err', 'Sent Supibot active call, not a bot :(, won\'t attempt again.')
+            break
 
-    r = requests.put('https://supinic.com/api/bot/active',
-                     headers={
-                         'Authorization': f'Basic {supibot_auth["id"]}:{supibot_auth["key"]}',
-                         'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
-                     })
-    if r.status_code == 400:
-        log('err', 'Sent Supibot active call, not a bot :(, won\'t attempt again.')
-        kill_job = True
+        elif r.status_code == 200:
+            log('info', 'Sent Supibot active call. OK')
 
-    elif r.status_code == 200:
-        log('info', 'Sent Supibot active call. OK')
-
-    elif r.status_code in [401, 403]:
-        log('warn', 'Sent Supibot active call. Bad authorization.')
-    else:
-        log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
+        elif r.status_code in [401, 403]:
+            log('warn', 'Sent Supibot active call. Bad authorization.')
+        else:
+            log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
+        time.sleep(60 * 60 * 0.5)
 
 
-job_active()
-if not kill_job:
-    main.bot.schedule_repeated_event(60 * 60 * 0.5, 10, job_active, (), {})
+thread = threading.Thread(target=job_active, args=(killer_lock,))
+thread.start()
+
+
+@atexit.register
+def auto_kill_job(*args):
+    print('Stopping Supibot heartbeat thread.')
+    killer_lock.acquire()
+    thread.join()
+    print('Done.')

@@ -68,6 +68,7 @@ def command_whois(msg: twitchirc.ChannelMessage):
         argv = shlex.split(msg.text.replace('\U000e0000', ''))
     except ValueError as e:
         main.bot.send(msg.reply(f'@{msg.user} FeelsWeirdMan {e.args}'))
+        return
 
     args = whois_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
@@ -93,14 +94,27 @@ def command_whois(msg: twitchirc.ChannelMessage):
         if data['data']:
             data = data['data']
             user = data[0]
-            main.bot.send(msg.reply(f'@{msg.user} User {user["display_name"]}, '
-                                    f'ID: {user["id"]}, login: {user["login"]}, '
-                                    f'User type: '
-                                    f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
-                                    f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
-                                    f'Description: {user["description"]}'))
+            db_user = main.User.get_by_twitch_id(user['id'])
+            if db_user is not None:
+                mod_in = (", ".join(db_user.mod_in))[::-1].replace(", "[::-1], " and "[::-1])[::-1]
+                reply = (f'@{msg.user} User {user["display_name"]}, '
+                         f'ID: {user["id"]}, login: {user["login"]}, '
+                         f'User type: '
+                         f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
+                         f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
+                         + (f'Known moderator in: {mod_in} ' if db_user.mod_in != [] else '')
+                         + f'Description: {user["description"]}')
+            else:
+                reply = (f'@{msg.user} User {user["display_name"]}, '
+                         f'ID: {user["id"]}, login: {user["login"]}, '
+                         f'User type: '
+                         f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
+                         f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
+                         f'User not known to the bot.'
+                         f'Description: {user["description"]}')
+            main.bot.send(msg.reply(reply))
         else:
             main.bot.send(msg.reply(f'@{msg.user} No such user found.'))
-        main.bot.flush_queue(10) 
+        main.bot.flush_queue(10)
 
     main.bot.schedule_event(1, 10, _handle_request, (), {})

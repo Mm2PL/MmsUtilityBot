@@ -13,8 +13,9 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import twitchirc
 import enum
+
+import twitchirc
 import sqlalchemy
 from sqlalchemy.orm import relationship
 
@@ -75,8 +76,29 @@ class Suggestion(main.Base):
     state = sqlalchemy.Column(sqlalchemy.Enum(SuggestionState))
     notes = sqlalchemy.Column(sqlalchemy.Text)
 
+    def nice_state(self, capitalize=False):
+        st = self.state.name.replace('_', '')
+        if capitalize:
+            return st.capitalize()
+        else:
+            return st
+
     def __repr__(self):
-        return f'<{self.state.name.capitalize()} suggestion {self.id} by {self.author.last_known_username}>'
+        return f'<{self.nice_state(True)} suggestion {self.id} by {self.author.last_known_username}>'
+
+    def humanize(self, as_author=False):
+        if as_author:
+            if self.notes not in [None, '<no notes>']:
+                return f'{self.text} (id: {self.id}, state: {self.nice_state()}, notes: {self.notes})'
+            else:
+                return f'{self.text} (id: {self.id}, state: {self.nice_state()})'
+        else:
+            if self.notes not in [None, '<no notes>']:
+                return (f'{self.text} (id: {self.id}, state: {self.nice_state()}, '
+                        f'author: {self.author.last_known_username}, notes: {self.notes})')
+            else:
+                return (f'{self.text} (id: {self.id}, state: {self.nice_state()}, '
+                        f'author: {self.author.last_known_username})')
 
 
 @plugin_help.add_manual_help_using_command('Suggest something. You can use this to report a bug, '
@@ -88,13 +110,86 @@ def command_suggest(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('suggest', msg, global_cooldown=0, local_cooldown=30)
     if cd_state:
         return
-    t = msg.text.split(' ', 1)
+    t = main.delete_spammer_chrs(msg.text).split(' ', 1)
     if len(t) == 1:
-        bot.send(msg.reply(f'@{msg.user}, Usage: suggest <text...>'))
+        main.bot.send(msg.reply(f'@{msg.user}, Usage: suggest <text...>'))
         return
 
     s = Suggestion(author=main.User.get_by_message(msg), text=t[1], state=Suggestion.SuggestionState.new,
                    notes='<no notes>')
     with main.session_scope() as session:
         session.add(s)
-    main.bot.send(msg.reply(f'@{msg.user} Suggestion saved, hopefully.'))
+    main.bot.send(msg.reply(f'@{msg.user} Suggestion saved, hopefully. ID: {s.id}'))
+
+
+@plugin_help.add_manual_help_using_command('Check on your suggestions.',
+                                           ['check_suggestion'])
+@plugin_manager.add_conditional_alias('check_suggestion', plugin_prefixes.condition_prefix_exists)
+@main.bot.add_command('mb.check_suggestion')
+def command_check_suggestion(msg: twitchirc.ChannelMessage):
+    cd_state = main.do_cooldown('check_suggestion', msg, global_cooldown=0, local_cooldown=30)
+    if cd_state:
+        return
+    t = main.delete_spammer_chrs(msg.text).split(' ')
+    if len(t) == 1:
+        main.bot.send(msg.reply(f'@{msg.user}, Usage: check_suggestion <ID> or check_suggestion.'))
+        return
+    target = t[1]
+    if target.isnumeric():
+        target = int(target)
+        with main.session_scope() as session:
+            suggestion = session.query(Suggestion).filter(Suggestion.id == target).first()
+            main.bot.send(msg.reply(f'@{msg.user} '
+                                    f'{suggestion.humanize(suggestion.author.last_known_username == msg.user)}'))
+    else:
+        with main.session_scope() as session:
+            user = main.User.get_by_message(msg, no_create=True)
+            if user is None:
+                main.bot.send(msg.reply(f'@{msg.user}, You are a new user, you don\'t have any suggestions.'))
+                return
+            suggestions = (session.query(Suggestion)
+                           .filter(Suggestion.author == user)
+                           .filter(Suggestion.state.notin_([Suggestion.SuggestionState.done,
+                                                            Suggestion.SuggestionState.rejected,
+                                                            Suggestion.SuggestionState.not_a_suggestion])))
+            main.bot.send(msg.reply(f'@{msg.user} Your suggestions: '
+                                    f'{", ".join([f"{s.id} ({s.nice_state()})" for s in suggestions])}'))
+
+
+@plugin_help.add_manual_help_using_command('Mark a suggestion as resolved.',
+                                           ['resolves',
+                                            'resolve_suggestion'])
+@plugin_manager.add_conditional_alias('resolves', plugin_prefixes.condition_prefix_exists)
+@plugin_manager.add_conditional_alias('resolve_suggestion', plugin_prefixes.condition_prefix_exists)
+@main.bot.add_command('mb.resolve_suggestion', required_permissions=['suggestions.resolve'])
+def command_resolve_suggestion(msg: twitchirc.ChannelMessage):
+    t = main.delete_spammer_chrs(msg.text).split(' ', 3)
+    if len(t) < 3:
+        main.bot.send(msg.reply(f'@{msg.user}, Usage: resolve_suggestion <ID> <state> [notes...]'))
+        return
+
+    if not t[1].isnumeric():
+        main.bot.send(msg.reply(f'@{msg.user}, Unknown suggestion {t[1]!r}.'))
+        return
+    target = int(t[1])
+    state_names = [i.name for i in Suggestion.SuggestionState]
+    if t[2] in state_names:
+        state = Suggestion.SuggestionState[t[2]]
+    else:
+        main.bot.send(msg.reply(f'@{msg.user}, Invalid state: {t[2]!r}. Choose between '
+                                f'{", ".join([repr(i.name) for i in Suggestion.SuggestionState])}'))
+        return
+    if len(t) == 4:
+        notes = t[3]
+    else:
+        notes = None
+    with main.session_scope() as session:
+        suggestion = session.query(Suggestion).filter(Suggestion.id == target).first()
+        suggestion.state = state
+        if notes is not None:
+            suggestion.notes = notes
+        session.add(suggestion)
+    main.bot.send(msg.reply(f'@{msg.user} Modified suggestion id {target!r}, '
+                            f'new state {state}, '
+                            f'new notes {notes}.'))
+

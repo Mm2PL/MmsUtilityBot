@@ -146,13 +146,13 @@ def _refresh_game(channel, picked=None):
                     print('set', res[0])
                 else:
                     return False, 'Game not found, weird.', 'game_not_found'
-            cat_found, err_name = _refresh_category(data['title'], channel)
-            if cat_found:
-                return (True, f'{current_games[channel].name} and set category to '
-                              f'{current_categories[channel].category.name}',
-                        'update_both')
-            else:
-                return True, f"{current_games[channel].name}, couldn\'t update category: {err_name}", 'update_game'
+                cat_found, err_name = _refresh_category(data['title'], channel)
+                if cat_found:
+                    return (True, f'{current_games[channel].name} and set category to '
+                                  f'{current_categories[channel].category.name}',
+                            'update_both')
+                else:
+                    return True, f"{current_games[channel].name}, couldn\'t update category: {err_name}", 'update_game'
 
         else:
             return False, f'monkaS {chr(128073)} API didn\'t return anything.', 'api_empty'
