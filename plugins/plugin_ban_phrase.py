@@ -33,6 +33,7 @@ NAME = 'ban_pharse'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
     'commands': [
+        'mb.reload_ban_phrases'
     ]
 }
 log = main.make_log_function(NAME)
@@ -98,7 +99,7 @@ class BanPhrase(main.Base):
     def check(self, text: str):
         if self.trigger_is_regex:
             self._ensure_pattern_compiled()
-            return self.pattern.match(text)
+            return len(self.pattern.findall(text))
         else:
             return self.trigger in text
 
