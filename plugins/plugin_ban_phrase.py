@@ -177,7 +177,7 @@ class BanPhraseMiddleware(twitchirc.AbstractMiddleware):
             text = msg.text
 
             for phrase in ban_phrases:
-                if phrase.channel.last_known_username == msg.channel:
+                if phrase.channel_alias is None or phrase.channel.last_known_username == msg.channel:
                     if not phrase.output:
                         continue
                     text = phrase.check_and_replace(text)
@@ -192,7 +192,7 @@ class BanPhraseMiddleware(twitchirc.AbstractMiddleware):
             text = msg.text
 
             for phrase in ban_phrases:
-                if phrase.channel.last_known_username == msg.channel:
+                if phrase.channel_alias is None or phrase.channel.last_known_username == msg.channel:
                     if not phrase.input:
                         continue
 
