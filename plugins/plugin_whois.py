@@ -85,10 +85,6 @@ def command_whois(msg: twitchirc.ChannelMessage):
     r = requests.get('https://api.twitch.tv/helix/users', params=params,
                      headers={'Client-ID': twitch_auth.json_data['client_id']})
 
-    # whois_requests.append({
-    #     'msg': msg,
-    #     'request': r
-    # })
     def _handle_request():
         data = r.json()
         if data['data']:
@@ -102,7 +98,7 @@ def command_whois(msg: twitchirc.ChannelMessage):
                          f'User type: '
                          f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
                          f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
-                         + (f'Known moderator in: {mod_in} ' if db_user.mod_in != [] else '')
+                         + (f'Known moderator in: {mod_in}. ' if db_user.mod_in != [] else '')
                          + f'Description: {user["description"]}')
             else:
                 reply = (f'@{msg.user} User {user["display_name"]}, '
@@ -110,7 +106,7 @@ def command_whois(msg: twitchirc.ChannelMessage):
                          f'User type: '
                          f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
                          f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
-                         f'User not known to the bot.'
+                         f'User not known to the bot. '
                          f'Description: {user["description"]}')
             main.bot.send(msg.reply(reply))
         else:
