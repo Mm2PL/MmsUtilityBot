@@ -87,7 +87,11 @@ def command_whois(msg: twitchirc.ChannelMessage):
         return
 
     r = requests.get(f'https://api.ivr.fi/twitch/resolve/{name}',
-                     params=({'id': 1}) if id_ else {})
+                     params=({'id': 1}) if id_ else {},
+                     headers={
+                         'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot',
+                         'Requested-By': msg.user
+                     })
     request_queue.put_nowait((r, msg))
 
 
