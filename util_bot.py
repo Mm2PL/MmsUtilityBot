@@ -17,6 +17,7 @@ import atexit
 import builtins
 import contextlib
 import threading
+import types
 import urllib.parse
 import importlib.util
 import importlib.abc
@@ -35,6 +36,11 @@ import queue
 import sqlalchemy
 import twitchirc
 import json5 as json
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from twitchirc import Command, ChannelMessage
@@ -64,6 +70,7 @@ class Args:
 # twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
 # twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
 debug = False
+base_address = None
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('-e', '--escalate', help='Escalate warns, WARNs to ERRs and ERRs to fatals', action='store_true',
@@ -73,10 +80,13 @@ if __name__ == '__main__':
     p.add_argument('--_restart_from', help=argparse.SUPPRESS, nargs=2, dest='restart_from')
     p.add_argument('--base-addr', help='Address of database.', dest='base_addr')
     prog_args = p.parse_args()
+    if prog_args.debug:
+        debug = True
+    if prog_args.base_addr:
+        base_address = prog_args.base_addr
 
 passwd = 'oauth:' + twitch_auth.json_data['access_token']
-if prog_args.debug:
-    debug = True
+if debug:
     storage = twitchirc.JsonStorage('storage_debug.json', auto_save=True, default={
         'permissions': {
 
@@ -90,8 +100,8 @@ else:
     })
 
 Base = declarative_base()
-if prog_args.base_addr:
-    db_engine = create_engine(prog_args.base_addr)
+if base_address:
+    db_engine = create_engine(base_address)
 else:
     if 'database_passwd' not in storage.data:
         raise RuntimeError('Please define a database password in storage.json.')
@@ -215,7 +225,7 @@ print = lambda *args, **kwargs: log('info', *args, **kwargs)
 
 
 def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
-                global_cooldown: int = 1.5 * 60, local_cooldown: int = 2 * 60) -> bool:
+                global_cooldown: int = 10, local_cooldown: int = 30) -> bool:
     global cooldowns
 
     global_name = f'global_{msg.channel}_{cmd}'
@@ -367,12 +377,19 @@ class User(Base):
             return User._get_by_local_id(id_, s)
 
     @staticmethod
-    def get_by_name(name: str) -> typing.List[typing.Any]:
-        with session_scope() as session:
-            users: typing.List[User] = session.query(User).filter(User.last_known_username == name).all()
-            for user in users:
-                session.refresh(user)
-            return users
+    def _get_by_name(name: str, session):
+        users: typing.List[User] = session.query(User).filter(User.last_known_username == name).all()
+        for user in users:
+            session.refresh(user)
+        return users
+
+    @staticmethod
+    def get_by_name(name: str, s=None) -> typing.List[typing.Any]:
+        if s is None:
+            with session_scope() as session:
+                return User._get_by_name(name, session)
+        else:
+            return User._get_by_name(name, s)
 
     def _update(self, msg, update, session):
         self.last_active = update['last_active']
@@ -531,7 +548,7 @@ def count_chatters(msg: twitchirc.ChannelMessage):
 counters = {}
 
 
-def _counter_difference(text, counter):
+def counter_difference(text, counter):
     if text.startswith('-'):
         text = text[1:]
         print(text)
@@ -556,15 +573,15 @@ def _counter_difference(text, counter):
     return counter
 
 
-def _show_counter_status(old_val, val, counter_name, counter_message, msg):
+def show_counter_status(old_val, val, counter_name, counter_message, msg):
     if val < 0:
         val = 'a lot of'
     print(val)
     if old_val != val:
-        bot.send(msg.reply(counter_message['true'].format(name=counter_name, old_val=old_val,
-                                                          new_val=val)))
+        return msg.reply(counter_message['true'].format(name=counter_name, old_val=old_val,
+                                                        new_val=val))
     else:
-        bot.send(msg.reply(counter_message['false'].format(name=counter_name, val=val)))
+        return msg.reply(counter_message['false'].format(name=counter_name, val=val))
 
 
 def new_counter_command(counter_name, counter_message, limit_to_channel: typing.Optional[str] = None,
@@ -590,26 +607,26 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
         text = msg.text[len(bot.prefix):].replace(counter_name + ' ', '')
         old_val = c[msg.channel]
         print(repr(text), msg.text)
-        new_counter_value = _counter_difference(text, c[msg.channel])
+        new_counter_value = counter_difference(text, c[msg.channel])
         if new_counter_value is None:
             bot.send(msg.reply(f'Not a number: {text}'))
             return
         else:
             c[msg.channel] = new_counter_value
         val = c[msg.channel]
-        _show_counter_status(val, old_val, counter_name, counter_message, msg)
+        bot.send(show_counter_status(val, old_val, counter_name, counter_message, msg))
 
     command.source = command_source
     return command
 
 
-# new_counter_command('bonk', {
-#     True: 'Bonk counter (from {old_val}) => {new_val}',
-#     False: 'Strimer has {name}ed {val} times.'
-# })
 tasks: List[typing.Dict[
     str, typing.Union[sp.Popen, str, twitchirc.ChannelMessage]
 ]] = []
+
+
+class AliasCommand(twitchirc.Command):
+    pass
 
 
 def add_alias(bot_obj, alias):
@@ -619,9 +636,13 @@ def add_alias(bot_obj, alias):
         else:
             command.aliases = [alias]
 
-        @bot_obj.add_command(alias)
+        # @bot_obj.add_command(alias)
         def alias_func(msg: twitchirc.ChannelMessage):
             return command(msg)
+
+        alias_func = AliasCommand(alias, alias_func, parent=bot_obj, limit_to_channels=command.limit_to_channels,
+                                  matcher_function=command.matcher_function)
+        bot_obj.add_command(alias_func)
 
         return command
 
@@ -639,16 +660,14 @@ def command_quick_clip(msg: twitchirc.ChannelMessage):
     tasks.append({'proc': qc_proc, 'owner': msg.user, 'msg': msg})
 
 
-@bot.add_command('mb.cooldowns', required_permissions=['util.cooldowns'])
-def command_list_cooldowns(msg: twitchirc.ChannelMessage):
-    bot.send(msg.reply(f''))
-
-
 @bot.add_command('not_active', required_permissions=['util.not_active'])
 def command_not_active(msg: twitchirc.ChannelMessage):
     global plebs
-    text = msg.text.replace(bot.prefix + 'not_active ', '', 1).split(' ')
-    print(text)
+    argv = delete_spammer_chrs(msg.text).split(' ')
+    if len(argv) < 2:
+        bot.send(msg.reply(f'@{msg.user} Usage: not_active <user> Marks the user as not active'))
+        return
+    text = argv[1:]
     if len(text) == 1:
         print(text[0])
         rem_count = 0
@@ -778,7 +797,7 @@ def flush_users():
                             user = User.get_by_message(update['msg'])
                             user.update(update, session)
                             continue
-                        
+
                         user = User.get_by_local_id(db_id)
                         user.update(update, session)
                 print('Deleting to_updates.')
@@ -931,30 +950,29 @@ def command_restart(msg: twitchirc.ChannelMessage):
     raise SystemExit('restart.')
 
 
-@bot.add_command('mb.reload', required_permissions=['util.reload'])
+reloadables: typing.Dict[str, types.FunctionType] = {}
+
+
+@bot.add_command('mb.reload', required_permissions=['util.reload'], enable_local_bypass=False)
 def command_reload(msg: twitchirc.ChannelMessage):
-    print('=' * 80)
-    print('Removing commands from source commands.json...')
+    argv = delete_spammer_chrs(msg.text).split(' ', 1)
+    if len(argv) == 1:
+        bot.send(f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: '
+                 f'{", ".join(reloadables.keys())}')
+    else:
+        for name, func in reloadables.items():
+            if name.lower() == argv[1].lower():
+                bot.send(msg.reply(f'@{msg.user}, sync-reloading {name}...'))
+                reload_start = time.time()
+                try:
+                    o = reloadables[name]()
+                except Exception as e:
+                    bot.send(msg.reply(f'@{msg.user}, done. Error: {e} (Time taken: {time.time() - reload_start}s)'))
+                else:
+                    bot.send(msg.reply(f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'))
+                return
 
-    for num, cmd in enumerate(bot.commands):
-        if hasattr(cmd, 'source') and cmd.source == 'commands.json':
-            del bot.commands[num]
-    print('=' * 80)
-    print('Re-adding commands...')
-    load_commands()
-    print('DONE!')
-    print('=' * 80)
-    print(f'{msg.user} reloaded all of the custom echo and counter commands.')
-    for plugin in plugins.values():
-
-        r = reload_plugin(plugin)
-        if r[0]:
-            print(f'  Unload successful')
-        else:
-            print(f'  Unload unsuccessful: {r[1]}')
-    print(f'[2/2] @{msg.user} reloaded all plugins')
-    print('=' * 80)
-    bot.send(msg.reply(f'@{msg.user} Reloaded all of the custom echo and counter commands.'))
+        bot.send(msg.reply(f'@{msg.user} Couldn\'t reload {argv[1]}: no such target.'))
 
 
 def new_command_from_command_entry(entry: typing.Dict[str, str]):
@@ -1075,8 +1093,8 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
         pl = module.Plugin(module, source=file_name)
     else:
         pl = Plugin(module, source=file_name)
-
-    module.__builtins__['print'] = lambda *args, **kwargs: make_log_function(pl.name)('info', *args, **kwargs)
+    log_func = make_log_function(pl.name)
+    module.__builtins__['print'] = lambda *args, **kwargs: log_func('info', *args, **kwargs)
     plugin_meta_path[pl.module] = [
         spec,
         pl.module
@@ -1111,6 +1129,25 @@ def closing_handler():
 
 bot.schedule_repeated_event(0.1, 100, closing_handler, args=(), kwargs={})
 start_time = datetime.datetime.now()
+
+with open('code_sign_public.pem', 'rb') as f:
+    __public_key = load_pem_public_key(f.read(), backend=default_backend())
+
+
+def verify_signed_code(code: str, sign: bytes):
+    try:
+        __public_key.verify(
+            sign,
+            bytes(code, 'utf-8'),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except InvalidSignature:
+        return False
 
 
 def uptime() -> datetime.timedelta:

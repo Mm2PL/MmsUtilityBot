@@ -116,20 +116,25 @@ def _check_downtime_request(i):
         })
 
 
-def _parse_duration(duration: str) -> int:
-    time_ = 0
+def _parse_duration(duration: str) -> datetime.timedelta:
     buf = ''
+    hours = 0
+    minutes = 0
+    seconds = 0
     for i in duration:
         if i.isnumeric():
             buf += i
         else:
             if i == 's':
-                time_ += int(buf)
+                seconds += int(buf)
+                buf = ''
             elif i == 'm':
-                time_ += int(buf) * 60
+                minutes += int(buf)
+                buf = ''
             elif i == 'h':
-                time_ += int(buf) * 60 * 60
-    return time_
+                hours = int(buf)
+                buf = ''
+    return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
 
 def _check_downtime_2_request(i):
@@ -142,7 +147,7 @@ def _check_downtime_2_request(i):
     if not json_data['data']:
         return
     data = json_data['data'][0]
-    duration = datetime.timedelta(seconds=_parse_duration(data['duration']))
+    duration = _parse_duration(data['duration'])
     print(duration)
 
     struct_time = time.strptime(data['created_at'],
@@ -157,7 +162,7 @@ def _check_downtime_2_request(i):
 
     now = datetime.datetime.utcnow()
     time_start_difference = now - created_at
-    offline_for = round_time_delta(time_start_difference + duration)
+    offline_for = round_time_delta(time_start_difference - duration)
 
     print(duration, created_at, offline_for)
     main.bot.send(i['msg'].reply(f'@{i["msg"].user} {i["msg"].channel} has been offline for {offline_for}'))

@@ -13,9 +13,11 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import atexit
+import datetime
+import queue
 import shlex
-import typing
-from typing import List
+import threading
 
 import requests
 
@@ -40,8 +42,6 @@ try:
 except ImportError:
     import plugins.plugin_prefixes as plugin_prefixes
 
-import twitch_auth
-
 __meta_data__ = {
     'name': 'plugin_whois',
     'commands': [
@@ -49,7 +49,9 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function('whois')
-whois_requests: List[typing.Dict[str, typing.Union[str, requests.Request, twitchirc.ChannelMessage]]] = []
+# whois_requests: List[typing.Dict[str, typing.Union[str, requests.Request, twitchirc.ChannelMessage]]] = []
+message_return_queue = queue.Queue()
+request_queue = queue.Queue()
 
 whois_parser = twitchirc.ArgumentParser(prog='whois')
 g = whois_parser.add_mutually_exclusive_group(required=True)
@@ -74,43 +76,74 @@ def command_whois(msg: twitchirc.ChannelMessage):
     if args is None:
         main.bot.send(msg.reply(f'@{msg.user} {whois_parser.format_usage()}'))
         return
-    params = {
-
-    }
     if args.id is not None:
-        params['id'] = args.id
-    if args.name is not None:
-        params['login'] = args.name
+        name = args.id
+        id_ = True
+    elif args.name is not None:
+        name = args.name
+        id_ = False
+    else:
+        main.bot.send(msg.reply(f'@{msg.user} Do you really want the bot to crash?'))
+        return
 
-    r = requests.get('https://api.twitch.tv/helix/users', params=params,
-                     headers={'Client-ID': twitch_auth.json_data['client_id']})
+    r = requests.get(f'https://api.ivr.fi/twitch/resolve/{name}',
+                     params=({'id': 1}) if id_ else {})
+    request_queue.put_nowait((r, msg))
 
-    def _handle_request():
-        data = r.json()
-        if data['data']:
-            data = data['data']
-            user = data[0]
-            db_user = main.User.get_by_twitch_id(user['id'])
-            if db_user is not None:
-                mod_in = (", ".join(db_user.mod_in))[::-1].replace(", "[::-1], " and "[::-1])[::-1]
-                reply = (f'@{msg.user} User {user["display_name"]}, '
-                         f'ID: {user["id"]}, login: {user["login"]}, '
-                         f'User type: '
-                         f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
-                         f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
-                         + (f'Known moderator in: {mod_in}. ' if db_user.mod_in != [] else '')
-                         + f'Description: {user["description"]}')
-            else:
-                reply = (f'@{msg.user} User {user["display_name"]}, '
-                         f'ID: {user["id"]}, login: {user["login"]}, '
-                         f'User type: '
-                         f'{user["broadcaster_type"] + "," if user["broadcaster_type"] else "normal user"} '
-                         f'{", " + user["type"] if user["type"] else "with normal permissions"}. '
-                         f'User not known to the bot. '
-                         f'Description: {user["description"]}')
-            main.bot.send(msg.reply(reply))
+
+def _request_handler(in_queue: queue.Queue, out_queue: queue.Queue):
+    while 1:
+        task, msg = in_queue.get()
+        task: requests.Request
+        msg: twitchirc.ChannelMessage
+        if isinstance(task, bool):
+            return task
+        data = task.json()
+        if data['status'] == 404:
+            out_queue.put(msg.reply(f'@{msg.user} No such user found.'))
+            continue
+        roles = 'none'
+        if data['roles']['isAffiliate']:
+            roles = 'affiliate, '
+        if data['roles']['isPartner']:
+            roles += 'partner, '
+        if data['roles']['isSiteAdmin']:
+            roles += 'site admin, '
+        if data['roles']['isStaff']:
+            roles += 'staff'
+
+        roles = (roles[::-1].replace(', '[::-1], '', 1))[::-1]
+        # replace last ", " with "".
+        if data['displayName'].lower() != data['login'].lower():
+            login = f'({data["login"]})'
         else:
-            main.bot.send(msg.reply(f'@{msg.user} No such user found.'))
+            login = ''
+        created_on = datetime.datetime.strptime(data['createdAt'][:-8], '%Y-%m-%dT%H:%M:%S')
+        out_queue.put(msg.reply(f'@{msg.channel}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
+                                f'user {data["displayName"]}{login}, '
+                                f'chat color: {data["chatColor"]}, '
+                                f'account created at {created_on}, roles: {roles}, bio: '
+                                f'{data["bio"] if data["bio"] is not None else "not set"}'))
+
+
+thread = threading.Thread(target=_request_handler, args=(request_queue, message_return_queue))
+thread.start()
+
+
+@atexit.register
+def _thread_stopper(*args, **kwargs):
+    del args, kwargs
+    request_queue.put((True, None))
+
+
+def _message_sender():
+    try:
+        elem = message_return_queue.get_nowait()
+    except queue.Empty:
+        return
+    if isinstance(elem, twitchirc.ChannelMessage):
+        main.bot.send(elem)
         main.bot.flush_queue(10)
 
-    main.bot.schedule_event(1, 10, _handle_request, (), {})
+
+main.bot.schedule_repeated_event(0.1, 10, _message_sender, (), {})

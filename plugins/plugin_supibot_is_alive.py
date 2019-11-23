@@ -60,7 +60,15 @@ def job_active(job_kill_lock: threading.Lock):
             log('warn', 'Sent Supibot active call. Bad authorization.')
         else:
             log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
-        time.sleep(60 * 60 * 0.5)
+        current_sleep_time = 0
+        while 1:
+            print('sleeping.')
+            current_sleep_time += 1
+            time.sleep(1)
+            if current_sleep_time >= 60 * 60 * 0.5:
+                break
+            if job_kill_lock.locked():
+                return
 
 
 thread = threading.Thread(target=job_active, args=(killer_lock,))

@@ -13,14 +13,21 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import codecs
 import enum
-import re
+import traceback
 import typing
 
 import sqlalchemy
 import twitchirc
+from sqlalchemy import orm
 from sqlalchemy.orm import relationship
 from twitchirc import Event
+try:
+    import regex as re
+except ImportError:
+    print('Unable to import regex, using re instead.')
+    import re
 
 try:
     # noinspection PyUnresolvedReferences
@@ -29,7 +36,7 @@ except ImportError:
     import util_bot as main
 
     exit(1)
-NAME = 'ban_pharse'
+NAME = 'ban_phrase'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
     'commands': [
@@ -76,29 +83,49 @@ class BanPhrase(main.Base):
         else:
             return BanPhrase._load_all(session)
 
+    @property
+    def unescaped_trigger(self):
+        return codecs.getdecoder("unicode_escape")(self.trigger, 'ignore')[0]
+
+    @property
+    def unescaped_warning(self):
+        return codecs.getdecoder("unicode_escape")(self.warning, 'ignore')[0]
+
+    @property
+    def unescaped_replacement(self):
+        return codecs.getdecoder("unicode_escape")(self.replacement, 'ignore')[0]
+
     def check_and_replace(self, text: str):
+        if self.bad:
+            return text
+
         check_result = self.check(text)
         if not check_result:
             return text
 
         if self.trigger_is_regex:
             if self.type == BanPhraseType.replacement:
-                return self.pattern.sub(self.replacement, text)
+                return self.pattern.sub(self.unescaped_replacement, text)
             elif self.type == BanPhraseType.deny:
-                return self.warning
+                return self.unescaped_warning
             elif self.type == BanPhraseType.deny_no_warning:
                 return None
         else:
             if self.type == BanPhraseType.replacement:
-                return text.replace(self.trigger, self.replacement)
+                return text.replace(self.unescaped_trigger, self.unescaped_replacement)
             elif self.type == BanPhraseType.deny:
-                return self.warning
+                return self.unescaped_warning
             elif self.type == BanPhraseType.deny_no_warning:
                 return None
 
     def check(self, text: str):
+        if self.bad:
+            return False
+
         if self.trigger_is_regex:
             self._ensure_pattern_compiled()
+            if self.bad:
+                return False
             return len(self.pattern.findall(text))
         else:
             return self.trigger in text
@@ -160,11 +187,30 @@ class BanPhrase(main.Base):
     def _ensure_pattern_compiled(self):
         if self.pattern is not None:
             return
-        self.pattern = re.compile(self.trigger)
+        try:
+            self.pattern = re.compile(self.unescaped_trigger)
+        except:
+            try:
+                self.pattern = re.compile(self.trigger)
+            except Exception as e:
+                self.bad = True
+                log('err', f'Bad pattern {self.unescaped_trigger!r}.')
+                for i in traceback.format_exc(limit=1000).split('\n'):
+                    i = i.replace('\n', '')
+                    log('err', i)
+
 
     def __repr__(self):
         return f'<BanPhrase for channel id {self.channel_alias}, {"regex " if self.trigger_is_regex else ""}' \
                f'trigger: {self.trigger}>'
+
+    def __init__(self, *args, **kwargs):
+        self.bad = False
+        super().__init__(*args, **kwargs)
+
+    @orm.reconstructor
+    def _recreate(self, *args, **kwargs):
+        self.bad = False
 
 
 ban_phrases: typing.List[BanPhrase] = []
