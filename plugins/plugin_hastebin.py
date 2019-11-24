@@ -72,7 +72,7 @@ class Plugin(main.Plugin):
             elem: typing.Tuple[str, twitchirc.ChannelMessage]
             data, msg = elem
             r = requests.post(f'{HASTEBIN_ADDR}documents',
-                              data=data)
+                              data=data.encode('utf-8'))
             response = r.json()
             out_q.put(msg.reply(f'@{msg.user} Here\'s your hastebin link {HASTEBIN_ADDR}{response["key"]}'))
 
