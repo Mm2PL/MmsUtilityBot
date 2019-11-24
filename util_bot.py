@@ -508,7 +508,7 @@ def fix_sub_list(chat: str):
 
 
 def delete_spammer_chrs(text):
-    return text.replace('\U000e0000', '')
+    return text.replace('\U000e0000', '').rstrip('\x01')
 
 
 @bot.add_command('count_subs')

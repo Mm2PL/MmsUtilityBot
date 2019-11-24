@@ -18,6 +18,8 @@ import enum
 import twitchirc
 import sqlalchemy
 from sqlalchemy.orm import relationship
+import socket
+import threading
 
 try:
     # noinspection PyUnresolvedReferences
@@ -48,6 +50,13 @@ try:
     import plugin_plugin_prefixes as plugin_prefixes
 except ImportError:
     import plugins.plugin_prefixes as plugin_prefixes
+
+    exit(1)
+main.load_file('plugins/plugin_ipc.py')
+try:
+    import plugin_plugin_ipc as plugin_ipc
+except ImportError:
+    import plugins.plugin_ipc as plugin_ipc
 
     exit(1)
 
@@ -193,3 +202,60 @@ def command_resolve_suggestion(msg: twitchirc.ChannelMessage):
                             f'new state {state}, '
                             f'new notes {notes}.'))
 
+
+PAGE_SIZE = 50
+
+
+@plugin_ipc.add_command('get_user_suggestions')
+def _ipc_command_list_suggestions(sock: socket.socket, msg: str, socket_id):
+    arg: str
+    _, arg = msg.replace('\n', '').replace('\r\n', '').split(' ', 1)
+    args = arg.split(' ', 1)
+    user_id = None
+    page_num = None
+    if len(args) >= 2:
+        if args[0].isnumeric():
+            user_id = int(args[0])
+        if args[1].isnumeric():
+            page_num = int(args[1])
+    if user_id is None or page_num is None:
+        return (b'!1\r\n'
+                b'~Invalid usage.\r\n'
+                +
+                plugin_ipc.format_json(
+                    {
+                        'type': 'error',
+                        'source': 'get_user_suggestions',
+                        'message': 'Invalid usage.'
+                    })
+                )
+    else:
+        def _fetch_suggestions(rwq):
+            print(f'fetch {user_id} p {page_num}')
+            with main.session_scope() as session:
+                suggestions = (session.query(Suggestion)
+                               .filter(Suggestion.author_alias == user_id)
+                               .offset(page_num * PAGE_SIZE)
+                               .limit(PAGE_SIZE)
+                               .all())
+                rwq.put(
+                    plugin_ipc.format_json(
+                        {
+                            'type': 'suggestion_list',
+                            'page': page_num,
+                            'page_size': PAGE_SIZE,
+                            'data': [
+                                {
+                                    'text': suggestion.text,
+                                    'notes': suggestion.notes,
+                                    'state': suggestion.state.name
+                                }
+                                for suggestion in suggestions
+                            ]
+                        }
+                    )
+                )
+
+        t = threading.Thread(target=_fetch_suggestions, args=(plugin_ipc.response_write_queues[socket_id],))
+        t.start()
+        return
