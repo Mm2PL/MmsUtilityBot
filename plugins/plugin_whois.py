@@ -123,7 +123,7 @@ def _request_handler(in_queue: queue.Queue, out_queue: queue.Queue):
         else:
             login = ''
         created_on = datetime.datetime.strptime(data['createdAt'][:-8], '%Y-%m-%dT%H:%M:%S')
-        out_queue.put(msg.reply(f'@{msg.channel}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
+        out_queue.put(msg.reply(f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
                                 f'user {data["displayName"]}{login}, '
                                 f'chat color: {data["chatColor"]}, '
                                 f'account created at {created_on}, roles: {roles}, bio: '
