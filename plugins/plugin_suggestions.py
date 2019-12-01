@@ -20,6 +20,7 @@ import sqlalchemy
 from sqlalchemy.orm import relationship
 import socket
 import threading
+import datetime
 
 try:
     # noinspection PyUnresolvedReferences
@@ -74,6 +75,7 @@ class Suggestion(main.Base):
         accepted = 2
         rejected = 3
         not_a_suggestion = 4
+        duplicate = 5
 
 
     __tablename__ = 'suggestions'
@@ -84,6 +86,9 @@ class Suggestion(main.Base):
     text = sqlalchemy.Column(sqlalchemy.Text)
     state = sqlalchemy.Column(sqlalchemy.Enum(SuggestionState))
     notes = sqlalchemy.Column(sqlalchemy.Text)
+
+    creation_date = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True, default=datetime.datetime.now)
+    is_hidden = sqlalchemy.Column(sqlalchemy.Boolean, default=False)
 
     def nice_state(self, capitalize=False):
         st = self.state.name.replace('_', '')
@@ -119,7 +124,7 @@ def command_suggest(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('suggest', msg, global_cooldown=0, local_cooldown=30)
     if cd_state:
         return
-    t = main.delete_spammer_chrs(msg.text).split(' ', 1)
+    t = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
     if len(t) == 1:
         main.bot.send(msg.reply(f'@{msg.user}, Usage: suggest <text...>'))
         return
@@ -148,8 +153,11 @@ def command_check_suggestion(msg: twitchirc.ChannelMessage):
         target = int(target)
         with main.session_scope() as session:
             suggestion = session.query(Suggestion).filter(Suggestion.id == target).first()
-            main.bot.send(msg.reply(f'@{msg.user} '
-                                    f'{suggestion.humanize(suggestion.author.last_known_username == msg.user)}'))
+            if suggestion is None:
+                main.bot.send(msg.reply(f'@{msg.user} Suggestion id {target!r} not found.'))
+            else:
+                main.bot.send(msg.reply(f'@{msg.user} '
+                                        f'{suggestion.humanize(suggestion.author.last_known_username == msg.user)}'))
     else:
         with main.session_scope() as session:
             user = main.User.get_by_message(msg, no_create=True)
@@ -248,7 +256,8 @@ def _ipc_command_list_suggestions(sock: socket.socket, msg: str, socket_id):
                                 {
                                     'text': suggestion.text,
                                     'notes': suggestion.notes,
-                                    'state': suggestion.state.name
+                                    'state': suggestion.state.name,
+                                    'id': suggestion.id
                                 }
                                 for suggestion in suggestions
                             ]
@@ -258,4 +267,112 @@ def _ipc_command_list_suggestions(sock: socket.socket, msg: str, socket_id):
 
         t = threading.Thread(target=_fetch_suggestions, args=(plugin_ipc.response_write_queues[socket_id],))
         t.start()
-        return
+
+
+@plugin_ipc.add_command('get_suggestion')
+def _ipc_command_list_suggestions(sock: socket.socket, msg: str, socket_id):
+    arg: str
+    _, arg = msg.replace('\n', '').replace('\r\n', '').split(' ', 1)
+    args = arg.split(' ', 1)
+    suggestion_id = None
+    if len(args) >= 1:
+        if args[0].isnumeric():
+            suggestion_id = int(args[0])
+    if suggestion_id is None:
+        return (b'!1\r\n'
+                b'~Invalid usage.\r\n'
+                +
+                plugin_ipc.format_json(
+                    {
+                        'type': 'error',
+                        'source': 'get_suggestion',
+                        'message': 'Invalid usage.'
+                    })
+                )
+    else:
+        def _fetch_suggestions(rwq):
+            print(f'fetch suggestion {suggestion_id}')
+            with main.session_scope() as session:
+                suggestion = (session.query(Suggestion)
+                              .filter(Suggestion.id == suggestion_id)
+                              .first())
+                rwq.put(
+                    plugin_ipc.format_json(
+                        {
+                            'type': 'suggestion_list',
+                            'page': 0,
+                            'page_size': 1,
+                            'data':
+                                ([
+                                     {
+                                         'text': suggestion.text,
+                                         'notes': suggestion.notes,
+                                         'state': suggestion.state.name,
+                                         'id': suggestion.id,
+                                         'author': {
+                                             'name': suggestion.author.last_known_username,
+                                             'alias': suggestion.author.id
+                                         }
+                                     }
+                                 ] if suggestion is not None else [])
+                        }
+                    )
+                )
+
+        t = threading.Thread(target=_fetch_suggestions, args=(plugin_ipc.response_write_queues[socket_id],))
+        t.start()
+
+
+@plugin_ipc.add_command('get_suggestions')
+def _ipc_command_list_suggestions(sock: socket.socket, msg: str, socket_id):
+    arg: str
+    _, arg = msg.replace('\n', '').replace('\r\n', '').split(' ', 1)
+    args = arg.split(' ', 1)
+    page_num = None
+    if len(args) >= 1:
+        if args[0].isnumeric():
+            page_num = int(args[0])
+    if page_num is None:
+        return (b'!1\r\n'
+                b'~Invalid usage.\r\n'
+                +
+                plugin_ipc.format_json(
+                    {
+                        'type': 'error',
+                        'source': 'get_user_suggestions',
+                        'message': 'Invalid usage.'
+                    })
+                )
+    else:
+        def _fetch_suggestions(rwq):
+            print(f'fetch suggestions, p {page_num}')
+            with main.session_scope() as session:
+                suggestions = (session.query(Suggestion)
+                               .offset(page_num * PAGE_SIZE)
+                               .limit(PAGE_SIZE)
+                               .all())
+                rwq.put(
+                    plugin_ipc.format_json(
+                        {
+                            'type': 'suggestion_list',
+                            'page': page_num,
+                            'page_size': PAGE_SIZE,
+                            'data': [
+                                {
+                                    'text': suggestion.text,
+                                    'notes': suggestion.notes,
+                                    'state': suggestion.state.name,
+                                    'id': suggestion.id,
+                                    'author': {
+                                        'name': suggestion.author.last_known_username,
+                                        'alias': suggestion.author.id
+                                    }
+                                }
+                                for suggestion in suggestions
+                            ]
+                        }
+                    )
+                )
+
+        t = threading.Thread(target=_fetch_suggestions, args=(plugin_ipc.response_write_queues[socket_id],))
+        t.start()

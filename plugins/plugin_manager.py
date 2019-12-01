@@ -13,10 +13,17 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
+import enum
+import json
 import traceback
 import typing
+from typing import Dict, Any
 
+import sqlalchemy
 import twitchirc
+from sqlalchemy import orm
+from sqlalchemy.orm import relationship
 
 try:
     # noinspection PyPackageRequirements
@@ -45,13 +52,18 @@ error_notification_channel = main.bot.username.lower()
 
 
 def _call_handler(command, message):
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(_acall_handler(command, message))
+
+
+async def _acall_handler(command, message):
     if message.channel in blacklist and command.chat_command in blacklist[message.channel]:
         # command is blocked in this channel.
         log('info', f'User {message.user} attempted to call command {command.chat_command} in channel '
                     f'{message.channel} where it is blacklisted.')
         return
     try:
-        command(message)
+        await main.bot._call_command(command, message)
     except Exception as e:
         msg = twitchirc.ChannelMessage(
             text=f'Errors monkaS {chr(128073)} ALERT: {e!r}',
@@ -66,17 +78,18 @@ def _call_handler(command, message):
 
 
 # noinspection PyProtectedMember
-def call_command_handlers_replacement(message: twitchirc.ChannelMessage) -> None:
+async def _acall_command_handlers(message: twitchirc.ChannelMessage):
+    """Handle commands."""
     if message.text.startswith(main.bot.prefix):
         was_handled = False
         if ' ' not in message.text:
             message.text += ' '
         for handler in main.bot.commands:
             if callable(handler.matcher_function) and handler.matcher_function(message, handler):
-                _call_handler(handler, message)
+                await _acall_handler(handler, message)
                 was_handled = True
             if message.text.startswith(main.bot.prefix + handler.ef_command):
-                _call_handler(handler, message)
+                await _acall_handler(handler, message)
                 was_handled = True
 
         if not was_handled:
@@ -89,14 +102,176 @@ def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Comm
     def decorator(command: twitchirc.Command):
         @main.bot.add_command(alias, enable_local_bypass=command.enable_local_bypass,
                               required_permissions=command.permissions_required)
-        def new_command(msg: twitchirc.ChannelMessage):
+        async def new_command(msg: twitchirc.ChannelMessage):
             if condition(command, msg):
-                return command(msg)
+                return await command.acall(msg)
 
         return command
 
     return decorator
 
+
+channel_settings: Dict[str, Any] = {}
+
+
+class ChannelSettings(main.Base):
+    __tablename__ = 'channelsettings'
+
+    channel_alias = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'), primary_key=True)
+    channel = relationship('User')
+    settings_raw = sqlalchemy.Column(sqlalchemy.Text)
+
+    @orm.reconstructor
+    def _reconstructor(self):
+        self._import()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._settings = {}
+        self._export()
+
+    @staticmethod
+    def _load_all(session):
+        return session.query(ChannelSettings).all()
+
+    @staticmethod
+    def load_all(session=None):
+        if session is None:
+            with main.session_scope() as s:
+                return ChannelSettings._load_all(s)
+        else:
+            return ChannelSettings._load_all(session)
+
+    def _import(self):
+        self._settings = json.loads(self.settings_raw)
+
+    def _export(self):
+        self.settings_raw = json.dumps(self._settings)
+
+    def fill_defaults(self):
+        for k in all_settings.keys():
+            self.set(k, Setting.find(k).default_value)
+
+    def update(self):
+        self._export()
+
+    def get(self, setting_name) -> typing.Any:
+        setting = Setting.find(setting_name)
+        if self.channel_alias is not None and setting.scope == SettingScope.GLOBAL:
+            raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
+
+        if setting_name in self._settings:
+            return self._settings[setting_name]
+        else:
+            return setting.default_value
+
+    def set(self, setting_name, value) -> None:
+        setting = Setting.find(setting_name)
+        if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
+            raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
+
+        self._settings[setting_name] = value
+
+
+channel_settings_session = None
+
+
+def _init_settings():
+    global channel_settings_session
+
+    channel_settings_session = main.Session()
+    channel_settings_session.flush = lambda *a, **kw: print('CS: Flushing a readonly session.')
+    print('Load channel settings.')
+    with main.session_scope() as write_session:
+        print('Loading existing channel settings...')
+        for i in ChannelSettings.load_all(write_session):
+            if i.channel_alias == -1:  # global settings.
+                channel_settings[SettingScope.GLOBAL.name] = i
+            else:
+                channel_settings[i.channel.last_known_username] = i
+        print('OK')
+        print('Creating missing channel settings...')
+        for j in main.bot.channels_connected + [SettingScope.GLOBAL.name]:
+            if j in channel_settings:
+                continue
+            cs = ChannelSettings()
+            if j == SettingScope.GLOBAL.name:
+                cs.channel_alias = -1
+                write_session.add(cs)
+                continue
+
+            channels = main.User.get_by_name(j.lower(), write_session)
+            if len(channels) != 1:
+                continue
+            cs.channel = channels[0]
+            write_session.add(cs)
+            channel_settings[channels[0].last_known_username] = cs
+        print('OK')
+        print('Commit.')
+
+    print(f'Done. Loaded {len(channel_settings)} channel settings entries.')
+
+
+main.bot.schedule_event(0.1, 100, _init_settings, (), {})
+
+
+def _reload_settings():
+    global channel_settings
+    channel_settings = {}
+    _init_settings()
+    return 'OK'
+
+
+main.reloadables['channel_settings'] = _reload_settings
+
+
+class SettingScope(enum.Enum):
+    PER_CHANNEL = 0
+    GLOBAL = 1
+
+
+all_settings = {}
+
+
+class Setting:
+    default_value: typing.Any
+    name: str
+    scope: SettingScope
+
+    def __init__(self, owner: main.Plugin, name: str, default_value=..., scope=SettingScope.PER_CHANNEL):
+        self.owner = owner
+        self.name = name
+        self.default_value = default_value
+        self.scope = scope
+        self.register()
+
+    @staticmethod
+    def find(name: str):
+        if name in all_settings:
+            return all_settings[name]
+        else:
+            raise KeyError(f'Cannot find setting {name}, did you misspell the name or is the plugin that adds it not '
+                           f'loaded?')
+
+    def register(self):
+        if self.name not in all_settings:
+            all_settings[self.name] = self
+        else:
+            raise KeyError(f'Refusing to override setting {all_settings[self.name]} with {self}.')
+
+    def unregister(self):
+        if self.name in all_settings:
+            if all_settings[self.name] != self:
+                raise KeyError(f'Refusing to unregister unrelated setting {all_settings[self.name]}. (as {self})')
+            del all_settings[self.name]
+        else:
+            raise KeyError(f'Setting {self} is not registered.')
+
+    def __repr__(self):
+        return f'<Setting {self.name} from plugin {self.owner.name}, scope: {self.scope.name}>'
+
+
+# command definitions
 
 @main.bot.add_command('mb.unblacklist_command', required_permissions=['util.unblacklist_command'],
                       enable_local_bypass=True)
@@ -178,7 +353,7 @@ def ensure_blacklist(channel):
         blacklist[channel] = []
 
 
-main.bot._call_command_handlers = call_command_handlers_replacement
+main.bot._acall_command_handlers = _acall_command_handlers
 
 if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']

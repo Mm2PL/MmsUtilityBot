@@ -1,6 +1,11 @@
+aiohttp
+cryptography
+flask
+Pillow
 sqlalchemy
 json5
 requests
 twitchirc==1.4
 srcomapi
 pymysql
+regex

@@ -148,21 +148,6 @@ committer_close_queue = queue.Queue()
 committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue, committer_close_queue), kwargs={})
 committer_thread.start()
 
-
-# @contextlib.contextmanager
-# def session_scope():
-#     """Provide a transactional scope around a series of operations."""
-#     session = Session()
-#     session.expire_on_commit = False
-#     print('Create threaded session.')
-#     try:
-#         yield session
-#     except:
-#         print('TS: Roll back.')
-#         session.rollback()
-#         raise
-#     committer_queue.put(session, block=False)
-
 @contextlib.contextmanager
 def session_scope_local_thread():
     """Provide a transactional scope around a series of operations."""
@@ -507,8 +492,14 @@ def fix_sub_list(chat: str):
     print(f'Removed {rem_count} expired sub entries.')
 
 
+def delete_replace(text, chars):
+    for ch in chars:
+        text = text.replace(ch, '')
+    return text
+
+
 def delete_spammer_chrs(text):
-    return text.replace('\U000e0000', '').rstrip('\x01')
+    return delete_replace(text, f'\U000e0000\x01{chr(0x1f36a)}')
 
 
 @bot.add_command('count_subs')
@@ -636,9 +627,8 @@ def add_alias(bot_obj, alias):
         else:
             command.aliases = [alias]
 
-        # @bot_obj.add_command(alias)
-        def alias_func(msg: twitchirc.ChannelMessage):
-            return command(msg)
+        async def alias_func(msg: twitchirc.ChannelMessage):
+            return command.acall(msg)
 
         alias_func = AliasCommand(alias, alias_func, parent=bot_obj, limit_to_channels=command.limit_to_channels,
                                   matcher_function=command.matcher_function)
@@ -955,10 +945,10 @@ reloadables: typing.Dict[str, types.FunctionType] = {}
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'], enable_local_bypass=False)
 def command_reload(msg: twitchirc.ChannelMessage):
-    argv = delete_spammer_chrs(msg.text).split(' ', 1)
+    argv = delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
     if len(argv) == 1:
-        bot.send(f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: '
-                 f'{", ".join(reloadables.keys())}')
+        bot.send(msg.reply(f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: '
+                           f'{", ".join(reloadables.keys())}'))
     else:
         for name, func in reloadables.items():
             if name.lower() == argv[1].lower():

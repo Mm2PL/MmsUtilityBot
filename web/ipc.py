@@ -44,12 +44,23 @@ class Connection:
             self.reconnect()
             return self.command(command, no_reconnect=True)
 
-    def receive(self, block: bool = True):
+    def _receive(self, recv_until_complete):
+        msgs = []
+        if recv_until_complete:
+            first = True
+            while self.buf or first:
+                msgs += self.decode(self.sock.recv(self.max_recv))
+                first = False
+        else:
+            msgs += self.decode(self.sock.recv(self.max_recv))
+        return msgs
+
+    def receive(self, block: bool = True, recv_until_complete=False):
         if block:
-            return self.decode(self.sock.recv(self.max_recv))
+            return self._receive(recv_until_complete)
         else:
             if select.select([self.sock], [], [], 0)[0]:
-                return self.decode(self.sock.recv(self.max_recv))
+                return self._receive(recv_until_complete)
             else:
                 return None
 

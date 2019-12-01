@@ -23,6 +23,7 @@ import twitchirc
 from sqlalchemy import orm
 from sqlalchemy.orm import relationship
 from twitchirc import Event
+
 try:
     import regex as re
 except ImportError:
@@ -199,7 +200,6 @@ class BanPhrase(main.Base):
                     i = i.replace('\n', '')
                     log('err', i)
 
-
     def __repr__(self):
         return f'<BanPhrase for channel id {self.channel_alias}, {"regex " if self.trigger_is_regex else ""}' \
                f'trigger: {self.trigger}>'
@@ -293,10 +293,12 @@ def _init():
 main.bot.schedule_event(0.1, 100, _init, (), {})
 
 
-@main.bot.add_command('mb.reload_ban_phrases', required_permissions=['ban_phrases.reload'])
-def command_reload_ban_phrases(msg: twitchirc.ChannelMessage):
+def command_reload_ban_phrases():
     global ban_phrases, ban_phrase_read_only_session
     ban_phrases = []
     ban_phrase_read_only_session.close()
     _init()
-    main.bot.send(msg.reply(f'@{msg.user}, Done.'))
+    return 'Done.'
+
+
+main.reloadables['ban_phrases'] = command_reload_ban_phrases

@@ -75,7 +75,7 @@ class Plugin(main.Plugin):
             main.bot.send(msg.reply(random_msg))
         if msg.channel == 'supinic' and msg.user in ['thepositivebot', 'linkusbanned'] \
                 and msg.text.startswith('\x01ACTION [Cookies]'):
-            m = COOKIE_PATTERN.match(msg.text.replace('\x01ACTION ', ''))
+            m = COOKIE_PATTERN.match(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
             if m:
                 if m.group(2).lower() in self.cookie_optin:
                     main.bot.send(msg.reply(f'$remind {m.group(2)} cookie :) in 2h'))

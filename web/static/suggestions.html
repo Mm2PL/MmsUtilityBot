@@ -1,0 +1,174 @@
+<!--
+  ~ This is a simple utility bot
+  ~ Copyright (C) 2019 Maciej Marciniak
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title id="title">Mm's bot (suggestions page 0)</title>
+    <link href="/global.css" rel="stylesheet">
+    <script type="text/javascript">
+        /* MEGADANK js  */
+        let current_page = -1;
+        let is_loading = false;
+
+        function update_page_number() {
+            document.getElementById("page_num").innerText = `Page ${current_page}`;
+            document.getElementById("title").innerText = `Mm's bot (suggestions page ${current_page})`;
+        };
+
+        function load(page) {
+            window.history.pushState({current_page: page}, `Mm's bot (suggestions page ${page})`, `?page=${page}`);
+            current_page = page;
+            let xhr = new XMLHttpRequest();
+            xhr.open(
+                "GET",
+                `https://kotmisia.pl/api/suggestions/list/${page}`
+            );
+            xhr.responseType = 'json';
+            xhr.onerror = () => {
+                document.getElementById("loading_failed").hidden = false;
+                document.getElementById("loading_info").hidden = true;
+            };
+            xhr.onload = () => {
+                update_page_number();
+                if (xhr.status === 200) {
+                    let resp = xhr.response.data;
+
+                    let list = document.getElementsByClassName("suggestion_list")[0];
+                    list.innerHTML = '';  // clear the previously loaded entries.
+                    if (resp.length == 0) {
+                        let li = document.createElement("li");
+                        let header = document.createElement("h3");
+                        header.append("No more elements.");
+                        li.append(header);
+                        list.append(li);
+                        is_loading = false;
+                        document.getElementById("loading_info").hidden = true;
+                        document.getElementById("button_next").hidden = true;
+                        return;
+                    }
+                    for (let i = 0; i < resp.length; i++) {
+                        let li = document.createElement("li");
+                        let header = document.createElement("h3");
+                        header.append(resp[i].text);
+                        li.append(header);
+                        li.append(document.createTextNode(`Author: ${resp[i].author.name}`));
+                        li.append(document.createElement("br"));
+                        li.append(document.createTextNode(`ID: ${resp[i].id}`));
+                        li.append(document.createElement("br"));
+                        li.append(document.createTextNode(`State: ${resp[i].state.replace("_", " ")}`));
+                        li.append(document.createElement("br"));
+                        li.append(document.createTextNode("Notes:"));
+                        li.append(document.createElement("br"));
+
+                        let code = document.createElement("code");
+                        code.append(document.createTextNode(resp[i].notes));
+
+                        li.append(code);
+                        list.append(li);
+                    }
+                    if (resp.length < xhr.response.page_size) {
+                        document.getElementById("button_next").hidden = true;
+                    }
+
+                }
+                is_loading = false;
+                document.getElementById("loading_info").hidden = true;
+            };
+            is_loading = true;
+            xhr.send();
+        };
+
+        function on_next_page() {
+            if (is_loading) {
+                return;
+            }
+            load(current_page + 1);
+            if (current_page == 0) {
+                document.getElementById("button_prev").hidden = true;
+            } else {
+                document.getElementById("button_prev").hidden = false;
+            }
+            window.scrollTo(0, 0);
+            document.getElementById("loading_info").hidden = false;
+            document.getElementById("button_prev").hidden = false;
+        };
+
+        function on_prev_page() {
+            if (is_loading) {
+                return;
+            }
+            if (current_page == 0) {
+                return;
+            }
+            load(current_page - 1);
+            if (current_page == 0) {
+                document.getElementById("button_prev").hidden = true;
+            } else {
+                document.getElementById("button_prev").hidden = false;
+            }
+            window.scrollTo(0, 0);
+            document.getElementById("loading_info").hidden = false;
+            document.getElementById("button_next").hidden = false;
+        };
+        // check the page in the URL.
+        let args = String(document.location).split("?");
+        current_page = 0;
+        for (let j = 0; j < args.length; j++) {
+            let param = args[j].split('=');
+            if (param[0] === "page") {
+                if (Number(param[1]) != NaN) { // attempt converting this to a number
+                    current_page = Number(param[1]);
+                }
+            }
+        }
+        load(current_page);
+        window.setTimeout(() => {
+            update_page_number();
+            if (current_page == 0) {
+                document.getElementById("button_prev").hidden = true;
+            }
+            document.getElementById("button_next").hidden = false;
+            document.getElementById("loading_failed").hidden = true;
+        }, 1);
+
+    </script>
+</head>
+<body>
+<noscript>
+    <h1>
+    Did you forget to enable js?
+    </h1>
+</noscript>
+<h1 id="page_num">Page 0</h1>
+<div id="loading_info">
+    Loading... <img src="https://cdn.betterttv.net/emote/5c0bc8e66fa89733b2af374a/3x" alt="dankCircle">
+</div>
+<div id="loading_failed" hidden="hidden">
+    Loading failed <img src="https://cdn.frankerfacez.com/dc/5a/dc5ab2633c6bd46cf17d37cd0d31d72f.png"
+                        alt="peepoSadDank">
+</div>
+
+<ol class="suggestion_list">
+
+</ol>
+<button id="button_prev" onclick="on_prev_page();">Previous page</button>
+<button id="button_next" onclick="on_next_page();">Next page</button>
+</body>
+</html>

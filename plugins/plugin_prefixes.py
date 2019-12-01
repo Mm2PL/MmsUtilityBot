@@ -38,7 +38,7 @@ __meta_data__ = {
     'name': 'plugin_prefixes',
     'commands': []
 }
-log = main.make_log_function('ping')
+log = main.make_log_function('prefixes')
 
 channel_prefixes: Dict[str, str] = {
     # 'channel': 'prefix'
@@ -48,7 +48,7 @@ old_handler = main.bot._call_command_handlers
 
 
 # noinspection PyProtectedMember
-def new_handler(message: twitchirc.ChannelMessage):
+async def new_handler(message: twitchirc.ChannelMessage):
     if message.channel in channel_prefixes:
         chan_prefix = channel_prefixes[message.channel]
         if message.text.startswith(chan_prefix):
@@ -57,7 +57,7 @@ def new_handler(message: twitchirc.ChannelMessage):
                 message.text += ' '
             for handler in main.bot.commands:
                 if message.text.startswith(chan_prefix + handler.ef_command):
-                    plugin_manager._call_handler(handler, message)
+                    await plugin_manager._acall_handler(handler, message)
                     was_handled = True
 
             if not was_handled:
@@ -65,10 +65,10 @@ def new_handler(message: twitchirc.ChannelMessage):
         else:
             return
     else:
-        old_handler(message)
+        await old_handler(message)
 
 
-main.bot._call_command_handlers = new_handler
+main.bot._acall_command_handlers = new_handler
 
 
 def condition_prefix_exists(command: twitchirc.Command, msg: twitchirc.ChannelMessage):

@@ -17,11 +17,49 @@ from flask import abort, jsonify
 
 
 def init(register_endpoint, ipc_conn):
-    @register_endpoint('/suggestions/list/<int:user_id>/<int:page>')
-    @register_endpoint('/suggestions/list/<int:user_id>')
+    @register_endpoint('/suggestions/list/user/<int:user_id>/<int:page>')
     def list_suggestions(user_id: int, page=0):
+        """
+        List suggestions filtering by user.
+        <br/>
+        Arguments:
+        <ol>
+            <li>
+            <b>user_id</b> Internal id of the user you want to search for. NOT THE TWITCH ID.
+            </li>
+
+            <li>
+            <b>page</b> Page number you want. Pages are 50 or less entries in size, indexed from 0.
+            </li>
+        </ol>
+        """
         ipc_conn.command(f'get_user_suggestions {user_id} {page}'.encode('utf-8'))
-        msgs = ipc_conn.receive(True)
+        msgs = ipc_conn.receive(True, recv_until_complete=True)
+        for m in msgs:
+            if m[0] == 'json' and m[1]['type'] == 'suggestion_list':
+                return jsonify({
+                    'status': 200,
+                    'page': m[1]['page'],
+                    'page_size': m[1]['page_size'],  # don't copy shit you don't need to, leaking info is bad.
+                    'data': m[1]['data']
+                })
+        abort(400)  # bad request
+
+    @register_endpoint('/suggestions/list/<int:page>')
+    def list_all_suggestions(page):
+        """
+        List suggestions
+        <br/>
+        Arguments:
+        <ol>
+            <li>
+            <b>page</b> Page number you want. Pages are 50 or less entries in size, indexed from 0.
+            </li>
+        </ol>
+        """
+        ipc_conn.command(f'get_suggestions {page}'.encode('utf-8'))
+        msgs = ipc_conn.receive(True, True)
+        print(msgs)
         for m in msgs:
             if m[0] == 'json' and m[1]['type'] == 'suggestion_list':
                 return jsonify({

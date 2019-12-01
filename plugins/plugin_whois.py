@@ -13,13 +13,11 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import atexit
 import datetime
 import queue
 import shlex
-import threading
 
-import requests
+import aiohttp
 
 try:
     # noinspection PyPackageRequirements
@@ -49,7 +47,6 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function('whois')
-# whois_requests: List[typing.Dict[str, typing.Union[str, requests.Request, twitchirc.ChannelMessage]]] = []
 message_return_queue = queue.Queue()
 request_queue = queue.Queue()
 
@@ -61,7 +58,7 @@ g.add_argument('-n', '--name', help='Use the username', dest='name', type=str)
 
 @plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
 @main.bot.add_command('mb.whois')
-def command_whois(msg: twitchirc.ChannelMessage):
+async def command_whois(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('whois', msg, global_cooldown=30,
                                 local_cooldown=60)
     if cd_state:
@@ -74,8 +71,7 @@ def command_whois(msg: twitchirc.ChannelMessage):
 
     args = whois_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {whois_parser.format_usage()}'))
-        return
+        return f'@{msg.user} {whois_parser.format_usage()}'
     if args.id is not None:
         name = args.id
         id_ = True
@@ -83,29 +79,18 @@ def command_whois(msg: twitchirc.ChannelMessage):
         name = args.name
         id_ = False
     else:
-        main.bot.send(msg.reply(f'@{msg.user} Do you really want the bot to crash?'))
-        return
+        return f'@{msg.user} Do you really want the bot to crash?'
 
-    r = requests.get(f'https://api.ivr.fi/twitch/resolve/{name}',
-                     params=({'id': 1}) if id_ else {},
-                     headers={
-                         'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot',
-                         'Requested-By': msg.user
-                     })
-    request_queue.put_nowait((r, msg))
-
-
-def _request_handler(in_queue: queue.Queue, out_queue: queue.Queue):
-    while 1:
-        task, msg = in_queue.get()
-        task: requests.Request
-        msg: twitchirc.ChannelMessage
-        if isinstance(task, bool):
-            return task
-        data = task.json()
+    async with aiohttp.request('get', f'https://api.ivr.fi/twitch/resolve/{name}',
+                               params=({'id': 1}) if id_ else {},
+                               headers={
+                                   'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot',
+                                   'Requested-By': msg.user
+                               }) as request:
+        data = await request.json()
         if data['status'] == 404:
-            out_queue.put(msg.reply(f'@{msg.user} No such user found.'))
-            continue
+            return f'@{msg.user} No such user found.'
+
         roles = 'none'
         if data['roles']['isAffiliate']:
             roles = 'affiliate, '
@@ -123,31 +108,8 @@ def _request_handler(in_queue: queue.Queue, out_queue: queue.Queue):
         else:
             login = ''
         created_on = datetime.datetime.strptime(data['createdAt'][:-8], '%Y-%m-%dT%H:%M:%S')
-        out_queue.put(msg.reply(f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
-                                f'user {data["displayName"]}{login}, '
-                                f'chat color: {data["chatColor"]}, '
-                                f'account created at {created_on}, roles: {roles}, bio: '
-                                f'{data["bio"] if data["bio"] is not None else "not set"}'))
-
-
-thread = threading.Thread(target=_request_handler, args=(request_queue, message_return_queue))
-thread.start()
-
-
-@atexit.register
-def _thread_stopper(*args, **kwargs):
-    del args, kwargs
-    request_queue.put((True, None))
-
-
-def _message_sender():
-    try:
-        elem = message_return_queue.get_nowait()
-    except queue.Empty:
-        return
-    if isinstance(elem, twitchirc.ChannelMessage):
-        main.bot.send(elem)
-        main.bot.flush_queue(10)
-
-
-main.bot.schedule_repeated_event(0.1, 10, _message_sender, (), {})
+        return (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
+                f'user {data["displayName"]}{login}, '
+                f'chat color: {data["chatColor"]}, '
+                f'account created at {created_on}, roles: {roles}, bio: '
+                f'{data["bio"] if data["bio"] is not None else "not set"}')
