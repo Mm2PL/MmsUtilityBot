@@ -114,20 +114,16 @@ def command_prefix(msg: twitchirc.ChannelMessage):
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = prefix_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {prefix_parser.format_usage()}'))
-        return
+        return f'@{msg.user} {prefix_parser.format_usage()}'
     print(args)
     if args.query:
         args.query = ''.join(args.query)
         if args.query in channel_prefixes:
-            main.bot.send(msg.reply(f'@{msg.user} Channel {args.query!r} uses prefix {channel_prefixes[args.query]}'))
-            return
+            return f'@{msg.user} Channel {args.query!r} uses prefix {channel_prefixes[args.query]}'
         elif args.query in main.bot.channels_connected:
-            main.bot.send(msg.reply(f'@{msg.user} Channel {args.query!r} uses default prefix ({main.bot.prefix})'))
-            return
+            return f'@{msg.user} Channel {args.query!r} uses default prefix ({main.bot.prefix})'
         else:
-            main.bot.send(msg.reply(f'@{msg.user} Not in channel {args.query!r}.'))
-            return
+            return f'@{msg.user} Not in channel {args.query!r}.'
     elif args.set:
         args.set = ''.join(args.set)
         temp = [i.isprintable() for i in args.set]
@@ -140,12 +136,10 @@ def command_prefix(msg: twitchirc.ChannelMessage):
             # if one returned False the sum will not be equal to len() of rules.
             chan = _command_prefix_get_channel(msg, args)
             channel_prefixes[chan] = args.set
-            main.bot.send(msg.reply(f'@{msg.user} Set prefix to {args.set!r} for channel {chan}.'))
             _save_prefixes()
-            return
+            return f'@{msg.user} Set prefix to {args.set!r} for channel {chan}.'
         else:
-            main.bot.send(msg.reply(f'@{msg.user} Invalid prefix {args.set!r}.'))
-            return
+            return f'@{msg.user} Invalid prefix {args.set!r}.'
 
 
 if 'plugin_prefixes' in main.bot.storage.data:

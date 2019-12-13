@@ -100,8 +100,7 @@ class Plugin(main.Plugin):
             return
         if msg.user in self.ping_optouts:
             del self.ping_optouts[msg.user]
-            main.bot.send(msg.reply(f'@{msg.user}, you can be pinged by the bot now.'))
-            return
+            return f'@{msg.user}, you can be pinged by the bot now.'
 
         args = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
         if len(args) == 1:
@@ -120,7 +119,7 @@ class Plugin(main.Plugin):
             mode = OPTOUT_MODE_NO_AT
         # noinspection PyUnboundLocalVariable
         self.ping_optouts[msg.user] = mode
-        main.bot.send(msg.reply(f'@{msg.user}, i will no longer ping you :)'))
+        return f'@{msg.user}, i will no longer ping you :)'
 
 
 PING_PATTERN = regex.compile(r'@([a-zA-Z0-9_]+)')

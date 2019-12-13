@@ -70,6 +70,6 @@ def command_load_plugin(msg: twitchirc.ChannelMessage):
         argv.pop(0)  # Remove the command name
     try:
         pl = main.load_file(argv[0])
-        main.bot.send(msg.reply(f'Successfully loaded plugin: {pl.name}'))
+        return f'Successfully loaded plugin: {pl.name}'
     except Exception as e:
-        main.bot.send(msg.reply(f'An exception was encountered: {e!r}'))
+        return f'An exception was encountered: {e!r}'

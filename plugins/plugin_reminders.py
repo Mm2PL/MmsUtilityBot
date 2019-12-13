@@ -79,8 +79,7 @@ c_rem_parser.add_argument('-f', '--for', dest='for_user', default=None)
 def command_reminder(msg: twitchirc.ChannelMessage):
     aargs = c_rem_parser.parse_args(msg.text.split(' ')[1:])
     if aargs is None or aargs.help:
-        main.bot.send(msg.reply(f'@{msg.user} {c_rem_parser.format_usage()}'))
-        return
+        return f'@{msg.user} {c_rem_parser.format_usage()}'
     # for i in dir(aargs):
     #     if i.startswith('_'):
     #         continue
@@ -88,19 +87,18 @@ def command_reminder(msg: twitchirc.ChannelMessage):
     if aargs.for_user:
         missing_perms = main.bot.check_permissions(msg, ['reminder.reminder.for_other'], enable_local_bypass=True)
         if missing_perms:
-            main.bot.send(msg.reply(f'@{msg.user} Cannot add reminder for other user, you don\'t have the permissions '
-                                    f'needed'))
+            return (f'@{msg.user} Cannot add reminder for other user, you don\'t have the permissions '
+                    f'needed')
     if aargs.remove:
         if msg.channel not in reminders:
-            main.bot.send(msg.reply(f'@{msg.user} Cannot remove reminders: channel is not registered. '
-                                    f'No reminders here.'))
-            return
+            return (f'@{msg.user} Cannot remove reminders: channel is not registered. '
+                    f'No reminders here.')
         count = 0
         for r in reminders[msg.channel].copy():
             if r['user'] == aargs.remove.lower():
                 count += 1
                 reminders[msg.channel].remove(r)
-        main.bot.send(msg.reply(f'@{msg.user} removed {count} reminder(s).'))
+        return f'@{msg.user} removed {count} reminder(s).'
     if aargs.list:
         output = ''
         if msg.channel not in reminders:
@@ -111,8 +109,7 @@ def command_reminder(msg: twitchirc.ChannelMessage):
             output += f'<{r["text"]!r} on ' \
                       f'{datetime.datetime.fromtimestamp(r["timestamp"]).strftime("%Y-%M-%d %H:%m:%S")}>, '
         output = output[:-2]
-        main.bot.send(msg.reply(f'@{msg.user} List: {output}'))
-        return
+        return f'@{msg.user} List: {output}'
     if aargs.add:
         # if not aargs.time:
         #     bot.send(msg.reply(f'@{msg.user} Argument -t/--time is required with -a/--add.'))
@@ -131,15 +128,15 @@ def command_reminder(msg: twitchirc.ChannelMessage):
             'nr': aargs.nr
         })
         if not aargs.nr:
-            main.bot.send(msg.reply(f'@{msg.user} , I will be messaging you in {seconds} seconds '
-                                    f'or ({seconds // 3600:.0f} hours, '
-                                    f'{seconds % 3600 / 60:.0f} minutes and {seconds % 3600 % 60:.0f} seconds) with '
-                                    f'the message {text!r}'))
+            return (f'@{msg.user} , I will be messaging you in {seconds} seconds '
+                    f'or ({seconds // 3600:.0f} hours, '
+                    f'{seconds % 3600 / 60:.0f} minutes and {seconds % 3600 % 60:.0f} seconds) with '
+                    f'the message {text!r}')
         else:
-            main.bot.send(msg.reply(f'@{msg.user} , I will be messaging you every {seconds} seconds '
-                                    f'or ({seconds // 3600:.0f} hours, '
-                                    f'{seconds % 3600 / 60:.0f} minutes and {seconds % 3600 % 60:.0f} seconds) with '
-                                    f'the message {text!r}'))
+            return (f'@{msg.user} , I will be messaging you every {seconds} seconds '
+                    f'or ({seconds // 3600:.0f} hours, '
+                    f'{seconds % 3600 / 60:.0f} minutes and {seconds % 3600 % 60:.0f} seconds) with '
+                    f'the message {text!r}')
 
 
 def make_successful_set_reminder_message(msg, all_seconds, text, reoccurring):

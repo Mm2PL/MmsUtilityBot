@@ -152,14 +152,12 @@ def command_find_limit(msg: twitchirc.ChannelMessage):
     if '' in argv:
         argv.remove('')
     if len(argv) == 1:
-        main.bot.send(msg.reply(f'@{msg.user} Usage: !find_limit (emote), NOTE commands are exempt '
-                                f'from emote costs'))
-        return
+        return (f'@{msg.user} Usage: !find_limit (emote), NOTE commands are exempt '
+                f'from emote costs')
     for limit_name, limit_data in emotes.items():
         if argv[1] in limit_data['emotes']:
-            main.bot.send(msg.reply(f'@{msg.user} Emote {argv[1]} belongs to limit {limit_name}.'))
-            return
-    main.bot.send(msg.reply(f'@{msg.user} Failed to find which limit {argv[1]} belongs to. :('))
+            return f'@{msg.user} Emote {argv[1]} belongs to limit {limit_name}.'
+    return f'@{msg.user} Failed to find which limit {argv[1]} belongs to. :('
 
 
 @main.bot.add_command('emote_cost')
@@ -172,15 +170,14 @@ def command_show_emote_cost(msg: twitchirc.ChannelMessage):
     if '' in argv:
         argv.remove('')
     if len(argv) == 1:
-        main.bot.send(msg.reply(f'@{msg.user} Usage: !emote_cost (limit)'))
-        return
+        return f'@{msg.user} Usage: !emote_cost (limit)'
     if argv[1] in emotes:
         text = []
         for k, v in emotes[argv[1]]['emotes'].items():
             text.append(f'{k} ({v})')
-        main.bot.send(msg.reply(f'@{msg.user} Emotes in the {argv[1]} limit with their cost: {", ".join(text)}'))
+        return f'@{msg.user} Emotes in the {argv[1]} limit with their cost: {", ".join(text)}'
     else:
-        main.bot.send(msg.reply(f'@{msg.user} {argv[1]!r}: No such emote limit.'))
+        return f'@{msg.user} {argv[1]!r}: No such emote limit.'
 
 
 @main.bot.add_command('show_limits')
@@ -197,8 +194,7 @@ def command_show_limits(msg: twitchirc.ChannelMessage):
         channel = argv[1]
     text = []
     if channel not in channels:
-        main.bot.send(msg.reply(f"@{msg.user} Channel {channel} isn't registered in this bot or doesn't exist."))
-        return
+        return f"@{msg.user} Channel {channel} isn't registered in this bot or doesn't exist."
     for limit_name, limit_data in channels[channel].items():
         if limit_name == '_last_regen':
             continue
@@ -208,8 +204,8 @@ def command_show_limits(msg: twitchirc.ChannelMessage):
                                                                                                           '%H:%M:%S '
                                                                                                           'CEST('
                                                                                                           'UTC+1h)'))
-    main.bot.send(msg.reply(f'@{msg.user} You have {", ".join(text)}, your limits will regenerate on '
-                            f'{regen_time}'))
+    return (f'@{msg.user} You have {", ".join(text)}, your limits will regenerate on '
+            f'{regen_time}')
 
 
 main.bot.handlers['chat_msg'].append(msg_handler)

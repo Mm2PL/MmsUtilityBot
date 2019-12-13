@@ -60,8 +60,7 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
     args = add_echo_command_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
         usage = add_echo_command_parser.format_usage().replace('\n', '')
-        main.bot.send(msg.reply(f'@{msg.user} {usage}'))
-        return
+        return f'@{msg.user} {usage}'
     print(args)
     if args.scope == LOCAL_COMMAND:
         scope = [msg.channel]
@@ -69,23 +68,21 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
         scope = args.scope.split(',')
         for i in scope:
             if i not in main.bot.channels_connected:
-                main.bot.send(msg.reply(f'@{msg.user} Cannot add command: bot isn\'t in channel #{i}.'))
-                return
+                return f'@{msg.user} Cannot add command: bot isn\'t in channel #{i}.'
 
             missing_permissions = main.bot.check_permissions(msg, ['util.add_command.non_local'],
                                                              enable_local_bypass=False)
             if i != msg.user and not missing_permissions:
-                main.bot.send(msg.reply(f'@{msg.user} You don\'t have permissions to create a command with this scope.'
-                                        f'Offending entry: {i!r}. If you still want to do it create a local command '
-                                        f'and use "mb.enable_command {args.name}" to enable it there '
-                                        f'(mod rights are required).'))
+                return (f'@{msg.user} You don\'t have permissions to create a command with this scope.'
+                        f'Offending entry: {i!r}. If you still want to do it create a local command '
+                        f'and use "mb.enable_command {args.name}" to enable it there '
+                        f'(mod rights are required).')
                 # todo: make mb.enable_command, you absolute dumb-ass.
-                return
 
     for j in main.bot.commands:
         if j.chat_command == args.name:
             # todo: make this ignore commands disabled in the `scope`
-            main.bot.send(msg.reply(f'@{msg.user} Cannot add command: command already exists.'))
+            return f'@{msg.user} Cannot add command: command already exists.'
             return
 
     text = ' '.join(args.data)
@@ -107,8 +104,8 @@ def add_echo_command(msg: twitchirc.ChannelMessage):
     with open('commands.json', 'w') as file:
         json5.dump(data, file, indent=4, sort_keys=True)
 
-    main.bot.send(msg.reply(f'@{msg.user} Added echo command {args.name!r} with message {text!r} in channels '
-                            f'{scope!r}'))
+    return (f'@{msg.user} Added echo command {args.name!r} with message {text!r} in channels '
+            f'{scope!r}')
 
 
 @dataclass
@@ -173,31 +170,28 @@ def delete_command(msg: twitchirc.ChannelMessage):
     args = delete_command_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
         usage = delete_command_parser.format_usage().replace('\n', '')
-        main.bot.send(msg.reply(f'@{msg.user} {usage}'))
-        return
+        return f'@{msg.user} {usage}'
 
     if args.confirm:
         if msg.user in delete_list:
             delete_action = delete_list[msg.user]
             del delete_list[msg.user]
             if delete_action.expiration_time < datetime.datetime.now():
-                main.bot.send(msg.reply(f'@{msg.user} Your request has expired.'))
-                return
+                return f'@{msg.user} Your request has expired.'
             if delete_action.command_to_delete.chat_command != args.confirm:
-                main.bot.send(msg.reply(f'@{msg.user} Cannot confirm deletion of command '
-                                        f'{delete_action.command_to_delete.chat_command!r}. '
-                                        f'You typed {args.confirm!r}.'))
-                return 1
+                return (f'@{msg.user} Cannot confirm deletion of command '
+                        f'{delete_action.command_to_delete.chat_command!r}. '
+                        f'You typed {args.confirm!r}.')
             else:
                 exit_code, message = _delete_command(delete_action.command_to_delete, msg.channel, args.is_global)
                 if exit_code != 0:
-                    main.bot.send(msg.reply(f'@{msg.user} Failed to delete command: {message}'))
+                    return f'@{msg.user} Failed to delete command: {message}'
                 else:
-                    main.bot.send(msg.reply(f'@{msg.user} Deleted command '
-                                            f'{delete_action.command_to_delete.chat_command!r} successfully.'))
+                    return (f'@{msg.user} Deleted command '
+                            f'{delete_action.command_to_delete.chat_command!r} successfully.')
                 return
         else:
-            main.bot.send(msg.reply(f'@{msg.user} You don\'t have an action to confirm.'))
+            return f'@{msg.user} You don\'t have an action to confirm.'
     else:
         t = args.target.rstrip().split('#')
         if len(t) == 2:
@@ -218,8 +212,7 @@ def delete_command(msg: twitchirc.ChannelMessage):
             if len(candidates) == 1:
                 cmd = candidates[0]
             elif len(candidates) == 0:
-                main.bot.send(msg.reply(f'@{msg.user} Command {target!r} doesn\'t exist in this scope.'))
-                return
+                return f'@{msg.user} Command {target!r} doesn\'t exist in this scope.'
             else:
                 if t_info.isnumeric():
                     t_info = int(t_info) + 1
@@ -241,4 +234,4 @@ def delete_command(msg: twitchirc.ChannelMessage):
                                     f'{scope} using (prefix)mb.delete_command --confirm-delete COMMAND_NAME. '
                                     f'You have {TIME_DELETION} seconds to do this.'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} Command {args.target} doesn\'t exist.'))
+            return f'@{msg.user} Command {args.target} doesn\'t exist.'

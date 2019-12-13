@@ -208,18 +208,17 @@ p_conv.add_argument('unit_to')
 
 @main.bot.add_command('convert')
 def command_convert(msg: twitchirc.ChannelMessage):
-    args = p_conv.parse_args(shlex.split(msg.text.replace('!convert ', '')))
+    argv = shlex.split(main.delete_spammer_chrs(msg.text))
+    if len(argv) == 1:
+        return f"@{msg.user} " + p_conv.format_usage()
+    args = p_conv.parse_args(argv[1:])
     if args is None:
-        main.bot.send(msg.reply(f"@{msg.user} " + p_conv.format_usage()))
-        return
+        return f"@{msg.user} " + p_conv.format_usage()
     number, unit_from = find_unit_with_data(args.data)
     unit_to = find_unit(args.unit_to)
     converted = convert_unit(number, unit_from, unit_to)
     if converted == 'F':
-        main.bot.send(msg.reply(f'@{msg.user} Conversion is not possible: conversion '
-                                f'{unit_from}({unit_from.human_name}) to {unit_to}({unit_to.human_name})'))
-        return
+        return (f'@{msg.user} Conversion is not possible: conversion '
+                                f'{unit_from}({unit_from.human_name}) to {unit_to}({unit_to.human_name})')
     else:
-        main.bot.send(
-            msg.reply(f'@{msg.user} {number:.2f}{unit_from.human_name} = {converted:.2f}{unit_to.human_name}'))
-        return
+        return f'@{msg.user} {number:.2f}{unit_from.human_name} = {converted:.2f}{unit_to.human_name}'

@@ -18,7 +18,7 @@ import enum
 import json
 import traceback
 import typing
-from typing import Dict, Any
+from typing import Dict
 
 import sqlalchemy
 import twitchirc
@@ -63,6 +63,7 @@ async def _acall_handler(command, message):
                     f'{message.channel} where it is blacklisted.')
         return
     try:
+        # noinspection PyProtectedMember
         await main.bot._call_command(command, message)
     except Exception as e:
         msg = twitchirc.ChannelMessage(
@@ -109,9 +110,6 @@ def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Comm
         return command
 
     return decorator
-
-
-channel_settings: Dict[str, Any] = {}
 
 
 class ChannelSettings(main.Base):
@@ -173,6 +171,7 @@ class ChannelSettings(main.Base):
         self._settings[setting_name] = value
 
 
+channel_settings: Dict[str, ChannelSettings] = {}
 channel_settings_session = None
 
 
@@ -275,25 +274,22 @@ class Setting:
 
 @main.bot.add_command('mb.unblacklist_command', required_permissions=['util.unblacklist_command'],
                       enable_local_bypass=True)
-def command_unblacklist(msg: twitchirc.ChannelMessage) -> None:
+def command_unblacklist(msg: twitchirc.ChannelMessage) -> str:
     ensure_blacklist(msg.channel)
     args = msg.text.split(' ')
     if len(args) != 2:
-        main.bot.send(msg.reply(f'@{msg.user} Usage: '
-                                f'"{main.bot.prefix}{command_unblacklist.chat_command} COMMAND". '
-                                f'Where COMMAND is the command you want to unblacklist.'))
-        return
+        return (f'@{msg.user} Usage: '
+                f'"{main.bot.prefix}{command_unblacklist.chat_command} COMMAND". '
+                f'Where COMMAND is the command you want to unblacklist.')
     target = args[1]
     for i in main.bot.commands:
         if i.chat_command == target:
             if target not in blacklist[msg.channel]:
-                main.bot.send(msg.reply(f"@{msg.user} Cannot unblacklist command {target} that isn't blacklisted "
-                                        f"here."))
-                return
+                return (f"@{msg.user} Cannot unblacklist command {target} that isn't blacklisted "
+                        f"here.")
             blacklist[msg.channel].remove(target)
-            main.bot.send(msg.reply(f'@{msg.user} Unblacklisted command {target} from channel #{msg.channel}.'))
-            return
-    main.bot.send(msg.reply(f'@{msg.user} Cannot unblacklist nonexistent command {target}.'))
+            return f'@{msg.user} Unblacklisted command {target} from channel #{msg.channel}.'
+    return f'@{msg.user} Cannot unblacklist nonexistent command {target}.'
 
 
 @main.bot.add_command('mb.blacklist_command', required_permissions=['util.blacklist_command'], enable_local_bypass=True)
@@ -307,8 +303,7 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> None:
         return
     target = args[1]
     if target in blacklist[msg.channel]:
-        main.bot.send(msg.reply(f'@{msg.user} That command is already blacklisted.'))
-        return
+        return f'@{msg.user} That command is already blacklisted.'
 
     for i in main.bot.commands:
         if i.chat_command == target:
@@ -316,8 +311,7 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> None:
             main.bot.send(msg.reply(f'@{msg.user} Blacklisted command {target}. '
                                     f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.'))
             return
-    main.bot.send(msg.reply(f'@{msg.user} Cannot blacklist nonexistent command {target}.'))
-    return
+    return f'@{msg.user} Cannot blacklist nonexistent command {target}.'
 
 
 @main.bot.add_command('mb.list_blacklisted_commands', required_permissions=['util.blacklist_command'],
@@ -334,10 +328,9 @@ def command_join_blacklisted(msg: twitchirc.ChannelMessage) -> None:
     ensure_blacklist(msg.channel)
     chan = msg.text.split(' ')[1].lower()
     if chan in ['all']:
-        main.bot.send(msg.reply(f'Cannot join #{chan}.'))
-        return
+        return f'Cannot join #{chan}.'
     if chan in main.bot.channels_connected:
-        main.bot.send(msg.reply(f'This bot is already in channel #{chan}.'))
+        return f'This bot is already in channel #{chan}.'
     else:
         blacklist[msg.channel] = [i.chat_command for i in main.bot.commands]
         blacklist[msg.channel].remove('mb.blacklist_command')

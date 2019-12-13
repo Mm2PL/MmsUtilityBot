@@ -126,14 +126,13 @@ def command_suggest(msg: twitchirc.ChannelMessage):
         return
     t = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
     if len(t) == 1:
-        main.bot.send(msg.reply(f'@{msg.user}, Usage: suggest <text...>'))
-        return
+        return f'@{msg.user}, Usage: suggest <text...>'
 
     s = Suggestion(author=main.User.get_by_message(msg), text=t[1], state=Suggestion.SuggestionState.new,
                    notes='<no notes>')
     with main.session_scope() as session:
         session.add(s)
-    main.bot.send(msg.reply(f'@{msg.user} Suggestion saved, hopefully. ID: {s.id}'))
+    return f'@{msg.user} Suggestion saved, hopefully. ID: {s.id}'
 
 
 @plugin_help.add_manual_help_using_command('Check on your suggestions.',
@@ -146,15 +145,14 @@ def command_check_suggestion(msg: twitchirc.ChannelMessage):
         return
     t = main.delete_spammer_chrs(msg.text).split(' ')
     if len(t) == 1:
-        main.bot.send(msg.reply(f'@{msg.user}, Usage: check_suggestion <ID> or check_suggestion.'))
-        return
+        return f'@{msg.user}, Usage: check_suggestion <ID> or check_suggestion.'
     target = t[1]
     if target.isnumeric():
         target = int(target)
         with main.session_scope() as session:
             suggestion = session.query(Suggestion).filter(Suggestion.id == target).first()
             if suggestion is None:
-                main.bot.send(msg.reply(f'@{msg.user} Suggestion id {target!r} not found.'))
+                return f'@{msg.user} Suggestion id {target!r} not found.'
             else:
                 main.bot.send(msg.reply(f'@{msg.user} '
                                         f'{suggestion.humanize(suggestion.author.last_known_username == msg.user)}'))
@@ -162,8 +160,7 @@ def command_check_suggestion(msg: twitchirc.ChannelMessage):
         with main.session_scope() as session:
             user = main.User.get_by_message(msg, no_create=True)
             if user is None:
-                main.bot.send(msg.reply(f'@{msg.user}, You are a new user, you don\'t have any suggestions.'))
-                return
+                return f'@{msg.user}, You are a new user, you don\'t have any suggestions.'
             suggestions = (session.query(Suggestion)
                            .filter(Suggestion.author == user)
                            .filter(Suggestion.state.notin_([Suggestion.SuggestionState.done,
@@ -182,12 +179,10 @@ def command_check_suggestion(msg: twitchirc.ChannelMessage):
 def command_resolve_suggestion(msg: twitchirc.ChannelMessage):
     t = main.delete_spammer_chrs(msg.text).split(' ', 3)
     if len(t) < 3:
-        main.bot.send(msg.reply(f'@{msg.user}, Usage: resolve_suggestion <ID> <state> [notes...]'))
-        return
+        return f'@{msg.user}, Usage: resolve_suggestion <ID> <state> [notes...]'
 
     if not t[1].isnumeric():
-        main.bot.send(msg.reply(f'@{msg.user}, Unknown suggestion {t[1]!r}.'))
-        return
+        return f'@{msg.user}, Unknown suggestion {t[1]!r}.'
     target = int(t[1])
     state_names = [i.name for i in Suggestion.SuggestionState]
     if t[2] in state_names:

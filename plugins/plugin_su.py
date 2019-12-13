@@ -93,14 +93,13 @@ def command_su(msg: twitchirc.ChannelMessage):
         return
     args = su_parser.parse_args(shlex.split(msg.args.replace(main.bot.prefix + command_su.chat_command + ' ', '')))
     if args is None:
-        main.bot.send(msg.reply(f'@{msg.user} {su_parser.format_usage()}'))
-        return
+        return f'@{msg.user} {su_parser.format_usage()}'
     print(args)
     if args.help is not None:
         if args.help == 'usage':
-            main.bot.send(msg.reply(f'@{msg.user} {su_parser.format_usage()} (0)'))
+            return f'@{msg.user} {su_parser.format_usage()}'
         elif args.help in SU_HELP:
-            main.bot.send(msg.reply(f'@{msg.user} {SU_HELP[args.help]} (0)'))
+            return f'@{msg.user} {SU_HELP[args.help]}'
         else:
             main.bot.send(msg.reply(f'@{msg.user} No such help topic found. Try !{command_su.chat_command} -h usage'
                                     f'(1)'))
@@ -108,12 +107,12 @@ def command_su(msg: twitchirc.ChannelMessage):
         if args.logout:
             if hasattr(msg, 'real_user'):
                 if msg.real_user not in su_ed_users:
-                    main.bot.send(msg.reply(f'@{msg.real_user} You are not su-ed FeelsDankMan'))
+                    return f'@{msg.real_user} You are not su-ed FeelsDankMan'
                 else:
                     del su_ed_users[msg.real_user]
             else:
                 if msg.user not in su_ed_users:
-                    main.bot.send(msg.reply(f'@{msg.user} You are not su-ed FeelsDankMan'))
+                    return f'@{msg.user} You are not su-ed FeelsDankMan'
                 else:
                     del su_ed_users[msg.user]
             return
@@ -127,7 +126,7 @@ def command_su(msg: twitchirc.ChannelMessage):
                 su_ed_users[msg.real_user] = Su(args.user, args.channel)
             else:
                 su_ed_users[msg.user] = Su(args.user, args.channel)
-            main.bot.send(msg.reply(f'@{msg.user} Successfully changed user.'))
+            return f'@{msg.user} Successfully changed user.'
 
 
 command_su: twitchirc.Command
@@ -136,6 +135,6 @@ command_su: twitchirc.Command
 @main.bot.add_command('mb.whoami')
 def command_whoami(msg: twitchirc.ChannelMessage):
     if hasattr(msg, 'real_user'):
-        main.bot.send(msg.reply(f'@{msg.real_user} You are {msg.user}'))
+        return f'@{msg.real_user} You are {msg.user}'
     else:
-        main.bot.send(msg.reply(f'@{msg.user} You are {msg.user}'))
+        return f'@{msg.user} You are {msg.user}'

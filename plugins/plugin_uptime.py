@@ -49,9 +49,9 @@ def command_title(msg: twitchirc.ChannelMessage):
         return
     r, status_code = main.twitch_auth.new_api.get_streams(user_login=msg.channel, wait_for_result=True)
     if status_code == 200 and 'data' in r and len(r['data']) > 0:
-        main.bot.send(msg.reply(f'@{msg.user} {r["data"][0]["title"]}'))
+        return f'@{msg.user} {r["data"][0]["title"]}'
     else:
-        main.bot.send(msg.reply(f'@{msg.user} eShrug Stream not found.'))
+        return f'@{msg.user} eShrug Stream not found.'
 
 
 @main.bot.add_command('uptime')

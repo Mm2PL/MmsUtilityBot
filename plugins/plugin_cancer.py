@@ -128,22 +128,20 @@ class Plugin(main.Plugin):
             return
         if msg.user.lower() in self.cookie_optin:
             self.cookie_optin.remove(msg.user.lower())
-            main.bot.send(msg.reply(f'@{msg.user} You have been removed from the cookie opt-in list.'))
+            return f'@{msg.user} You have been removed from the cookie opt-in list.'
         else:
             self.cookie_optin.append(msg.user.lower())
-            main.bot.send(msg.reply(f'@{msg.user} You have been added to the cookie opt-in list.'))
+            return f'@{msg.user} You have been added to the cookie opt-in list.'
 
     def c_pyramid(self, msg: twitchirc.ChannelMessage):
         if msg.channel not in self.pyramid_enabled:
-            main.bot.send(msg.reply(f'@{msg.user}, This command is disabled here.'))
-            return
+            return f'@{msg.user}, This command is disabled here.'
         cd_state = main.do_cooldown('pyramid', msg, global_cooldown=60, local_cooldown=60)
         if cd_state:
             return
         t = main.delete_spammer_chrs(msg.text).split(' ', 1)
         if len(t) == 1:
-            main.bot.send(msg.reply(f'@{msg.user}, Usage: pyramid <text...>'))
-            return
+            return f'@{msg.user}, Usage: pyramid <text...>'
         args = t[1].rstrip()
         size = ''
         for i in args.split(' '):
@@ -164,8 +162,7 @@ class Plugin(main.Plugin):
         cd_state = main.do_cooldown('braille', global_cooldown=0, local_cooldown=60, msg=msg)
         if cd_state:
             return
-        main.bot.send(msg.reply(f'@{msg.user} this command isn\'t finished yet.'))
-        return
+        return f'@{msg.user} this command isn\'t finished yet.'
         _next_token = 'url'
         url = None
 
@@ -184,8 +181,7 @@ class Plugin(main.Plugin):
             elif _next_token == 'option':
                 opt = part.split(':', 1)
                 if len(opt) == 1:
-                    main.bot.send(msg.reply(f'@{msg.user} No value provided for option {opt} at position {num}'))
-                    return
+                    return f'@{msg.user} No value provided for option {opt} at position {num}'
 
         main.bot.send(f'@{msg.user}'
                       f'http://kotmisia.pl/api/ascii/{url}'

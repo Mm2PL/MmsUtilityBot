@@ -102,21 +102,21 @@ def get_user_name(msg):
 @main.bot.add_command('vote')
 def command_vote(msg: twitchirc.ChannelMessage):
     if msg.user in ['__vote_info', '__vote_results']:
-        main.bot.send(msg.reply(f'@{get_user_name(msg)} No crashing the bot for you ;)'))
+        return f'@{get_user_name(msg)} No crashing the bot for you ;)'
         return
     cd_state = main.do_cooldown('vote', msg, global_cooldown=0, local_cooldown=1 * 60)
     if cd_state:
         return
 
     if msg.channel not in votes:
-        main.bot.send(msg.reply(f"@{get_user_name(msg)} There's no on-going vote in this channel."))
+        return f"@{get_user_name(msg)} There's no on-going vote in this channel."
     else:
         vote_obj: Vote = votes[msg.channel]['__vote_info']
         if vote_obj.closed:
-            main.bot.send(msg.reply(f"@{get_user_name(msg)} There's no on-going vote in this channel."))
+            return f"@{get_user_name(msg)} There's no on-going vote in this channel."
         argv = msg.text.split(' ')
         if len(argv) < 2:
-            main.bot.send(msg.reply(f'@{get_user_name(msg)} Usage: !vote <option(s)>'))
+            return f'@{get_user_name(msg)} Usage: !vote <option(s)>'
         already_voted = msg.user in votes[msg.channel]
         if votes[msg.channel]['__vote_info'].allow_multiple:
             user_votes = argv[1].split(',') if ',' in argv[1] else [argv[1]]
@@ -131,26 +131,25 @@ def command_vote(msg: twitchirc.ChannelMessage):
                     main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully overridden vote. '
                                             f'New vote is {user_votes!r}'))
                 else:
-                    main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully voted for {user_votes!r}'))
+                    return f'@{get_user_name(msg)} Successfully voted for {user_votes!r}'
             else:
 
                 if len(invalid_votes) == 1:
-                    main.bot.send(msg.reply(f'@{get_user_name(msg)} Invalid option: {invalid_votes[0]!r}'))
+                    return f'@{get_user_name(msg)} Invalid option: {invalid_votes[0]!r}'
                 else:
-                    main.bot.send(msg.reply(f'@{get_user_name(msg)} Invalid option(s): {invalid_votes!r}'))
-            return
+                    return f'@{get_user_name(msg)} Invalid option(s): {invalid_votes!r}'
         if argv[1] in vote_obj.options:
             votes[msg.channel][msg.user] = argv[1]
             if already_voted:
                 main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully overridden vote. '
                                         f'New vote is {argv[1]!r}'))
             else:
-                main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully voted for {argv[1]!r}'))
+                return f'@{get_user_name(msg)} Successfully voted for {argv[1]!r}'
         else:
             if ',' in argv[1]:
-                main.bot.send(msg.reply(f'@{get_user_name(msg)} Cannot vote for multiple options in this poll.'))
+                return f'@{get_user_name(msg)} Cannot vote for multiple options in this poll.'
             else:
-                main.bot.send(msg.reply(f'@{get_user_name(msg)} Invalid option: {argv[1]}'))
+                return f'@{get_user_name(msg)} Invalid option: {argv[1]}'
 
 
 def _nice_winners(winners):
@@ -218,12 +217,10 @@ def command_vote_admin(msg: twitchirc.ChannelMessage):
     print(msg.channel, msg.user, args)
     if args is None:
         usage = re.sub('\n +', ' ', vote_admin_parser.format_usage())
-        main.bot.send(msg.reply(f"@{get_user_name(msg)} {usage}"))
-        return
+        return f"@{get_user_name(msg)} {usage}"
     if not args.new_template and not args.new_from_template and not args.end and not args.new:
         usage = re.sub('\n +', ' ', vote_admin_parser.format_usage())
-        main.bot.send(msg.reply(f"@{get_user_name(msg)} {usage}"))
-        return
+        return f"@{get_user_name(msg)} {usage}"
 
     elif args.new_template:
         _ensure_plugin_data()
@@ -232,31 +229,28 @@ def command_vote_admin(msg: twitchirc.ChannelMessage):
     elif args.new_from_template:
         template = _load_template(args.new_from_template)
         if template is None:
-            main.bot.send(msg.reply(f'@{get_user_name(msg)} Cannot retrieve template: {args.new_from_template!r}'))
-            return
+            return f'@{get_user_name(msg)} Cannot retrieve template: {args.new_from_template!r}'
         args.new = template
     elif args.end:
         if msg.channel not in votes:
-            main.bot.send(msg.reply(f"@{get_user_name(msg)} There's no on-going vote in this channel."))
-            return
+            return f"@{get_user_name(msg)} There's no on-going vote in this channel."
         vote_obj: Vote = votes[msg.channel]['__vote_info']
         results = vote_obj.close()
 
-        main.bot.send(msg.reply(f'@{get_user_name(msg)} The results are: '
-                                f'{_calculate_votes(results)}'))
+        return (f'@{get_user_name(msg)} The results are: '
+                f'{_calculate_votes(results)}')
 
     if args.new:
         if msg.channel in votes and not votes[msg.channel]['__vote_info'].closed:
-            main.bot.send(msg.reply(f"@{get_user_name(msg)} There's already a un-closed poll in this channel. "
-                                    f"TIP: Use -e/--end to close it."))
-            return
+            return (f"@{get_user_name(msg)} There's already a un-closed poll in this channel. "
+                    f"TIP: Use -e/--end to close it.")
         vote = Vote(args.new[0], msg.channel, options=args.new[1].split(','), allow_multiple=args.multiple)
         votes[msg.channel] = {
             '__vote_info': vote
         }
-        main.bot.send(msg.reply(f'@{get_user_name(msg)} Created new poll {args.new[0]!r} with options '
-                                f'{args.new[1].split(",")!r}.'
-                                f'{" Allowing voting for multiple options" if args.multiple else ""}'))
+        return (f'@{get_user_name(msg)} Created new poll {args.new[0]!r} with options '
+                f'{args.new[1].split(",")!r}.'
+                f'{" Allowing voting for multiple options" if args.multiple else ""}')
 
 
 command_vote_admin: twitchirc.Command

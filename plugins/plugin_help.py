@@ -144,7 +144,7 @@ def command_help(msg: twitchirc.ChannelMessage):
             for num, i in enumerate(msgs):
                 main.bot.send(msg.reply(f'@{msg.user} ({num + 1}/{len(msgs)}) {i}'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} All help topics: {new_msg}'))
+            return f'@{msg.user} All help topics: {new_msg}'
     elif topic.lower() == 'commands':
         all_commands: Dict[str, Callable[..., Any]] = {}
         for command in main.bot.commands:
@@ -170,7 +170,7 @@ def command_help(msg: twitchirc.ChannelMessage):
             for num, i in enumerate(msgs):
                 main.bot.send(msg.reply(f'@{msg.user} All documented commands: (p{num + 1}/{len(msgs)}) {i}'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} All documented commands: {new_msg}'))
+            return f'@{msg.user} All documented commands: {new_msg}'
 
     elif topic.lower() == 'all commands':
         all_commands: Dict[str, Callable[..., Any]] = {}
@@ -195,8 +195,8 @@ def command_help(msg: twitchirc.ChannelMessage):
             for num, i in enumerate(msgs):
                 main.bot.send(msg.reply(f'@{msg.user} ({num + 1}/{len(msgs)}) {i}'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} All commands: {new_msg}'))
+            return f'@{msg.user} All commands: {new_msg}'
     elif topic not in all_help:
-        main.bot.send(msg.reply(f'@{msg.user} No such topic found'))
+        return f'@{msg.user} No such topic found'
     else:
-        main.bot.send(msg.reply(f'@{msg.user} {topic!r}: {all_help[topic]}'))
+        return f'@{msg.user} {topic!r}: {all_help[topic]}'

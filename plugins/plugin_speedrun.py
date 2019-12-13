@@ -179,12 +179,12 @@ def command_worldrecord(msg: twitchirc.ChannelMessage):
         time_ = category.runs[0]["run"].times['primary_t']
         players = ' and '.join([p.name for p in category.runs[0]["run"].players])
 
-        main.bot.send(msg.reply(f'@{msg.user} Current WR for {current_games[msg.channel].name} '
+        return (f'@{msg.user} Current WR for {current_games[msg.channel].name} '
                                 f'({category.category.name}) is '
-                                f'{_format_time(time_)} by {players}'))
+                                f'{_format_time(time_)} by {players}')
     else:
         if msg.channel in current_games:
-            main.bot.send(msg.reply(f'@{msg.user}, There is a game set but there is no category set. Cannot fetch WR.'))
+            return f'@{msg.user}, There is a game set but there is no category set. Cannot fetch WR.'
         else:
             main.bot.send(msg.reply(f'@{msg.user}, There is no game set on this channel. Ask a mod to run the '
                                     f'update_game command.'))
@@ -207,17 +207,16 @@ def command_update_game(msg: twitchirc.ChannelMessage):
                                     f'or {command_update_game.chat_command} [game title]'
                                     f'or {command_update_game.chat_command} [part of title] to select the game.'))
         else:
-            main.bot.send(msg.reply(f'@{msg.user} Error: {ret_msg}'))
+            return f'@{msg.user} Error: {ret_msg}'
     else:
-        main.bot.send(msg.reply(f'@{msg.user}, Okay, set game to {ret_msg}'))
+        return f'@{msg.user}, Okay, set game to {ret_msg}'
 
 
 @main.bot.add_command('update_cat', forced_prefix=None, enable_local_bypass=True,
                       required_permissions=['wr.update_cat'])
 def command_update_cat(msg: twitchirc.ChannelMessage):
     if msg.channel not in current_games:
-        main.bot.send(msg.reply(f'@{msg.user} Cannot update category, there\'s no game set.'))
-        return
+        return f'@{msg.user} Cannot update category, there\'s no game set.'
     picked = (msg.text + ' ').split(' ', 1)[1].rstrip(' ')
 
     if picked == '':
@@ -230,15 +229,14 @@ def command_update_cat(msg: twitchirc.ChannelMessage):
             if 'data' in stream:
                 data = stream['data'][0]
                 if data['type'] == '':
-                    main.bot.send(msg.reply(f'@{msg.user} monkaS {chr(127073)} API error.'))
-                    return
+                    return f'@{msg.user} monkaS {chr(127073)} API error.'
                 o, err_name = _refresh_category(stream['title'], msg.channel, picked)
                 if o:
-                    main.bot.send(msg.reply(f'@{msg.user} Okay, set category to {picked}'))
+                    return f'@{msg.user} Okay, set category to {picked}'
                 else:
-                    main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out.'))
+                    return f'@{msg.user} monkaS Something didn\'t work out.'
             else:
-                main.bot.send(msg.reply(f'@{msg.user} Stream not found.'))
+                return f'@{msg.user} Stream not found.'
     else:
         cat_name, filter_ = picked.split(';', 1)
         if filter_ == '':
@@ -247,6 +245,6 @@ def command_update_cat(msg: twitchirc.ChannelMessage):
             filter_ = int(filter_)
         o, name = _refresh_category(cat_name, msg.channel, filter_)
         if o:
-            main.bot.send(msg.reply(f'@{msg.user} Okay, set category to {picked}'))
+            return f'@{msg.user} Okay, set category to {picked}'
         else:
-            main.bot.send(msg.reply(f'@{msg.user} monkaS Something didn\'t work out. ({name})'))
+            return f'@{msg.user} monkaS Something didn\'t work out. ({name})'
