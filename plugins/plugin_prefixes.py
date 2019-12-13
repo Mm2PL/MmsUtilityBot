@@ -44,7 +44,7 @@ channel_prefixes: Dict[str, str] = {
     # 'channel': 'prefix'
 }
 # noinspection PyProtectedMember
-old_handler = main.bot._call_command_handlers
+old_handler = main.bot._acall_forced_prefix_commands
 
 
 # noinspection PyProtectedMember
