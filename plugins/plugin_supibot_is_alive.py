@@ -62,7 +62,6 @@ def job_active(job_kill_lock: threading.Lock):
             log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
         current_sleep_time = 0
         while 1:
-            print('sleeping.')
             current_sleep_time += 1
             time.sleep(1)
             if current_sleep_time >= 60 * 60 * 0.5:
