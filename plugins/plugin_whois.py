@@ -90,16 +90,17 @@ async def command_whois(msg: twitchirc.ChannelMessage):
         if data['status'] == 404:
             return f'@{msg.user} No such user found.'
 
-        roles = 'none'
+        roles = ''
         if data['roles']['isAffiliate']:
-            roles = 'affiliate, '
+            roles += 'affiliate, '
         if data['roles']['isPartner']:
             roles += 'partner, '
         if data['roles']['isSiteAdmin']:
             roles += 'site admin, '
         if data['roles']['isStaff']:
-            roles += 'staff'
-
+            roles += 'staff, '
+        if roles == '':
+            roles = 'none'
         roles = (roles[::-1].replace(', '[::-1], '', 1))[::-1]
         # replace last ", " with "".
         if data['displayName'].lower() != data['login'].lower():
