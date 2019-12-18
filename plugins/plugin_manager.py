@@ -1,5 +1,5 @@
 #  This is a simple utility bot
-#  Copyright (C) 2019 Maciej Marciniak
+#  Copyright (C) 2019 Mm2PL
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -96,7 +96,7 @@ async def _acall_command_handlers(message: twitchirc.ChannelMessage):
         if not was_handled:
             main.bot._do_unknown_command(message)
     else:
-        main.bot._call_forced_prefix_commands(message)
+        await main.bot._acall_forced_prefix_commands(message)
 
 
 def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Command, twitchirc.ChannelMessage], bool]):
@@ -133,33 +133,35 @@ class ChannelSettings(main.Base):
         return session.query(ChannelSettings).all()
 
     @staticmethod
-    def load_all(session=None):
+    def load_all(session=None) -> typing.List['ChannelSettings']:
         if session is None:
             with main.session_scope() as s:
                 return ChannelSettings._load_all(s)
         else:
             return ChannelSettings._load_all(session)
 
-    def _import(self):
+    def _import(self) -> None:
         self._settings = json.loads(self.settings_raw)
 
-    def _export(self):
+    def _export(self) -> None:
         self.settings_raw = json.dumps(self._settings)
 
-    def fill_defaults(self):
-        for k in all_settings.keys():
-            self.set(k, Setting.find(k).default_value)
+    def fill_defaults(self, forced=True):
+        for v in all_settings.values():
+            if v.scope == SettingScope.PER_CHANNEL \
+                    and (forced or (v.write_defaults and self.get(v) == v.default_value)):
+                self.set(v, v.default_value)
 
     def update(self):
         self._export()
 
     def get(self, setting_name) -> typing.Any:
         setting = Setting.find(setting_name)
-        if self.channel_alias is not None and setting.scope == SettingScope.GLOBAL:
+        if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
             raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
 
-        if setting_name in self._settings:
-            return self._settings[setting_name]
+        if setting.name in self._settings:
+            return self._settings[setting.name]
         else:
             return setting.default_value
 
@@ -184,6 +186,7 @@ def _init_settings():
     with main.session_scope() as write_session:
         print('Loading existing channel settings...')
         for i in ChannelSettings.load_all(write_session):
+            i.fill_defaults(forced=False)
             if i.channel_alias == -1:  # global settings.
                 channel_settings[SettingScope.GLOBAL.name] = i
             else:
@@ -229,7 +232,7 @@ class SettingScope(enum.Enum):
     GLOBAL = 1
 
 
-all_settings = {}
+all_settings: typing.Dict[str, 'Setting'] = {}
 
 
 class Setting:
@@ -237,15 +240,19 @@ class Setting:
     name: str
     scope: SettingScope
 
-    def __init__(self, owner: main.Plugin, name: str, default_value=..., scope=SettingScope.PER_CHANNEL):
+    def __init__(self, owner: main.Plugin, name: str, default_value=..., scope=SettingScope.PER_CHANNEL,
+                 write_defaults=False):
         self.owner = owner
         self.name = name
         self.default_value = default_value
         self.scope = scope
+        self.write_defaults = write_defaults
         self.register()
 
     @staticmethod
-    def find(name: str):
+    def find(name: typing.Union[str, 'Setting']):
+        if isinstance(name, Setting):
+            return name
         if name in all_settings:
             return all_settings[name]
         else:
@@ -293,7 +300,7 @@ def command_unblacklist(msg: twitchirc.ChannelMessage) -> str:
 
 
 @main.bot.add_command('mb.blacklist_command', required_permissions=['util.blacklist_command'], enable_local_bypass=True)
-def command_blacklist(msg: twitchirc.ChannelMessage) -> None:
+def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     ensure_blacklist(msg.channel)
     args = msg.text.split(' ')
     if len(args) != 2:
@@ -324,7 +331,7 @@ def command_list_blacklisted(msg: twitchirc.ChannelMessage) -> None:
 
 @main.bot.add_command('blacklisted_join', required_permissions=[twitchirc.PERMISSION_COMMAND_JOIN],
                       enable_local_bypass=False)
-def command_join_blacklisted(msg: twitchirc.ChannelMessage) -> None:
+def command_join_blacklisted(msg: twitchirc.ChannelMessage) -> str:
     ensure_blacklist(msg.channel)
     chan = msg.text.split(' ')[1].lower()
     if chan in ['all']:
