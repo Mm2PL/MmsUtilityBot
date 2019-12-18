@@ -107,8 +107,9 @@ class Plugin(main.Plugin):
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
-        if msg.user == 'supibot' and msg.text.startswith(("The playsound's cooldown has not passed yet! Try again in",
-                                                          'Playsounds are currently disabled!')):
+        if msg.user == 'supibot' \
+                and "The playsound's cooldown has not passed yet! Try again in" in msg.text \
+                or 'Playsounds are currently disabled!' in msg.text:
             # don't respond if the playsound didn't play
             self._sneeze = (-1, None)
 
