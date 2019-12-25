@@ -3,6 +3,7 @@ twitch_api
 venv/
 storage.json
 .idea/
-plugins/__pycache__/
+*__pycache__*
 twitch_api.json
 supibot_auth.json
+*secret*
