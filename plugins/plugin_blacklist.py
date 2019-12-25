@@ -1,5 +1,5 @@
 #  This is a simple utility bot
-#  Copyright (C) 2019 Maciej Marciniak
+#  Copyright (C) 2019 Mm2PL
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -250,7 +250,8 @@ class Plugin(main.Plugin):
 
                 if targets is None or len(targets) == 1:
                     obj = BlacklistEntry(target=targets[0] if targets is not None else targets,
-                                         command=kw['command'], channel=None, expires_on=kw['expires'],
+                                         command=kw['command'] if kw['command'] is not True else None,
+                                         channel=None, expires_on=kw['expires'],
                                          is_active=True)
                     blacklists.append(obj)
                     session.add(obj)
@@ -265,7 +266,8 @@ class Plugin(main.Plugin):
                     if len(channels) == 1:
                         if targets is None or len(targets) == 1:
                             obj = BlacklistEntry(target=targets[0] if targets is not None else targets,
-                                                 command=kw['command'], channel=channels[0],
+                                                 command=kw['command'] if kw['command'] is not True else None,
+                                                 channel=channels[0],
                                                  expires_on=kw['expires'],
                                                  is_active=True)
                             blacklists.append(obj)

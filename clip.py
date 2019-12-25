@@ -1,5 +1,5 @@
 #  This is a simple utility bot
-#  Copyright (C) 2019 Maciej Marciniak
+#  Copyright (C) 2019 Mm2PL
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-import json
 import time
 
 import requests
@@ -30,10 +29,6 @@ g.add_argument('-c', '--clip', help='Make a clip', dest='clip', action='store_tr
 p.add_argument('-C', '--channel', help='Channel name to clip', dest='c_id', type=str)
 
 args = p.parse_args()
-
-# with open('twitch_api.json', 'r') as f:
-#     json_data: dict = json.load(f)
-#     orig_data: dict = json_data.copy()
 
 
 def refresh():

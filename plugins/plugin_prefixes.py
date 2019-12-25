@@ -1,5 +1,5 @@
 #  This is a simple utility bot
-#  Copyright (C) 2019 Maciej Marciniak
+#  Copyright (C) 2019 Mm2PL
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ channel_prefixes: Dict[str, str] = {
     # 'channel': 'prefix'
 }
 # noinspection PyProtectedMember
-old_handler = main.bot._acall_forced_prefix_commands
+old_handler = plugin_manager._acall_command_handlers
 
 
 # noinspection PyProtectedMember
