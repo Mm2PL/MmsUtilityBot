@@ -70,7 +70,7 @@ RECONNECTION_MESSAGES = [
 
 COOKIE_PATTERN = regex.compile(
     rf'^\[Cookies\] \[(Default|Bronze|Silver|Gold|Platinum|Diamond|Masters|GrandMasters|Leader)\] '
-    rf'([a-z0-9]+)'
+    rf'([a-z0-9]+) \U0001f3ab'
 )
 COOLDOWN_TIMEOUT = 1.5
 
@@ -90,12 +90,12 @@ class Plugin(main.Plugin):
             m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
             if m:
                 if m[0][1].lower() in self.cookie_optin:
-                    main.bot.send(msg.reply(f'$remind {m.group(2)} cookie :) in 2h'))
+                    main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in 2h'))
             else:
                 # regex fail KKonaW
                 log('warn', 'regex fail KKonaW')
                 msg = twitchirc.ChannelMessage(
-                    text=f'Errors monkaS {chr(128073)} ALERT: {e!r}',
+                    text=f'Errors monkaS {chr(128073)} ALERT: regex fail.',
                     user='TO_BE_SENT',
                     channel=plugin_manager.error_notification_channel
                 )
@@ -107,9 +107,10 @@ class Plugin(main.Plugin):
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
-        if msg.user == 'supibot' \
-                and "The playsound's cooldown has not passed yet! Try again in" in msg.text \
-                or 'Playsounds are currently disabled!' in msg.text:
+        if msg.user == 'supibot' and self._sneeze[1] is not None and (
+            msg.text.startswith(self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
+            or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
+        ):
             # don't respond if the playsound didn't play
             self._sneeze = (-1, None)
 
