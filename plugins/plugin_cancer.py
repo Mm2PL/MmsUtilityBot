@@ -16,10 +16,21 @@
 import time
 import traceback
 from typing import Tuple
-from urllib.parse import urlencode
 import typing
 
 import regex
+
+try:
+    from utils import arg_parser
+
+except ImportError:
+    from plugins.utils import arg_parser
+
+try:
+    # noinspection PyUnresolvedReferences,PyPackageRequirements
+    from helpers import braille
+except ImportError:
+    from plugins.helpers import braille
 
 try:
     import plugin_plugin_help as plugin_help
@@ -39,6 +50,12 @@ try:
     import plugin_plugin_manager as plugin_manager
 except ImportError:
     import plugins.plugin_manager as plugin_manager
+
+main.load_file('plugins/plugin_hastebin.py')
+try:
+    import plugin_hastebin as plugin_hastebin
+except ImportError:
+    from plugins.plugin_hastebin import Plugin as plugin_hastebin
 
 import random
 
@@ -108,8 +125,9 @@ class Plugin(main.Plugin):
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
         if msg.user == 'supibot' and self._sneeze[1] is not None and (
-            msg.text.startswith(self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
-            or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
+                msg.text.startswith(
+                    self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
+                or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
         ):
             # don't respond if the playsound didn't play
             self._sneeze = (-1, None)
@@ -157,8 +175,9 @@ class Plugin(main.Plugin):
                                                     enable_local_bypass=True)(self.c_pyramid)
         plugin_help.add_manual_help_using_command('Make a pyramid.', None)(self.command_pyramid)
 
-        # self.command_braillefy = main.bot.add_command('braillefy')(self.c_braillefy)
-        # plugin_help.add_manual_help_using_command('Convert an image into braille.', None)(self.command_braillefy)
+        self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
+                                                      required_permissions=['cancer.braille'])(self.c_braillefy)
+        plugin_help.add_manual_help_using_command('Convert an image into braille.', None)(self.command_braillefy)
 
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
@@ -201,32 +220,56 @@ class Plugin(main.Plugin):
             for i in range(size, 0, -1):
                 main.bot.send(msg.reply(args * i))
 
-    # noinspection PyUnreachableCode
-    def c_braillefy(self, msg: twitchirc.ChannelMessage):
+    async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('braille', global_cooldown=0, local_cooldown=60, msg=msg)
         if cd_state:
             return
-        return f'@{msg.user} this command isn\'t finished yet.'
-        _next_token = 'url'
-        url = None
+        try:
+            args = arg_parser.parse_args(msg.text.split(' ', 1)[1], {
+                'url': str,
+                'sensitivity_r': float,
+                'sensitivity_g': float,
+                'sensitivity_b': float,
+                'sensitivity_a': float,
+                'max_y': int,
+                'pad_y': int,
+                'reverse': bool,
+                'hastebin': bool
+            }, strict_escapes=True, strict_quotes=True)
+        except arg_parser.ParserError as e:
+            return f'Error: {e.message}'
+        missing_args = arg_parser.check_required_keys(args, ['url'])
+        if missing_args:
+            return (f'Error: You are missing the {",".join(missing_args)} '
+                    f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
 
-        options = {
-            'reverse': False,
-            'size_percent': None,
-            'max_x': None,
-            'max_y': None,
-            'sensitivity': (1.0, 1.0, 1.0, 1.0)
-        }
-        for num, part in enumerate(main.delete_spammer_chrs(msg.text).split(' ')):
-            part: str
-            if _next_token == 'url':
-                _next_token = 'option'
-                url = part
-            elif _next_token == 'option':
-                opt = part.split(':', 1)
-                if len(opt) == 1:
-                    return f'@{msg.user} No value provided for option {opt} at position {num}'
-
-        main.bot.send(f'@{msg.user}'
-                      f'http://kotmisia.pl/api/ascii/{url}'
-                      f'?{"&".join([f"{urlencode(k)}={urlencode(v)}" for k, v in options])}')
+        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgba'])
+        if num_defined == 4:
+            # noinspection PyTypeChecker
+            sens: typing.Tuple[float, float, float, float] = (args['sensitivity_r'], args['sensitivity_g'],
+                                                              args['sensitivity_b'], args['sensitivity_a'])
+            is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
+            if is_zero:
+                return f'Error: Sensitivity cannot be zero. MEGADANK'
+        elif num_defined == 0:
+            sens = (0.5, 0.5, 0.5, 0.5)
+        else:
+            return f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.'
+        # noinspection PyTypeChecker
+        o: str = await braille.to_braille_from_url(args['url'],
+                                                   reverse=True if args['reverse'] is not Ellipsis else False,
+                                                   size_percent=None,
+                                                   max_x=60,
+                                                   max_y=args['max_y'] if args['max_y'] is not Ellipsis else 60,
+                                                   sensitivity=sens,
+                                                   enable_padding=True,
+                                                   pad_size=(60,
+                                                             args['pad_y'] if args['pad_y'] is not Ellipsis else 60))
+        sendable = ' '.join(o.split('\n')[1:])
+        print(len(sendable))
+        if args['hastebin'] is not Ellipsis or len(sendable) > 500:
+            return (f'This braille was too big to be posted. Here\'s a link to a pastebin: '
+                    f'{plugin_hastebin.hastebin_addr}'
+                    f'{await plugin_hastebin.upload(o)}')
+        else:
+            return sendable

@@ -16,6 +16,7 @@
 import atexit
 import builtins
 import contextlib
+import inspect
 import threading
 import types
 import urllib.parse
@@ -48,7 +49,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 import twitch_auth
 
-CACHE_EXPIRE_TIME = 60
+CACHE_EXPIRE_TIME = 15 * 60
 
 LOG_LEVELS = {
     'info': '\x1b[32minfo\x1b[m',
@@ -148,6 +149,7 @@ committer_close_queue = queue.Queue()
 committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue, committer_close_queue), kwargs={})
 committer_thread.start()
 
+
 @contextlib.contextmanager
 def session_scope_local_thread():
     """Provide a transactional scope around a series of operations."""
@@ -225,7 +227,7 @@ def do_cooldown(cmd: str, msg: twitchirc.ChannelMessage,
         return False
     if msg.user in cooldowns:  # user is timeout from the bot.
         return cooldowns[msg.user] > time.time()
-    if f'global_{msg.channel}_{cmd}' not in cooldowns:
+    if global_name not in cooldowns:
         cooldowns[global_name] = time.time() + global_cooldown
         cooldowns[local_name] = time.time() + local_cooldown
         return False
@@ -944,7 +946,7 @@ reloadables: typing.Dict[str, types.FunctionType] = {}
 
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'], enable_local_bypass=False)
-def command_reload(msg: twitchirc.ChannelMessage):
+async def command_reload(msg: twitchirc.ChannelMessage):
     argv = delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
     if len(argv) == 1:
         bot.send(msg.reply(f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: '
@@ -952,17 +954,27 @@ def command_reload(msg: twitchirc.ChannelMessage):
     else:
         for name, func in reloadables.items():
             if name.lower() == argv[1].lower():
-                bot.send(msg.reply(f'@{msg.user}, sync-reloading {name}...'))
                 reload_start = time.time()
-                try:
-                    o = reloadables[name]()
-                except Exception as e:
-                    bot.send(msg.reply(f'@{msg.user}, done. Error: {e} (Time taken: {time.time() - reload_start}s)'))
+                if inspect.iscoroutinefunction(func):
+                    bot.send(msg.reply(f'@{msg.user}, reloading {name} (async)...'))
+                    try:
+                        o = await func()
+                    except Exception as e:
+                        message = f'@{msg.user}, failed. Error: {e} (Time taken: {time.time() - reload_start}s)'
+                    else:
+                        message = f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'
                 else:
-                    bot.send(msg.reply(f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'))
-                return
+                    bot.send(msg.reply(f'@{msg.user}, reloading {name} (sync)...'))
 
-        bot.send(msg.reply(f'@{msg.user} Couldn\'t reload {argv[1]}: no such target.'))
+                    try:
+                        o = reloadables[name]()
+                    except Exception as e:
+                        message = f'@{msg.user}, failed. Error: {e} (Time taken: {time.time() - reload_start}s)'
+                    else:
+                        message = f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'
+                return message
+
+        return f'@{msg.user} Couldn\'t reload {argv[1]}: no such target.'
 
 
 def new_command_from_command_entry(entry: typing.Dict[str, str]):
@@ -1009,7 +1021,10 @@ def custom_import(name, globals_=None, locals_=None, fromlist=None, level=None):
         plugin_name = name.replace('plugin_', '', 1)
         if plugin_name not in plugins:
             raise ImportError(f'Cannot request non-loaded plugin: {plugin_name}')
-        return plugins[plugin_name].module
+        if type(plugins[plugin_name]) is Plugin:
+            return plugins[plugin_name].module
+        else:
+            return plugins[plugin_name]
     if name not in ['main']:
         return __import__(name, globals_, locals_, fromlist, level)
     else:
@@ -1164,7 +1179,6 @@ bot.handlers['any_msg'].append(any_msg_handler)
 twitchirc.get_join_command(bot)
 twitchirc.get_part_command(bot)
 twitchirc.get_perm_command(bot)
-twitchirc.get_no_permission_generator(bot)
 twitchirc.get_quit_command(bot)
 if 'counters' in bot.storage.data:
     counters = bot.storage['counters']

@@ -19,7 +19,7 @@ import typing
 import regex
 
 
-class ParserError(Exception):
+class ParserError(ValueError):
     def __init__(self, message):
         self.message = message
 
@@ -30,45 +30,110 @@ class ParserError(Exception):
         return f'ParserError: {self.message}'
 
 
-def parse_args(text: str, args_types: dict):
-    args = {
-
-    }
-    argv = text.split(' ')
-    for num, token in enumerate(argv):
+def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False):
+    args = {}
+    argv = _split_args(text, strict_escapes=strict_escapes, strict_quotes=strict_quotes)
+    for num, token in enumerate(argv.copy()):
         if ':' in token or '=' in token:
-            _parse_simple_value(token, argv, num)
+            k, v = _parse_simple_value(token, argv, num)
+            if k in args:
+                raise ParserError(f'Duplicate argument: {k}')
+            args[k] = v
         elif token.startswith('+'):
+            if token.lstrip('+') in args:
+                raise ParserError(f'Duplicate argument: {token.lstrip("+")}')
             args[token.lstrip('+')] = True
         elif token.startswith('-'):
+            if token.lstrip('-') in args:
+                raise ParserError(f'Duplicate argument: {token.lstrip("-")}')
             args[token.lstrip('-')] = False
 
     _parse_non_string_args(args, args_types)  # args is modified
 
+    _fill_optional_keys(args, args_types)  # args is modified
     return args
+
+
+def _split_args(text, strict_escapes=True, strict_quotes=False,
+                escapes: typing.Optional[typing.Dict[str, str]] = None) -> typing.List[str]:
+    if escapes is None:
+        escapes = {
+            '\\\\': '\\',
+            '\\|': '|',
+            '\\"': '"'
+        }
+    is_quoted = False
+    is_escaped = False
+    quote_start = -1
+    argv = ['']
+    for num, letter in enumerate(text):
+        if letter == '\\':
+            if is_escaped:
+                argv[-1] += letter
+                is_escaped = False
+            else:
+                is_escaped = True
+            continue
+        elif not is_escaped and letter == '"':
+            is_quoted = not is_quoted
+            if is_quoted:
+                quote_start = num
+            else:
+                quote_start = -1
+        elif letter == ' ':
+            if is_escaped or is_quoted:
+                argv[-1] += letter
+            else:
+                argv.append('')  # begin new argument
+        else:
+            if is_escaped:
+                if '\\' + letter in escapes:
+                    argv[-1] += escapes['\\' + letter]
+                elif strict_escapes:
+                    raise ParserError(f'Unknown escape: \\{letter} at position #{num}, did you want \\\\? '
+                                      f'[strict_escapes]')
+                else:
+                    argv[-1] += '\\'
+                    argv[-1] += letter
+            else:
+                argv[-1] += letter
+        is_escaped = False
+    if is_quoted and strict_quotes:
+        raise ParserError(f'Unclosed quotation, starting from character #{quote_start} [strict_quotes]')
+    if is_escaped:
+        if strict_escapes:
+            raise ParserError('Trailing backslash. [strict_escapes]')
+        else:
+            argv[-1] += '\\'
+    while '' in argv:
+        argv.remove('')
+    return argv
 
 
 def _parse_simple_value(token: str, argv: typing.List[str], num: int):
     token2 = token.replace(':', '=', 1).split('=', 1)
-    if len(token2) == 1:  # expect a value after a space.
-        if len(argv) >= num + 1:
-            token2.append(argv[num + 1])
+    if len(token2[1]) == 0:  # expect a value after a space.
+        if len(argv) > num + 1:
+            token2[1] = argv[num + 1]
         else:
-            raise ParserError(f'Expected value after token {token2[0]}')
+            dym = token + '""'
+            raise ParserError(f'Expected value after token {token!r}. Did you mean {dym}?')
     # else: key and value is in token2.
     return token2[0], token2[1]
 
 
 def _parse_non_string_args(args, args_types):
-    for key, value in args.copy():
+    for key, value in args.copy().items():
         if key in args_types:
             type_ = args_types[key]
-            args[key] = _handle_typed_argument(value, type_)
+            args[key] = handle_typed_argument(value, (type_, {}))
         else:
             raise ParserError(f'Unexpected argument: {key}')
 
 
-TIMEDELTA_REGEX = regex.compile(r'(?:(?P<days>\d+)d(?:ays)?)?'
+TIMEDELTA_REGEX = regex.compile(r'(?:(?P<years>\d+)y(?:ears?)?)?'
+                                r'(?:(?P<weeks>\d+)w(?:weeks?)?)?'
+                                r'(?:(?P<days>\d+)d(?:ays?)?)?'
                                 r'(?:(?P<hours>[0-5]?\d)h(?:ours?)?)?'
                                 r'(?:(?P<minutes>[0-5]?\d)m(?:inutes?)?)?'
                                 r'(?:(?P<seconds>[0-5]?\d)s(?:econds?)?)?')
@@ -76,10 +141,10 @@ TIMEDELTA_REGEX = regex.compile(r'(?:(?P<days>\d+)d(?:ays)?)?'
 
 def _time_converter(converter, options, value):
     if converter == datetime.datetime:
-        if 'format' in options:
-            f = options['format']
-        else:
-            f = '%Y-%m-%d %H:%M:%S.%f'
+        if 'format' not in options:
+            options['format'] = '%Y-%m-%d %H:%M:%S.%f'
+
+        f = options['format']
         try:
             return datetime.datetime.strptime(value, f)
         except Exception as e:
@@ -104,22 +169,44 @@ def _time_converter(converter, options, value):
         return datetime.timedelta(seconds=seconds)
 
 
-known_converters: typing.Dict[typing.Type, typing.Callable] = {
+def _regex_converter(converter, options, value):
+    if 'regex' in options:
+        # noinspection PyProtectedMember
+        if isinstance(options['regex'], (str, bytes)):
+            pat = regex.compile(options['regex'])
+        elif hasattr(options['regex'], 'pattern'):
+            pat = regex.compile(options['regex'].pattern)
+        else:
+            raise ParserError(f'Cannot parse {value!r} as {converter}, regular expression provided was '
+                              f'{type(options["regex"])}, expected a compiled pattern, string or bytes-like object.')
+
+        return pat.match(value)
+    else:
+        raise ParserError(f'Cannot parse {value!r} as {converter} without a regular expression.')
+
+
+known_converters: typing.Dict[typing.Union[typing.Type, str], typing.Callable] = {
     datetime.timedelta: _time_converter,
     datetime.datetime: _time_converter,
+    'regex': _regex_converter,
 }
 
 
-def _handle_typed_argument(value: str, type_) -> typing.Any:
+def handle_typed_argument(value: str, type_) -> typing.Any:
     converter: type = type_
     options: dict = {}
     if isinstance(type_, tuple):
         converter, options = type_
     if converter == int:
-        if value.isnumeric():
-            return int(type_)
+        if value.isdecimal():
+            return int(value)
         else:
-            return ParserError(f'Cannot parse {value!r} as {type_}')
+            raise ParserError(f'Cannot parse {value!r} as {type_}')
+    elif converter == float:
+        try:
+            return float(value)
+        except ValueError as e:
+            raise ParserError(f'Cannot parse {value!r} as {type_}') from e
     elif converter == str:
         return value
     elif converter in known_converters:
@@ -128,3 +215,17 @@ def _handle_typed_argument(value: str, type_) -> typing.Any:
         return converter(value, **options)
     else:
         raise ParserError(f'Cannot parse {value!r} as {converter!r}. Unknown converter: {converter!r}')
+
+
+def check_required_keys(args, required):
+    missing = []
+    for k in required:
+        if k not in args or args[k] is Ellipsis:
+            missing.append(k)
+    return missing
+
+
+def _fill_optional_keys(args, arg_types):
+    for a in arg_types:
+        if a not in args:
+            args[a] = Ellipsis

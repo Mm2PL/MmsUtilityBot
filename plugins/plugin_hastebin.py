@@ -13,12 +13,10 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import atexit
 import queue
-import threading
 import typing
 
-import requests
+import aiohttp
 
 try:
     # noinspection PyPackageRequirements
@@ -35,6 +33,11 @@ except ImportError:
     import plugins.plugin_help as plugin_help
 
     exit(1)
+try:
+    import plugin_plugin_manager as plugin_manager
+except ImportError:
+    import plugins.plugin_manager as plugin_manager
+
 # noinspection PyUnresolvedReferences
 import twitchirc
 
@@ -45,51 +48,40 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function(NAME)
-HASTEBIN_ADDR = 'https://www.kotmisia.pl/haste/'
 
 
 class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
+        self.hastebin_addr_setting = plugin_manager.Setting(
+            owner=self,
+            name='hastebin.address',
+            default_value='https://hastebin.com/',
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
         self.to_create_queue = queue.Queue()
         self.link_queue = queue.Queue()
         self.c_hastebin = main.bot.add_command('hastebin')(self.c_hastebin)
         plugin_help.add_manual_help_using_command('Create a hastebin of the message you provided.')(self.c_hastebin)
 
-        main.bot.schedule_repeated_event(0.1, 10, self.send_link, (), {})
-        self.thread = threading.Thread(target=self.threaded_hastebin, args=(self.to_create_queue, self.link_queue))
-        self.thread.start()
+    @property
+    def hastebin_addr(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.hastebin_addr_setting)
 
-    @atexit.register
-    def on_exit(self):
-        self.to_create_queue.put(None)
+    async def upload(self, data: str):
+        async with aiohttp.request('post', f'{self.hastebin_addr}documents', data=data.encode('utf-8')) as r:
+            response = await r.json()
+            return response['key']
 
-    def threaded_hastebin(self, in_q: queue.Queue, out_q: queue.Queue):
-        while 1:
-            elem = in_q.get()
-            if elem is None:
-                break
-            elem: typing.Tuple[str, twitchirc.ChannelMessage]
-            data, msg = elem
-            r = requests.post(f'{HASTEBIN_ADDR}documents',
-                              data=data.encode('utf-8'))
-            response = r.json()
-            out_q.put(msg.reply(f'@{msg.user} Here\'s your hastebin link {HASTEBIN_ADDR}{response["key"]}'))
-
-    def c_hastebin(self, msg: twitchirc.ChannelMessage):
+    async def c_hastebin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('hastebin', msg, global_cooldown=0, local_cooldown=30)
         if cd_state:
             return
         data = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)[1]
-        self.to_create_queue.put((data, msg))
 
-    def send_link(self, *args, **kwargs):
-        del args, kwargs
-        if self.link_queue.empty():
-            return
-        elem = self.link_queue.get_nowait()
-        if isinstance(elem, twitchirc.ChannelMessage):
-            main.bot.send(elem)
+        link = await self.upload(data)
+        return f'@{msg.user} Here\'s your hastebin link {self.hastebin_addr}{link}'
 
     @property
     def no_reload(self):
