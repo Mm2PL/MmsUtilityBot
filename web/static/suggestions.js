@@ -133,4 +133,6 @@
     loadingInfo.hidden = false;
     buttonPrev.hidden = false;
   };
+
+  document.getElementById("scroll").onclick = () => scrollTo(0, document.body.scrollHeight)
 }());

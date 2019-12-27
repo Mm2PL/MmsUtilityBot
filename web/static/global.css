@@ -110,3 +110,9 @@ h3 {
 li h3 {
   margin: 8px;
 }
+
+#scroll {
+  font-size: 36pt;
+  float: right;
+  cursor: pointer;
+}
