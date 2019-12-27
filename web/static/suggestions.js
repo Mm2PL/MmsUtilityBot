@@ -132,5 +132,5 @@
     scrollTo(0, 0);
     loadingInfo.hidden = false;
     buttonPrev.hidden = false;
-  };;
+  };
 }());
