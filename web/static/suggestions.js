@@ -13,7 +13,7 @@
 
   function updatePageNumber() {
     document.getElementById("pageNum").innerText = `Page ${currentPage}`;
-    document.title = `Mm"s bot (suggestions page ${currentPage})`;
+    document.title = `Mm's bot (suggestions page ${currentPage})`;
   };
 
   function load(page) {
