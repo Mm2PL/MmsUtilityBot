@@ -119,7 +119,7 @@
     load(currentPage - 1);
     buttonPrev.hidden = !currentPage;
 
-    scrollTo({ top: 0, behavior: "smooth" });
+    scrollTo(0, 0);
     loadingInfo.hidden = false;
     buttonNext.hidden = false;
   };
@@ -132,7 +132,7 @@
 
     buttonPrev.hidden = !currentPage;
 
-    scrollTo({ top: 0, behavior: "smooth" });
+    scrollTo(0, 0);
     loadingInfo.hidden = false;
     buttonPrev.hidden = false;
   };;
