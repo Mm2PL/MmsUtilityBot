@@ -17,7 +17,7 @@
   };
 
   function load(page) {
-    history.pushState({ currentPage: page }, `Mm"s bot (suggestions page ${page})`, `?page=${page}`);
+    history.pushState({ currentPage: page }, `Mm's bot (suggestions page ${page})`, `?page=${page}`);
     currentPage = page;
     isLoading = true;
 
