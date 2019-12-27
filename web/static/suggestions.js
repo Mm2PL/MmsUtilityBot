@@ -86,8 +86,6 @@
       });
   };
 
-  
-
   // check the page in the URL.
   const args = String(location).split("?");
   currentPage = 0;
