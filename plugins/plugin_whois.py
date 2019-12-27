@@ -16,6 +16,8 @@
 import datetime
 import queue
 import shlex
+import time
+import typing
 
 import aiohttp
 
@@ -47,8 +49,6 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function('whois')
-message_return_queue = queue.Queue()
-request_queue = queue.Queue()
 
 whois_parser = twitchirc.ArgumentParser(prog='whois')
 g = whois_parser.add_mutually_exclusive_group(required=True)
@@ -59,6 +59,9 @@ g.add_argument('-n', '--name', help='Use the username', dest='name', type=str)
 @plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
 @main.bot.add_command('mb.whois')
 async def command_whois(msg: twitchirc.ChannelMessage):
+    if not bots or bots_invalidates <= time.time():
+        await _load_bots()
+
     cd_state = main.do_cooldown('whois', msg, global_cooldown=30,
                                 local_cooldown=60)
     if cd_state:
@@ -108,8 +111,44 @@ async def command_whois(msg: twitchirc.ChannelMessage):
         else:
             login = ''
         created_on = datetime.datetime.strptime(data['createdAt'][:-8], '%Y-%m-%dT%H:%M:%S')
+        bot_notes = ''
+        bot = _find_bot(data['login'])
+        if bot is not None:
+            last_active = f', Last active: {bot["lastSeen"][:-4]}' if bot['lastSeen'] is not None else ''
+            bot_notes = (f' Prefix: {bot["prefix"] if bot["prefix"] is not None else "<blank>"}, '
+                         f'Description: {bot["description"] if bot["description"] is not None else "<blank>"}, '
+                         f'Language: {bot["language"] if bot["language"] is not None else "<unknown>"}'
+                         f'{last_active}')
+
         return (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
                 f'user {data["displayName"]}{login}, '
                 f'chat color: {data["chatColor"]}, '
-                f'account created at {created_on}, roles: {roles}, bio: '
-                f'{data["bio"] if data["bio"] is not None else "not set"}')
+                f'account created at {created_on}, '
+                f'roles: {roles}, '
+                f'id: {data["id"]}, '
+                f'bio: '
+                f'{data["bio"] if data["bio"] is not None else "<blank>"}'
+                f'{bot_notes}')
+
+
+bots: typing.List[dict] = []
+bots_invalidates = time.time()
+
+
+async def _load_bots():
+    global bots, bots_invalidates
+    bots_invalidates = time.time() + 600  # make the bot list invalidate in 10 minutes.
+    async with aiohttp.request('get', 'https://supinic.com/api/bot/active') as r:
+        r: aiohttp.ClientResponse
+        if r.status == 200:
+            bots = (await r.json())['data']
+            return 'ok'
+        else:
+            print(r.content)
+            return f'not okay: {r.status}'
+
+
+def _find_bot(username):
+    for bot in bots:
+        if bot['name'] == username:
+            return bot
