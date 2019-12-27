@@ -10,6 +10,7 @@
   const loadingInfo = document.getElementById("loadingInfo");
   const buttonNext = document.getElementById("buttonNext");
   const buttonPrev = document.getElementById("buttonPrev");
+  const list = document.getElementById("suggestionList");
 
   function updatePageNumber() {
     document.getElementById("pageNum").innerText = `Page ${currentPage}`;
@@ -26,7 +27,6 @@
       .then(json => {
         updatePageNumber();
 
-        const list = document.getElementById("suggestionList");
         list.innerText = "";
 
         if (!json.data.length) {
@@ -97,15 +97,13 @@
   }
 
   load(currentPage);
-  setTimeout(() => {
-    updatePageNumber();
-    if (!currentPage) {
-      buttonPrev.hidden = true;
-    }
+  updatePageNumber();
+  if (!currentPage) {
+    buttonPrev.hidden = true;
+  }
 
-    buttonNext.hidden = false;
-    loadingFailed.hidden = true;
-  }, 1);
+  buttonNext.hidden = false;
+  loadingFailed.hidden = true;
 
   buttonPrev.onclick = () => {
     if (isLoading) {
@@ -129,7 +127,6 @@
     }
 
     load(currentPage + 1);
-
     buttonPrev.hidden = !currentPage;
 
     scrollTo(0, 0);
