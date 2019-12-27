@@ -52,32 +52,9 @@ code {
   }
 }
 
-.dark body {
+body {
   color: #FAFAFA;
   background: #212121;
-}
-
-.dark button {
-  background: #EEEEEE;
-  color: #212121;
-}
-
-.dark button:hover {
-  background: #BDBDBD;
-}
-
-.light body {
-  background: #FAFAFA;
-  color: #212121;
-}
-
-.light button {
-  background: #616161;
-  color: #FAFAFA;
-}
-
-.light button:hover {
-  background: #9E9E9E;
 }
 
 .peepoSadDank {
@@ -111,10 +88,16 @@ button {
   padding: 10px 20px;
   transition: .25s;
   margin: 0 8px;
+  background: #EEEEEE;
+  color: #212121;
 }
 
 button:active {
   box-shadow: none;
+}
+
+button:hover {
+  background: #BDBDBD;
 }
 
 h1,
