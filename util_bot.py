@@ -1216,6 +1216,12 @@ if prog_args.restart_from:
     bot.schedule_event(1, 15, _send_restart_message, (), {})
 try:
     bot.run()
+except BaseException as e:
+    bot.call_middleware('fire',
+                        {
+                            'exception': e
+                        },
+                        False)
 finally:
     print('finally')
 

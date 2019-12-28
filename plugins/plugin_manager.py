@@ -24,6 +24,7 @@ import sqlalchemy
 import twitchirc
 from sqlalchemy import orm
 from sqlalchemy.orm import relationship
+from twitchirc import Event
 
 try:
     # noinspection PyPackageRequirements
@@ -66,16 +67,28 @@ async def _acall_handler(command, message):
         # noinspection PyProtectedMember
         await main.bot._call_command(command, message)
     except Exception as e:
-        msg = twitchirc.ChannelMessage(
-            text=f'Errors monkaS {chr(128073)} ALERT: {e!r}',
-            user='TO_BE_SENT',
-            channel=error_notification_channel
-        )
-        msg.outgoing = True
-        main.bot.force_send(msg)
-        log('err', f'Error while running command {command.chat_command}')
-        for i in traceback.format_exc(30).split('\n'):
-            log('err', i)
+        _acommand_error_handler(e, command, message)  # this shouldn't trigger but just in case.
+
+
+def _acommand_error_handler(exception, command, message):
+    msg = twitchirc.ChannelMessage(
+        text=f'Errors monkaS {chr(128073)} ALERT: {exception!r}',
+        user='TO_BE_SENT',
+        channel=error_notification_channel
+    )
+    msg.outgoing = True
+    main.bot.force_send(msg)
+    log('err', f'Error while running command {command.chat_command}')
+    log('info', f'{message.user}@{message.channel}: {message.text}')
+    for i in traceback.format_exc(30).split('\n'):
+        log('err', i)
+
+    msg2 = message.reply(f'@{message.user}, an error was raised during the execution of your command: '
+                         f'{command.chat_command}')
+    main.bot.send(msg2)
+
+
+main.bot.command_error_handler = _acommand_error_handler
 
 
 # noinspection PyProtectedMember
@@ -304,10 +317,9 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     ensure_blacklist(msg.channel)
     args = msg.text.split(' ')
     if len(args) != 2:
-        main.bot.send(msg.reply(f'@{msg.user} Usage: '
-                                f'"{main.bot.prefix}{command_blacklist.chat_command} COMMAND". '
-                                f'Where COMMAND is the command you want to blacklist.'))
-        return
+        return (f'@{msg.user} Usage: '
+                f'"{main.bot.prefix}{command_blacklist.chat_command} COMMAND". '
+                f'Where COMMAND is the command you want to blacklist.')
     target = args[1]
     if target in blacklist[msg.channel]:
         return f'@{msg.user} That command is already blacklisted.'
@@ -315,9 +327,8 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     for i in main.bot.commands:
         if i.chat_command == target:
             blacklist[msg.channel].append(target)
-            main.bot.send(msg.reply(f'@{msg.user} Blacklisted command {target}. '
-                                    f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.'))
-            return
+            return (f'@{msg.user} Blacklisted command {target}. '
+                    f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.')
     return f'@{msg.user} Cannot blacklist nonexistent command {target}.'
 
 
@@ -359,3 +370,66 @@ if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']
 else:
     main.bot.storage['command_blacklist'] = {}
+
+
+class ExceptionDetectionMiddleware(twitchirc.AbstractMiddleware):
+    def __init__(self):
+        super().__init__()
+        self.fire_triggered = False
+        print('fire detection loaded')
+
+    def on_action(self, event: Event):
+        super().on_action(event)
+        if event.name == 'fire':
+            self.fire(event)
+
+    def fire(self, event: Event) -> None:
+        print('FIRE!!!!! WAYTOODANK')
+        if self.fire_triggered:
+            return
+        self.fire_triggered = True
+        pinged = ''
+        if isinstance(event.source, twitchirc.Bot):
+            for user, perms in event.source.permissions.users.items():
+                print(user, perms)
+                if ((twitchirc.permission_names.GLOBAL_BYPASS_PERMISSION in perms
+                     or 'util.fire_ping' in perms
+                     or 'parent.bot_admin')
+                        and 'util.fire_ping_disable' not in perms):
+                    pinged += f' @{user}'
+        e = event.data['exception']
+        m = twitchirc.ChannelMessage(text=f'The bot\'s breaking!!! {pinged} WAYTOODANK {e!r}',
+                                     user='OUTGOING', channel=error_notification_channel,
+                                     outgoing=True, parent=None)
+        event.source.send(m)
+        event.source.flush_queue()
+
+    def send(self, event: Event) -> None:
+        pass
+
+    def receive(self, event: Event) -> None:
+        pass
+
+    def command(self, event: Event) -> None:
+        pass
+
+    def permission_check(self, event: Event) -> None:
+        pass
+
+    def join(self, event: Event) -> None:
+        pass
+
+    def part(self, event: Event) -> None:
+        pass
+
+    def disconnect(self, event: Event) -> None:
+        pass
+
+    def connect(self, event: Event) -> None:
+        pass
+
+    def add_command(self, event: Event) -> None:
+        pass
+
+
+main.bot.middleware.append(ExceptionDetectionMiddleware())
