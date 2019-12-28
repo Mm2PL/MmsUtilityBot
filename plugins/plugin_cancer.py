@@ -55,7 +55,8 @@ main.load_file('plugins/plugin_hastebin.py')
 try:
     import plugin_hastebin as plugin_hastebin
 except ImportError:
-    from plugins.plugin_hastebin import Plugin as plugin_hastebin
+    from plugins.plugin_hastebin import PluginHastebin
+    plugin_hastebin: PluginHastebin
 
 import random
 
@@ -124,6 +125,7 @@ class Plugin(main.Plugin):
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
+
         if msg.user == 'supibot' and self._sneeze[1] is not None and (
                 msg.text.startswith(
                     self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
@@ -231,6 +233,7 @@ class Plugin(main.Plugin):
                 'sensitivity_g': float,
                 'sensitivity_b': float,
                 'sensitivity_a': float,
+                'size_percent': float,
                 'max_y': int,
                 'pad_y': int,
                 'reverse': bool,
@@ -243,32 +246,38 @@ class Plugin(main.Plugin):
             return (f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
 
-        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgba'])
-        if num_defined == 4:
-            # noinspection PyTypeChecker
+        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgb'])
+        alpha = args['sensitivity_a'] if args['sensitivity_a'] is not Ellipsis else 1
+        if num_defined == 3:
             sens: typing.Tuple[float, float, float, float] = (args['sensitivity_r'], args['sensitivity_g'],
-                                                              args['sensitivity_b'], args['sensitivity_a'])
+                                                              args['sensitivity_b'], alpha)
             is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
             if is_zero:
                 return f'Error: Sensitivity cannot be zero. MEGADANK'
         elif num_defined == 0:
-            sens = (0.5, 0.5, 0.5, 0.5)
+            sens = (1, 1, 1, 1)
         else:
             return f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.'
+        if args['size_percent'] is not ... and args['max_y'] is not ...:
+            return f'Error: you cannot provide the size percentage and maximum height at the same time.'
+
+        max_x = 60 if args['size_percent'] is Ellipsis else None
+        max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
+        size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
         # noinspection PyTypeChecker
         o: str = await braille.to_braille_from_url(args['url'],
                                                    reverse=True if args['reverse'] is not Ellipsis else False,
-                                                   size_percent=None,
-                                                   max_x=60,
-                                                   max_y=args['max_y'] if args['max_y'] is not Ellipsis else 60,
+                                                   size_percent=size_percent,
+                                                   max_x=max_x,
+                                                   max_y=max_y,
                                                    sensitivity=sens,
                                                    enable_padding=True,
                                                    pad_size=(60,
                                                              args['pad_y'] if args['pad_y'] is not Ellipsis else 60))
         sendable = ' '.join(o.split('\n')[1:])
-        print(len(sendable))
         if args['hastebin'] is not Ellipsis or len(sendable) > 500:
-            return (f'This braille was too big to be posted. Here\'s a link to a pastebin: '
+            return (f'{"This braille was too big to be posted." if not args["hastebin"] is not Ellipsis else ""} '
+                    f'Here\'s a link to a hastebin: '
                     f'{plugin_hastebin.hastebin_addr}'
                     f'{await plugin_hastebin.upload(o)}')
         else:
