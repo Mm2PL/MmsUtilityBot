@@ -32,7 +32,6 @@ import datetime
 from types import ModuleType
 from typing import List, Dict, Union
 import argparse
-import queue
 
 import sqlalchemy
 import twitchirc
@@ -121,33 +120,12 @@ try:
 except twitchirc.CannotLoadError:
     bot.storage.save()
 bot.permissions.update(bot.storage['permissions'])
+bot.handlers['exit'] = []
+bot.storage.auto_save = False
 cooldowns = {
     # 'global_{cmd}': time.time() + 1,
     # '{user}': time.time()
 }
-
-
-def _committer_thread(queue: queue.Queue, close_queue: queue.Queue):
-    while 1:
-        elem = queue.get(True)
-        if elem is None:
-            return
-        try:
-            print(f'Committer thread: Commit.')
-            elem.commit()
-        finally:
-            print(f'Committer thread: Expunge all and close.')
-            close_queue.put(elem)
-            # elem.expunge_all()
-            # elem.close()
-            print('Done.')
-        queue.task_done()
-
-
-committer_queue = queue.Queue()
-committer_close_queue = queue.Queue()
-committer_thread = threading.Thread(target=_committer_thread, args=(committer_queue, committer_close_queue), kwargs={})
-committer_thread.start()
 
 
 @contextlib.contextmanager
@@ -155,7 +133,7 @@ def session_scope_local_thread():
     """Provide a transactional scope around a series of operations."""
     session = Session()
     session.expire_on_commit = False
-    print('Create local session.')
+    log('debug', 'Create local session.')
     try:
         yield session
         session.commit()
@@ -194,14 +172,16 @@ def make_log_function(plugin_name: str):
             elif level in ['err']:
                 level = 'fat'
         if level == 'fat':
-            print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
-                  f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
-                  **kwargs)
+            _print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
+                   f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
+                   **kwargs)
             bot.stop()
             exit(1)
-        return _print(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
-                      f'[{plugin_name}/{LOG_LEVELS[level]}] {" ".join([str(i) for i in data])}',
-                      **kwargs)
+        data = ' '.join([str(i) for i in data])
+        for line in data.split('\n'):
+            _print((f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
+                    f'[{plugin_name}/{LOG_LEVELS[level]}] {line}'),
+                   **kwargs)
 
     return log
 
@@ -630,11 +610,11 @@ def add_alias(bot_obj, alias):
             command.aliases = [alias]
 
         async def alias_func(msg: twitchirc.ChannelMessage):
-            return command.acall(msg)
+            return await command.acall(msg)
 
         alias_func = AliasCommand(alias, alias_func, parent=bot_obj, limit_to_channels=command.limit_to_channels,
                                   matcher_function=command.matcher_function)
-        bot_obj.add_command(alias_func)
+        bot_obj.commands.append(alias_func)
 
         return command
 
@@ -1120,19 +1100,6 @@ def black_list_user(user, time_to_black_list):
     cooldowns[user] = time.time() + time_to_black_list
 
 
-def closing_handler():
-    try:
-        while 1:
-            elem = committer_close_queue.get(False)
-            print('Closer: Expunge all and close')
-            elem.expunge_all()
-            elem.close()
-            print('Closer: done')
-    except queue.Empty:
-        return
-
-
-bot.schedule_repeated_event(0.1, 100, closing_handler, args=(), kwargs={})
 start_time = datetime.datetime.now()
 
 with open('code_sign_public.pem', 'rb') as f:
@@ -1223,23 +1190,25 @@ except BaseException as e:
                         },
                         False)
 finally:
+    bot.call_handlers('exit', ())
     print('finally')
-
+    print('flush cached users')
     users_lock.acquire()
     for k, v in cached_users.items():
         cached_users[k]['expire_time'] = 0
     users_lock.release()
     flush_users()
-
-    print('Committing all changes left. Stopping committer thread.')
-    committer_queue.put(None, block=True)
-    print('Done.')
+    print('flush cached users: done')
+    print('update channels and counters')
     bot.storage.auto_save = False
     bot.storage['channels'] = bot.channels_connected
     bot.storage['counters'] = counters
+    print('update permissions')
     bot.permissions.fix()
     for i in bot.permissions:
         bot.storage['permissions'][i] = bot.permissions[i]
     bot.storage['plebs'] = plebs
     bot.storage['subs'] = subs
+    print('save storage')
     bot.storage.save()
+    print('save storage: done')
