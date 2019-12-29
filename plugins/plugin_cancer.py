@@ -14,7 +14,6 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import time
-import traceback
 from typing import Tuple
 import typing
 
@@ -56,6 +55,7 @@ try:
     import plugin_hastebin as plugin_hastebin
 except ImportError:
     from plugins.plugin_hastebin import PluginHastebin
+
     plugin_hastebin: PluginHastebin
 
 import random
@@ -87,14 +87,32 @@ RECONNECTION_MESSAGES = [
 ]
 
 COOKIE_PATTERN = regex.compile(
-    rf'^\[Cookies\] \[(Default|Bronze|Silver|Gold|Platinum|Diamond|Masters|GrandMasters|Leader)\] '
-    rf'([a-z0-9]+) \U0001f3ab'
+    rf'^\[Cookies\] '
+    rf'\[(?P<rank>(?:P[1-4]: )?'
+    rf'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader))\] '
+    rf'(?P<name>[a-z0-9]+) \U0001f3ab'
 )
 COOLDOWN_TIMEOUT = 1.5
+
+PRESTIGE_PATTERN = regex.compile('P([1-4]):')
+COOKIE_PRESTIGE_TIMES = {
+    0: '2h',
+    1: '1h',
+    2: '30m',
+    3: '20m'
+}
 
 
 class Plugin(main.Plugin):
     _sneeze: Tuple[float, typing.Optional[twitchirc.ChannelMessage]]
+
+    def _time_from_rank(self, text) -> str:
+        prestige_match = PRESTIGE_PATTERN.findall(text)
+        if prestige_match:
+            level = int(prestige_match[0][0])
+            return COOKIE_PRESTIGE_TIMES[level]
+        else:
+            return COOKIE_PRESTIGE_TIMES[0]
 
     def chan_msg_handler(self, event: str, msg: twitchirc.ChannelMessage):
         if msg.user in ['supibot', 'mm2pl'] and msg.text.startswith('HONEYDETECTED RECONNECTED') \
@@ -106,22 +124,12 @@ class Plugin(main.Plugin):
         if msg.channel in ['supinic', 'mm2pl'] and msg.user in ['thepositivebot', 'linkusbanned'] \
                 and msg.text.startswith('\x01ACTION [Cookies]'):
             m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
-            if m:
-                if m[0][1].lower() in self.cookie_optin:
-                    main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in 2h'))
+            if m and m[0][1].lower() in self.cookie_optin:
+                time_ = self._time_from_rank(m[0][0].lower())
+
+                main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in {time_}'))
             else:
-                # regex fail KKonaW
-                log('warn', 'regex fail KKonaW')
-                msg = twitchirc.ChannelMessage(
-                    text=f'Errors monkaS {chr(128073)} ALERT: regex fail.',
-                    user='TO_BE_SENT',
-                    channel=plugin_manager.error_notification_channel
-                )
-                msg.outgoing = True
-                main.bot.force_send(msg)
-                log('err', f'Error while checking for cookie reminders. Regex failed.')
-                for i in traceback.format_exc(30).split('\n'):
-                    log('err', i)
+                log('warn', f'matching against regex failed: {msg.text!r}')
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
