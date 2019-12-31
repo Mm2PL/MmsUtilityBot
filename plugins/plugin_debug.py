@@ -62,9 +62,9 @@ def command_say(msg: twitchirc.ChannelMessage):
 async def command_eval(msg: twitchirc.ChannelMessage):
     assert msg.user == 'mm2pl' and msg.flags['user-id'] == '117691339', 'no.'
     code = main.delete_spammer_chrs(msg.text.split(' ', 1)[1])
-    log('warn', f'Eval from {msg.user}({msg.flags["user-id"]}): {code}')
-    result = eval(compile(code, msg.user + '@' + msg.channel, 'single'))
-    if isinstance(result, (list, str)):
+    log('warn', f'Eval from {msg.user}({msg.flags["user-id"]}): {code!r}')
+    result = eval(compile(code, msg.user + '@' + msg.channel, 'eval'), globals(), locals())
+    if isinstance(result, (list, str, twitchirc.Message)):
         return result
     else:
         return str(result)
