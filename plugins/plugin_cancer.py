@@ -109,8 +109,12 @@ class Plugin(main.Plugin):
     def _time_from_rank(self, text) -> str:
         prestige_match = PRESTIGE_PATTERN.findall(text)
         if prestige_match:
-            level = int(prestige_match[0][0])
-            return COOKIE_PRESTIGE_TIMES[level]
+            level = int(prestige_match[0])
+            if level in COOKIE_PRESTIGE_TIMES:
+                return COOKIE_PRESTIGE_TIMES[level]
+            else:
+                log('warn', f'Unknown prestige level: {level!r}. Message {text!r}')
+                return COOKIE_PRESTIGE_TIMES[0] + ' monkaS unknown prestige level.'
         else:
             return COOKIE_PRESTIGE_TIMES[0]
 
@@ -125,10 +129,10 @@ class Plugin(main.Plugin):
                 and msg.text.startswith('\x01ACTION [Cookies]'):
             m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
             if m and m[0][1].lower() in self.cookie_optin:
-                time_ = self._time_from_rank(m[0][0].lower())
+                time_ = self._time_from_rank(msg.text)
 
                 main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in {time_}'))
-            else:
+            elif not m:
                 log('warn', f'matching against regex failed: {msg.text!r}')
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
@@ -151,6 +155,17 @@ class Plugin(main.Plugin):
     def cooldown_timeout(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.timeout_setting)
 
+    @property
+    def random_pings(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.random_ping_setting)
+
+    @property
+    def cookie_optin(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.cookie_optin_setting)
+
+    def _get_pyramid_enabled(self, channel: str):
+        return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
+
     def __init__(self, module, source):
         super().__init__(module, source)
         self.timeout_setting = plugin_manager.Setting(self,
@@ -162,38 +177,75 @@ class Plugin(main.Plugin):
         self._sneeze = (-1, None)
         self.storage = main.PluginStorage(self, main.bot.storage)
         main.bot.handlers['chat_msg'].append(self.chan_msg_handler)
-        if 'random_pings' in self.storage:
-            self.random_pings = self.storage['random_pings']
-        else:
-            self.random_pings = ['{my pings run out}']
-            self.storage['random_pings'] = self.random_pings
 
-        if 'pyramid_enabled' in self.storage:
-            self.pyramid_enabled = self.storage['pyramid_enabled']
-        else:
-            self.pyramid_enabled = []
-            self.storage['pyramid_enabled'] = self.pyramid_enabled
+        self.random_ping_setting = plugin_manager.Setting(self,
+                                                          'cancer.random_pings',
+                                                          default_value=['{my pings run out}'],
+                                                          scope=plugin_manager.SettingScope.GLOBAL,
+                                                          write_defaults=True)
 
-        if 'cookie_optin' in self.storage:
-            self.cookie_optin = self.storage['cookie_optin']
-        else:
-            self.cookie_optin = []
-            self.storage['cookie_optin'] = self.cookie_optin
+        self.pyramid_enabled_setting = plugin_manager.Setting(self,
+                                                              'cancer.pyramid_enabled',
+                                                              default_value=False,
+                                                              scope=plugin_manager.SettingScope.PER_CHANNEL,
+                                                              write_defaults=True)
+
+        self.cookie_optin_setting = plugin_manager.Setting(self,
+                                                           'cancer.cookie_optin',
+                                                           default_value=[],
+                                                           scope=plugin_manager.SettingScope.GLOBAL,
+                                                           write_defaults=True)
 
         # register commands
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
-        plugin_help.add_manual_help_using_command('Make a pyramid.', None)(self.command_pyramid)
+        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text', None)(self.command_pyramid)
 
         self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
                                                       required_permissions=['cancer.braille'])(self.c_braillefy)
         plugin_help.add_manual_help_using_command('Convert an image into braille.', None)(self.command_braillefy)
+
+        # arguments.
+        plugin_help.create_topic('braillefy url',
+                                 'URL pointing to image you want to convert.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy reverse',
+                                 'Should the output braille be reversed.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy sensitivity',
+                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha)',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy sensitivity_r',
+                                     'braillefy sensitivity_g',
+                                     'braillefy sensitivity_b',
+                                     'braillefy sensitivity_a'
+                                 ])
+
+        plugin_help.create_topic('braillefy size',
+                                 'Size of the image. Defaults: max_x = 60, pad_y = 60'
+                                 'size_percent=[undefined]. max_x, pad_y are in pixels.',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy size_percent',
+                                     'braillefy max_x',
+                                     'braillefy pad_y',
+                                 ])
 
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
                                                   'cookies', None)(self.c_cookie_optin)
 
         main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
+
+        plugin_help.create_topic('plugin_cancer',
+                                 'Plugin dedicated to things that shouldn\'t be done '
+                                 '(responding to messages other than commands, spamming).',
+                                 section=plugin_help.SECTION_MISC,
+                                 links=[
+                                     'plugin_cancer.py'
+                                     'cancer'
+                                 ])
 
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
@@ -207,24 +259,26 @@ class Plugin(main.Plugin):
             return f'@{msg.user} You have been added to the cookie opt-in list.'
 
     def c_pyramid(self, msg: twitchirc.ChannelMessage):
-        if msg.channel not in self.pyramid_enabled:
+        if not self._get_pyramid_enabled(msg.channel):
             return f'@{msg.user}, This command is disabled here.'
         cd_state = main.do_cooldown('pyramid', msg, global_cooldown=60, local_cooldown=60)
         if cd_state:
             return
         t = main.delete_spammer_chrs(msg.text).split(' ', 1)
         if len(t) == 1:
-            return f'@{msg.user}, Usage: pyramid <text...>'
+            return f'@{msg.user}, Usage: pyramid <size> <text...>'
         args = t[1].rstrip()
         size = ''
         for i in args.split(' '):
             i: str
             if i.isnumeric():
                 size = i
+                break  # prefer first number!
         if size != '':
-            args = args.replace(size, '', 1).rstrip() + ' '
+            args: str = args.replace(size, '', 1).rstrip() + ' '
             size = int(size)
-            print(repr(args), repr(size))
+            if not args.strip(' '):
+                return f'@{msg.user}, Nothing to send. NaM'
             for i in range(1, size):
                 main.bot.send(msg.reply(args * i))
             for i in range(size, 0, -1):
