@@ -1184,6 +1184,9 @@ if prog_args.restart_from:
 try:
     bot.run()
 except BaseException as e:
+    import traceback
+
+    traceback.print_exc()
     bot.call_middleware('fire',
                         {
                             'exception': e

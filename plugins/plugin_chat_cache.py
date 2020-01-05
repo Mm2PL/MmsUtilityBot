@@ -13,12 +13,14 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import time
 import typing
 from collections import defaultdict
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Any
 
 import regex
+import requests
 from twitchirc import ChannelMessage
 
 try:
@@ -42,7 +44,8 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
-    cache: Dict[str, List[List[Union[ChannelMessage, float]]]]
+
+    cache: Dict[str, typing.List[typing.Tuple[twitchirc.ChannelMessage, float]]]
 
     def __init__(self, module, source):
         super().__init__(module, source)
@@ -56,6 +59,24 @@ class Plugin(main.Plugin):
             # ]
         }
         main.bot.handlers['chat_msg'].append(self.on_message)
+        main.bot.schedule_event(0.1, 10, self._load_recents_from_connected, (), {})
+
+    def _load_recents_from_connected(self):
+        for chan in main.bot.channels_connected:
+            self._load_recents(chan)
+
+    def _load_recents(self, channel):
+        log('info', f'Attempting to fetch recent messages for channel {channel}.')
+        req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}')
+        data = req.json()
+        if req.status_code != 200:
+            log('err', f'Unable to fetch recent messages for channel {channel}!')
+            log('info', repr(data))
+            return
+        for msg in data['messages']:
+            message = twitchirc.auto_message(msg, main.bot)
+            if isinstance(message, twitchirc.ChannelMessage):  # ignore messages other than normal text
+                self.on_message('recent', message)
 
     @property
     def no_reload(self):
@@ -104,8 +125,13 @@ class Plugin(main.Plugin):
         self._clear_cache()
         if message.channel not in self.cache:
             self.cache[message.channel] = []
+        t = None
+        if 'tmi-sent-ts' in message.flags:
+            t = int(message.flags['tmi-sent-ts'])/1000
+        else:
+            t = time.time()
         self.cache[message.channel].append(
-            [message, time.time()]
+            (message, t)
         )
 
     def _clear_cache(self):

@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import builtins
 
 try:
     # noinspection PyPackageRequirements
@@ -44,11 +45,11 @@ except ImportError:
 import twitchirc
 
 __meta_data__ = {
-    'name': 'plugin_say',
+    'name': 'plugin_debug',
     'commands': ['mb.say', 'say', 'mb.eval']
 }
 
-log = main.make_log_function('say')
+log = main.make_log_function('debug')
 
 
 @plugin_help.add_manual_help_using_command('Say something.', aliases=['say'])
@@ -63,7 +64,13 @@ async def command_eval(msg: twitchirc.ChannelMessage):
     assert msg.user == 'mm2pl' and msg.flags['user-id'] == '117691339', 'no.'
     code = main.delete_spammer_chrs(msg.text.split(' ', 1)[1])
     log('warn', f'Eval from {msg.user}({msg.flags["user-id"]}): {code!r}')
-    result = eval(compile(code, msg.user + '@' + msg.channel, 'eval'), globals(), locals())
+    glob = {name: getattr(builtins, name) for name in dir(builtins)}
+    glob.update({
+        'msg': msg, 'command_eval': command_eval,
+        'log': log, 'main': main, 'plugin_help': plugin_help, 'plugin_manager': plugin_manager,
+        'plugin_prefixes': plugin_prefixes
+    })
+    result = eval(compile(code, msg.user + '@' + msg.channel, 'eval'), glob, {})
     if isinstance(result, (list, str, twitchirc.Message)):
         return result
     else:

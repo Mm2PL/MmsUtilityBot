@@ -26,8 +26,10 @@ import typing
 import uuid
 import re
 import traceback
-from typing import Dict, Any
+from typing import Dict
 
+import dill as dill
+import sqlalchemy.ext.declarative
 import twitchirc
 from twitchirc import Event
 
@@ -135,7 +137,7 @@ main.bot.middleware.append(IPCMiddleware())
 def add_command(command_name):
     def decorator(func):
         commands[command_name.lower()] = func
-        print(f'Add command {command_name} with function {func}')
+        log('debug', f'Add command {command_name} with function {func}')
         return func
 
     return decorator
@@ -182,7 +184,7 @@ def _check_for_messages():
             if sock_id == -1:
                 raise main.WayTooDank('weee woo')
             if msg == b'':
-                print(f'Auto-close bad connection {sock_id}')
+                log('debug', f'Auto-close bad connection {sock_id}')
                 sock.close()
                 if sock_id in sockets:
                     del sockets[sock_id]
@@ -206,10 +208,9 @@ def _get_sock_id(sock):
 def on_receive_message(sock: socket.socket, msg: bytes, sock_id):
     print(f'Recv message {msg}')
     if sock_id == -1:
-        log('err', 'How did this happen?')
-        log('err', 'Received message from socket with no internal id.')
-        for i in ''.join(traceback.format_stack(1000)).split('\n'):
-            log('warn', i)
+        log('err', 'How did this happen?\n'
+                   'Received message from socket with no internal id.')
+        log('warn', traceback.format_stack())
         return
 
     msg: str = msg.decode('utf-8')
@@ -266,10 +267,10 @@ def _write_queued_messages():
     for sid, q in response_write_queues.items():
         while not q.empty():
             task = q.get(False)
-            print(f'Write message {task} to socket {sid}')
+            log('debug', f'Write message {task} to socket {sid}')
             sockets[sid].send(task)
             q.task_done()
-            print(f'Done.')
+            log('debug', f'Done.')
 
 
 def on_timer_hit():
@@ -278,8 +279,7 @@ def on_timer_hit():
         _check_for_messages()
         _write_queued_messages()
     except:
-        for i in traceback.format_exc().split('\n'):
-            log('err', i)
+        log('err', traceback.format_exc())
 
 
 main.bot.schedule_repeated_event(0.1, 5, on_timer_hit, (), {})
@@ -313,7 +313,7 @@ def _command_run(sock: socket.socket, msg: str, socket_id):
 @add_command('quit')
 def _command_quit(sock: socket.socket, msg: str, socket_id):
     global sockets, msg_buffer
-    print(f'Closed connection {socket_id} by request.')
+    log('debug', f'Closed connection {socket_id} by request.')
     sock.shutdown(socket.SHUT_RDWR)
     sock.close()
     if socket_id in sockets:

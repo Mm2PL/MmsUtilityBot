@@ -80,7 +80,7 @@ def create_topic(topic, help_, section=1, links: typing.Optional[list] = None):
         all_help[topic] = f'Topic {topic!r} exists but there was no help found :( .'
     else:
         all_help[section][topic] = help_
-    print(f'Created help topic {topic}({section}){f" with links {links}" if links is not None else ""}: {help_}')
+    log('debug', f'Created help topic {topic}({section}){f" with links {links}" if links is not None else ""}: {help_}')
 
 
 def _try_find_link(topic, section: typing.Optional[int] = None) -> Union[Tuple[int, str], Tuple[None, None]]:
@@ -114,17 +114,17 @@ def _find_topic(topic, section: typing.Optional[int] = None) -> typing.Optional[
             return f'{topic}({section}) Not found.'
     else:
         for s, topics in all_help.items():
-            print(repr(s), repr(topics))
+            log('debug', repr(s), repr(topics))
             if s == 0:  # skip links
                 continue
             if topic in topics:
-                print(repr(topics), repr(topic), repr(s))
+                log('debug', repr(topics), repr(topic), repr(s))
                 return f'{topic}({s}) {topics[topic]}'
         return f'{topic}(?) Not found.'
 
 
 def _help_topic_from_action(command_name, i):
-    print(i)
+    log('debug', i)
     # noinspection PyProtectedMember
     if isinstance(i, (argparse._StoreAction, argparse._AppendAction, argparse._CountAction,
                       argparse._AppendConstAction, argparse._StoreFalseAction, argparse._StoreTrueAction,

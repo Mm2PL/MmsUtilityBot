@@ -57,7 +57,7 @@ class Logger:
         return self.parent.log(self.source, level, message, cause=cause)
 
     def __call__(self, level, *message, cause=CAUSE_OTHER):
-        self.log(level, ' '.join(message), cause)
+        self.log(level, ' '.join([str(i) for i in message]), cause)
 
 
 class Plugin(main.Plugin):
@@ -76,7 +76,7 @@ class Plugin(main.Plugin):
             'err': 3,
             'fat': 10
         }
-        self.log_level = self.log_levels['info']
+        self.log_level = self.log_levels['debug']
         self.db_log_level = self.log_levels['info']
         self._logger_queue = queue.Queue()
         self._logger_thread = threading.Thread(target=self._logger_thread_func, args=(self._logger_queue,))
@@ -128,7 +128,7 @@ class Plugin(main.Plugin):
             return self.log_levels[level]
 
     def log(self, source: str, level: typing.Union[str, int], *message, cause=CAUSE_OTHER):
-        msg = self.oauth_pat.sub('[OAUTH TOKEN]', '  '.join(message))
+        msg = self.oauth_pat.sub('[OAUTH TOKEN]', '  '.join([str(i) for i in message]))
         self._db_log(source, self._translate_level(level), msg, cause)
         self._print_log(source, self._translate_level(level), msg, cause)
 
@@ -168,6 +168,7 @@ class Plugin(main.Plugin):
             if len(batch) > 50 or time.time() > batch_start + 30:
                 self._flush_batch(batch)
                 batch = []
+                batch_start = time.time()
 
     def _print_log(self, source, level, message, cause):
         if self.log_level <= level:
@@ -220,7 +221,7 @@ class LogEntry(main.Base):
     __tablename__ = 'logs'
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, nullable=False)
     time = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now, nullable=False)
-    source = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+    source = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
     level = sqlalchemy.Column(sqlalchemy.SmallInteger, nullable=False)
     message = sqlalchemy.Column(sqlalchemy.UnicodeText, nullable=False)
 

@@ -132,6 +132,9 @@ class ChannelSettings(main.Base):
     channel = relationship('User')
     settings_raw = sqlalchemy.Column(sqlalchemy.Text)
 
+    def __repr__(self):
+        return f'<ChannelSettings {self._settings!r}>'
+
     @orm.reconstructor
     def _reconstructor(self):
         self._import()
@@ -161,7 +164,7 @@ class ChannelSettings(main.Base):
 
     def fill_defaults(self, forced=True):
         for v in all_settings.values():
-            if v.scope == SettingScope.PER_CHANNEL \
+            if (v.scope == SettingScope.PER_CHANNEL and self.channel_alias != -1) \
                     and (forced or (v.write_defaults and self.get(v) == v.default_value)):
                 self.set(v, v.default_value)
 
@@ -183,7 +186,7 @@ class ChannelSettings(main.Base):
         if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
             raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
 
-        self._settings[setting_name] = value
+        self._settings[setting.name] = value
 
 
 channel_settings: Dict[str, ChannelSettings] = {}
@@ -200,6 +203,7 @@ def _init_settings():
         print('Loading existing channel settings...')
         for i in ChannelSettings.load_all(write_session):
             i.fill_defaults(forced=False)
+            i.update()
             if i.channel_alias == -1:  # global settings.
                 channel_settings[SettingScope.GLOBAL.name] = i
             else:
@@ -223,7 +227,6 @@ def _init_settings():
             channel_settings[channels[0].last_known_username] = cs
         print('OK')
         print('Commit.')
-
     print(f'Done. Loaded {len(channel_settings)} channel settings entries.')
 
 
