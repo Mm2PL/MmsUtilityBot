@@ -14,16 +14,15 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
-import enum
-import json
 import traceback
 import typing
 from typing import Dict
 
-import sqlalchemy
 import twitchirc
-from sqlalchemy import orm
-from sqlalchemy.orm import relationship
+from twitchirc import Event
+
+from plugins.models.channelsettings import SettingScope
+import plugins.models.channelsettings as channelsettings_model
 
 try:
     # noinspection PyPackageRequirements
@@ -66,16 +65,28 @@ async def _acall_handler(command, message):
         # noinspection PyProtectedMember
         await main.bot._call_command(command, message)
     except Exception as e:
-        msg = twitchirc.ChannelMessage(
-            text=f'Errors monkaS {chr(128073)} ALERT: {e!r}',
-            user='TO_BE_SENT',
-            channel=error_notification_channel
-        )
-        msg.outgoing = True
-        main.bot.force_send(msg)
-        log('err', f'Error while running command {command.chat_command}')
-        for i in traceback.format_exc(30).split('\n'):
-            log('err', i)
+        _acommand_error_handler(e, command, message)  # this shouldn't trigger but just in case.
+
+
+def _acommand_error_handler(exception, command, message):
+    msg = twitchirc.ChannelMessage(
+        text=f'Errors monkaS {chr(128073)} ALERT: {exception!r}',
+        user='TO_BE_SENT',
+        channel=error_notification_channel
+    )
+    msg.outgoing = True
+    main.bot.force_send(msg)
+    log('err', f'Error while running command {command.chat_command}')
+    log('info', f'{message.user}@{message.channel}: {message.text}')
+    for i in traceback.format_exc(30).split('\n'):
+        log('err', i)
+
+    msg2 = message.reply(f'@{message.user}, an error was raised during the execution of your command: '
+                         f'{command.chat_command}')
+    main.bot.send(msg2)
+
+
+main.bot.command_error_handler = _acommand_error_handler
 
 
 # noinspection PyProtectedMember
@@ -112,66 +123,8 @@ def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Comm
     return decorator
 
 
-class ChannelSettings(main.Base):
-    __tablename__ = 'channelsettings'
-
-    channel_alias = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'), primary_key=True)
-    channel = relationship('User')
-    settings_raw = sqlalchemy.Column(sqlalchemy.Text)
-
-    @orm.reconstructor
-    def _reconstructor(self):
-        self._import()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._settings = {}
-        self._export()
-
-    @staticmethod
-    def _load_all(session):
-        return session.query(ChannelSettings).all()
-
-    @staticmethod
-    def load_all(session=None) -> typing.List['ChannelSettings']:
-        if session is None:
-            with main.session_scope() as s:
-                return ChannelSettings._load_all(s)
-        else:
-            return ChannelSettings._load_all(session)
-
-    def _import(self) -> None:
-        self._settings = json.loads(self.settings_raw)
-
-    def _export(self) -> None:
-        self.settings_raw = json.dumps(self._settings)
-
-    def fill_defaults(self, forced=True):
-        for v in all_settings.values():
-            if v.scope == SettingScope.PER_CHANNEL \
-                    and (forced or (v.write_defaults and self.get(v) == v.default_value)):
-                self.set(v, v.default_value)
-
-    def update(self):
-        self._export()
-
-    def get(self, setting_name) -> typing.Any:
-        setting = Setting.find(setting_name)
-        if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
-            raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
-
-        if setting.name in self._settings:
-            return self._settings[setting.name]
-        else:
-            return setting.default_value
-
-    def set(self, setting_name, value) -> None:
-        setting = Setting.find(setting_name)
-        if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
-            raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
-
-        self._settings[setting_name] = value
-
+all_settings: typing.Dict[str, 'Setting'] = {}
+ChannelSettings, Setting = channelsettings_model.get(main.Base, main.session_scope, all_settings)
 
 channel_settings: Dict[str, ChannelSettings] = {}
 channel_settings_session = None
@@ -187,6 +140,7 @@ def _init_settings():
         print('Loading existing channel settings...')
         for i in ChannelSettings.load_all(write_session):
             i.fill_defaults(forced=False)
+            i.update()
             if i.channel_alias == -1:  # global settings.
                 channel_settings[SettingScope.GLOBAL.name] = i
             else:
@@ -210,7 +164,6 @@ def _init_settings():
             channel_settings[channels[0].last_known_username] = cs
         print('OK')
         print('Commit.')
-
     print(f'Done. Loaded {len(channel_settings)} channel settings entries.')
 
 
@@ -225,57 +178,6 @@ def _reload_settings():
 
 
 main.reloadables['channel_settings'] = _reload_settings
-
-
-class SettingScope(enum.Enum):
-    PER_CHANNEL = 0
-    GLOBAL = 1
-
-
-all_settings: typing.Dict[str, 'Setting'] = {}
-
-
-class Setting:
-    default_value: typing.Any
-    name: str
-    scope: SettingScope
-
-    def __init__(self, owner: main.Plugin, name: str, default_value=..., scope=SettingScope.PER_CHANNEL,
-                 write_defaults=False):
-        self.owner = owner
-        self.name = name
-        self.default_value = default_value
-        self.scope = scope
-        self.write_defaults = write_defaults
-        self.register()
-
-    @staticmethod
-    def find(name: typing.Union[str, 'Setting']):
-        if isinstance(name, Setting):
-            return name
-        if name in all_settings:
-            return all_settings[name]
-        else:
-            raise KeyError(f'Cannot find setting {name}, did you misspell the name or is the plugin that adds it not '
-                           f'loaded?')
-
-    def register(self):
-        if self.name not in all_settings:
-            all_settings[self.name] = self
-        else:
-            raise KeyError(f'Refusing to override setting {all_settings[self.name]} with {self}.')
-
-    def unregister(self):
-        if self.name in all_settings:
-            if all_settings[self.name] != self:
-                raise KeyError(f'Refusing to unregister unrelated setting {all_settings[self.name]}. (as {self})')
-            del all_settings[self.name]
-        else:
-            raise KeyError(f'Setting {self} is not registered.')
-
-    def __repr__(self):
-        return f'<Setting {self.name} from plugin {self.owner.name}, scope: {self.scope.name}>'
-
 
 # command definitions
 
@@ -304,10 +206,9 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     ensure_blacklist(msg.channel)
     args = msg.text.split(' ')
     if len(args) != 2:
-        main.bot.send(msg.reply(f'@{msg.user} Usage: '
-                                f'"{main.bot.prefix}{command_blacklist.chat_command} COMMAND". '
-                                f'Where COMMAND is the command you want to blacklist.'))
-        return
+        return (f'@{msg.user} Usage: '
+                f'"{main.bot.prefix}{command_blacklist.chat_command} COMMAND". '
+                f'Where COMMAND is the command you want to blacklist.')
     target = args[1]
     if target in blacklist[msg.channel]:
         return f'@{msg.user} That command is already blacklisted.'
@@ -315,9 +216,8 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     for i in main.bot.commands:
         if i.chat_command == target:
             blacklist[msg.channel].append(target)
-            main.bot.send(msg.reply(f'@{msg.user} Blacklisted command {target}. '
-                                    f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.'))
-            return
+            return (f'@{msg.user} Blacklisted command {target}. '
+                    f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.')
     return f'@{msg.user} Cannot blacklist nonexistent command {target}.'
 
 
@@ -359,3 +259,66 @@ if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']
 else:
     main.bot.storage['command_blacklist'] = {}
+
+
+class ExceptionDetectionMiddleware(twitchirc.AbstractMiddleware):
+    def __init__(self):
+        super().__init__()
+        self.fire_triggered = False
+        print('fire detection loaded')
+
+    def on_action(self, event: Event):
+        super().on_action(event)
+        if event.name == 'fire':
+            self.fire(event)
+
+    def fire(self, event: Event) -> None:
+        print('FIRE!!!!! WAYTOODANK')
+        if self.fire_triggered:
+            return
+        self.fire_triggered = True
+        pinged = ''
+        if isinstance(event.source, twitchirc.Bot):
+            for user, perms in event.source.permissions.users.items():
+                print(user, perms)
+                if ((twitchirc.permission_names.GLOBAL_BYPASS_PERMISSION in perms
+                     or 'util.fire_ping' in perms
+                     or 'parent.bot_admin')
+                        and 'util.fire_ping_disable' not in perms):
+                    pinged += f' @{user}'
+        e = event.data['exception']
+        m = twitchirc.ChannelMessage(text=f'The bot\'s breaking!!! {pinged} WAYTOODANK {e!r}',
+                                     user='OUTGOING', channel=error_notification_channel,
+                                     outgoing=True, parent=None)
+        event.source.send(m)
+        event.source.flush_queue()
+
+    def send(self, event: Event) -> None:
+        pass
+
+    def receive(self, event: Event) -> None:
+        pass
+
+    def command(self, event: Event) -> None:
+        pass
+
+    def permission_check(self, event: Event) -> None:
+        pass
+
+    def join(self, event: Event) -> None:
+        pass
+
+    def part(self, event: Event) -> None:
+        pass
+
+    def disconnect(self, event: Event) -> None:
+        pass
+
+    def connect(self, event: Event) -> None:
+        pass
+
+    def add_command(self, event: Event) -> None:
+        pass
+
+
+main.bot.middleware.append(ExceptionDetectionMiddleware())

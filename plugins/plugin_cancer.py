@@ -14,11 +14,12 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import time
-import traceback
+import warnings
 from typing import Tuple
 import typing
 
 import regex
+from PIL import Image
 
 try:
     from utils import arg_parser
@@ -55,7 +56,9 @@ main.load_file('plugins/plugin_hastebin.py')
 try:
     import plugin_hastebin as plugin_hastebin
 except ImportError:
-    from plugins.plugin_hastebin import Plugin as plugin_hastebin
+    from plugins.plugin_hastebin import PluginHastebin
+
+    plugin_hastebin: PluginHastebin
 
 import random
 
@@ -86,14 +89,36 @@ RECONNECTION_MESSAGES = [
 ]
 
 COOKIE_PATTERN = regex.compile(
-    rf'^\[Cookies\] \[(Default|Bronze|Silver|Gold|Platinum|Diamond|Masters|GrandMasters|Leader)\] '
-    rf'([a-z0-9]+) \U0001f3ab'
+    rf'^\[Cookies\] '
+    rf'\[(?P<rank>(?:P[1-4]: )?'
+    rf'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader))\] '
+    rf'(?P<name>[a-z0-9]+) \U0001f3ab'
 )
 COOLDOWN_TIMEOUT = 1.5
+
+PRESTIGE_PATTERN = regex.compile('P([1-4]):')
+COOKIE_PRESTIGE_TIMES = {
+    0: '2h',
+    1: '1h',
+    2: '30m',
+    3: '20m'
+}
 
 
 class Plugin(main.Plugin):
     _sneeze: Tuple[float, typing.Optional[twitchirc.ChannelMessage]]
+
+    def _time_from_rank(self, text) -> str:
+        prestige_match = PRESTIGE_PATTERN.findall(text)
+        if prestige_match:
+            level = int(prestige_match[0])
+            if level in COOKIE_PRESTIGE_TIMES:
+                return COOKIE_PRESTIGE_TIMES[level]
+            else:
+                log('warn', f'Unknown prestige level: {level!r}. Message {text!r}')
+                return COOKIE_PRESTIGE_TIMES[0] + ' monkaS unknown prestige level.'
+        else:
+            return COOKIE_PRESTIGE_TIMES[0]
 
     def chan_msg_handler(self, event: str, msg: twitchirc.ChannelMessage):
         if msg.user in ['supibot', 'mm2pl'] and msg.text.startswith('HONEYDETECTED RECONNECTED') \
@@ -105,25 +130,16 @@ class Plugin(main.Plugin):
         if msg.channel in ['supinic', 'mm2pl'] and msg.user in ['thepositivebot', 'linkusbanned'] \
                 and msg.text.startswith('\x01ACTION [Cookies]'):
             m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
-            if m:
-                if m[0][1].lower() in self.cookie_optin:
-                    main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in 2h'))
-            else:
-                # regex fail KKonaW
-                log('warn', 'regex fail KKonaW')
-                msg = twitchirc.ChannelMessage(
-                    text=f'Errors monkaS {chr(128073)} ALERT: regex fail.',
-                    user='TO_BE_SENT',
-                    channel=plugin_manager.error_notification_channel
-                )
-                msg.outgoing = True
-                main.bot.force_send(msg)
-                log('err', f'Error while checking for cookie reminders. Regex failed.')
-                for i in traceback.format_exc(30).split('\n'):
-                    log('err', i)
+            if m and m[0][1].lower() in self.cookie_optin:
+                time_ = self._time_from_rank(msg.text)
+
+                main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in {time_}'))
+            elif not m:
+                log('warn', f'matching against regex failed: {msg.text!r}')
 
         if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
             self._sneeze = (time.time() + self.cooldown_timeout, msg)
+
         if msg.user == 'supibot' and self._sneeze[1] is not None and (
                 msg.text.startswith(
                     self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
@@ -141,6 +157,17 @@ class Plugin(main.Plugin):
     def cooldown_timeout(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.timeout_setting)
 
+    @property
+    def random_pings(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.random_ping_setting)
+
+    @property
+    def cookie_optin(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.cookie_optin_setting)
+
+    def _get_pyramid_enabled(self, channel: str):
+        return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
+
     def __init__(self, module, source):
         super().__init__(module, source)
         self.timeout_setting = plugin_manager.Setting(self,
@@ -152,38 +179,76 @@ class Plugin(main.Plugin):
         self._sneeze = (-1, None)
         self.storage = main.PluginStorage(self, main.bot.storage)
         main.bot.handlers['chat_msg'].append(self.chan_msg_handler)
-        if 'random_pings' in self.storage:
-            self.random_pings = self.storage['random_pings']
-        else:
-            self.random_pings = ['{my pings run out}']
-            self.storage['random_pings'] = self.random_pings
 
-        if 'pyramid_enabled' in self.storage:
-            self.pyramid_enabled = self.storage['pyramid_enabled']
-        else:
-            self.pyramid_enabled = []
-            self.storage['pyramid_enabled'] = self.pyramid_enabled
+        self.random_ping_setting = plugin_manager.Setting(self,
+                                                          'cancer.random_pings',
+                                                          default_value=['{my pings run out}'],
+                                                          scope=plugin_manager.SettingScope.GLOBAL,
+                                                          write_defaults=True)
 
-        if 'cookie_optin' in self.storage:
-            self.cookie_optin = self.storage['cookie_optin']
-        else:
-            self.cookie_optin = []
-            self.storage['cookie_optin'] = self.cookie_optin
+        self.pyramid_enabled_setting = plugin_manager.Setting(self,
+                                                              'cancer.pyramid_enabled',
+                                                              default_value=False,
+                                                              scope=plugin_manager.SettingScope.PER_CHANNEL,
+                                                              write_defaults=True)
+
+        self.cookie_optin_setting = plugin_manager.Setting(self,
+                                                           'cancer.cookie_optin',
+                                                           default_value=[],
+                                                           scope=plugin_manager.SettingScope.GLOBAL,
+                                                           write_defaults=True)
 
         # register commands
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
-        plugin_help.add_manual_help_using_command('Make a pyramid.', None)(self.command_pyramid)
+        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text', None)(self.command_pyramid)
 
         self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
                                                       required_permissions=['cancer.braille'])(self.c_braillefy)
         plugin_help.add_manual_help_using_command('Convert an image into braille.', None)(self.command_braillefy)
+
+        # arguments.
+        plugin_help.create_topic('braillefy url',
+                                 'URL pointing to image you want to convert.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy reverse',
+                                 'Should the output braille be reversed.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy sensitivity',
+                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha)',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy sensitivity_r',
+                                     'braillefy sensitivity_g',
+                                     'braillefy sensitivity_b',
+                                     'braillefy sensitivity_a'
+                                 ])
+
+        plugin_help.create_topic('braillefy size',
+                                 'Size of the image. Defaults: max_x = 60, pad_y = 60, '
+                                 'size_percent=[undefined]. max_x, pad_y are in pixels.',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy size_percent',
+                                     'braillefy max_x',
+                                     'braillefy pad_y',
+                                 ])
 
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
                                                   'cookies', None)(self.c_cookie_optin)
 
         main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
+
+        plugin_help.create_topic('plugin_cancer',
+                                 'Plugin dedicated to things that shouldn\'t be done '
+                                 '(responding to messages other than commands, spamming).',
+                                 section=plugin_help.SECTION_MISC,
+                                 links=[
+                                     'plugin_cancer.py',
+                                     'cancer'
+                                 ])
+        warnings.simplefilter('error', Image.DecompressionBombWarning)
 
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
@@ -197,24 +262,26 @@ class Plugin(main.Plugin):
             return f'@{msg.user} You have been added to the cookie opt-in list.'
 
     def c_pyramid(self, msg: twitchirc.ChannelMessage):
-        if msg.channel not in self.pyramid_enabled:
+        if not self._get_pyramid_enabled(msg.channel):
             return f'@{msg.user}, This command is disabled here.'
         cd_state = main.do_cooldown('pyramid', msg, global_cooldown=60, local_cooldown=60)
         if cd_state:
             return
         t = main.delete_spammer_chrs(msg.text).split(' ', 1)
         if len(t) == 1:
-            return f'@{msg.user}, Usage: pyramid <text...>'
+            return f'@{msg.user}, Usage: pyramid <size> <text...>'
         args = t[1].rstrip()
         size = ''
-        for i in args.split(' '):
-            i: str
-            if i.isnumeric():
-                size = i
+        for arg in args.split(' '):
+            arg: str
+            if arg.isnumeric():
+                size = arg
+                break  # prefer first number!
         if size != '':
-            args = args.replace(size, '', 1).rstrip() + ' '
+            args: str = args.replace(size, '', 1).rstrip() + ' '
             size = int(size)
-            print(repr(args), repr(size))
+            if not args.strip(' '):
+                return f'@{msg.user}, Nothing to send. NaM'
             for i in range(1, size):
                 main.bot.send(msg.reply(args * i))
             for i in range(size, 0, -1):
@@ -231,6 +298,7 @@ class Plugin(main.Plugin):
                 'sensitivity_g': float,
                 'sensitivity_b': float,
                 'sensitivity_a': float,
+                'size_percent': float,
                 'max_y': int,
                 'pad_y': int,
                 'reverse': bool,
@@ -243,32 +311,76 @@ class Plugin(main.Plugin):
             return (f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
 
-        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgba'])
-        if num_defined == 4:
-            # noinspection PyTypeChecker
+        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgb'])
+        alpha = args['sensitivity_a'] if args['sensitivity_a'] is not Ellipsis else 1
+        if num_defined == 3:
             sens: typing.Tuple[float, float, float, float] = (args['sensitivity_r'], args['sensitivity_g'],
-                                                              args['sensitivity_b'], args['sensitivity_a'])
+                                                              args['sensitivity_b'], alpha)
             is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
             if is_zero:
                 return f'Error: Sensitivity cannot be zero. MEGADANK'
         elif num_defined == 0:
-            sens = (0.5, 0.5, 0.5, 0.5)
+            sens = (1, 1, 1, 1)
         else:
             return f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.'
-        # noinspection PyTypeChecker
-        o: str = await braille.to_braille_from_url(args['url'],
-                                                   reverse=True if args['reverse'] is not Ellipsis else False,
-                                                   size_percent=None,
-                                                   max_x=60,
-                                                   max_y=args['max_y'] if args['max_y'] is not Ellipsis else 60,
-                                                   sensitivity=sens,
-                                                   enable_padding=True,
-                                                   pad_size=(60,
-                                                             args['pad_y'] if args['pad_y'] is not Ellipsis else 60))
+        if args['size_percent'] is not ... and args['max_y'] is not ...:
+            return f'Error: you cannot provide the size percentage and maximum height at the same time.'
+
+        max_x = 60 if args['size_percent'] is Ellipsis else None
+        max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
+        size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
+
+        img = await braille.download_image(args['url'])
+        img: Image.Image
+        if img.format.lower() != 'gif':
+            img, o = await braille.crop_and_pad_image(True,
+                                                      img,
+                                                      max_x,
+                                                      max_y,
+                                                      '',
+                                                      (60,
+                                                       args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                      size_percent)
+            o += await braille.to_braille_from_image(img,
+                                                     reverse=True if args['reverse'] is not Ellipsis else False,
+                                                     size_percent=size_percent,
+                                                     max_x=max_x,
+                                                     max_y=max_y,
+                                                     sensitivity=sens,
+                                                     enable_padding=True,
+                                                     pad_size=(60,
+                                                               args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                     enable_processing=False)
+        else:
+            missing_permissions = main.bot.check_permissions(msg, ['cancer.braille.gif'],
+                                                             enable_local_bypass=False)
+            if missing_permissions:
+                o = 'Note: missing permissions to convert a gif. \n'
+            else:
+                o = ''
+                frame = -1
+                while 1:
+                    try:
+                        img.seek(frame + 1)
+                    except EOFError:
+                        break
+                    frame += 1
+                    o += f'\nFrame {frame}\n'
+                    o += await braille.to_braille_from_image(img.copy(),
+                                                             reverse=True if args['reverse'] is not Ellipsis else False,
+                                                             size_percent=size_percent,
+                                                             max_x=max_x,
+                                                             max_y=max_y,
+                                                             sensitivity=sens,
+                                                             enable_padding=True,
+                                                             pad_size=(60,
+                                                                       (args['pad_y'] if args['pad_y'] is not Ellipsis
+                                                                        else 60)),
+                                                             enable_processing=True)
         sendable = ' '.join(o.split('\n')[1:])
-        print(len(sendable))
         if args['hastebin'] is not Ellipsis or len(sendable) > 500:
-            return (f'This braille was too big to be posted. Here\'s a link to a pastebin: '
+            return (f'{"This braille was too big to be posted." if not args["hastebin"] is not Ellipsis else ""} '
+                    f'Here\'s a link to a hastebin: '
                     f'{plugin_hastebin.hastebin_addr}'
                     f'{await plugin_hastebin.upload(o)}')
         else:

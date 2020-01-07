@@ -13,14 +13,10 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import enum
-
-import twitchirc
-import sqlalchemy
-from sqlalchemy.orm import relationship
 import socket
 import threading
-import datetime
+
+import twitchirc
 
 try:
     # noinspection PyUnresolvedReferences
@@ -60,59 +56,14 @@ except ImportError:
     import plugins.plugin_ipc as plugin_ipc
 
     exit(1)
-
+import plugins.models.suggestion as suggestion_model
 __meta_data__ = {
     'name': 'suggestions',
     'commands': []
 }
 log = main.make_log_function('suggestions')
 
-
-class Suggestion(main.Base):
-    class SuggestionState(enum.Enum):
-        new = 0
-        done = 1
-        accepted = 2
-        rejected = 3
-        not_a_suggestion = 4
-        duplicate = 5
-
-
-    __tablename__ = 'suggestions'
-    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    author_alias = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'))
-    author = relationship('User')
-
-    text = sqlalchemy.Column(sqlalchemy.Text)
-    state = sqlalchemy.Column(sqlalchemy.Enum(SuggestionState))
-    notes = sqlalchemy.Column(sqlalchemy.Text)
-
-    creation_date = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True, default=datetime.datetime.now)
-    is_hidden = sqlalchemy.Column(sqlalchemy.Boolean, default=False)
-
-    def nice_state(self, capitalize=False):
-        st = self.state.name.replace('_', '')
-        if capitalize:
-            return st.capitalize()
-        else:
-            return st
-
-    def __repr__(self):
-        return f'<{self.nice_state(True)} suggestion {self.id} by {self.author.last_known_username}>'
-
-    def humanize(self, as_author=False):
-        if as_author:
-            if self.notes not in [None, '<no notes>']:
-                return f'{self.text} (id: {self.id}, state: {self.nice_state()}, notes: {self.notes})'
-            else:
-                return f'{self.text} (id: {self.id}, state: {self.nice_state()})'
-        else:
-            if self.notes not in [None, '<no notes>']:
-                return (f'{self.text} (id: {self.id}, state: {self.nice_state()}, '
-                        f'author: {self.author.last_known_username}, notes: {self.notes})')
-            else:
-                return (f'{self.text} (id: {self.id}, state: {self.nice_state()}, '
-                        f'author: {self.author.last_known_username})')
+Suggestion = suggestion_model.get(main.Base)
 
 
 @plugin_help.add_manual_help_using_command('Suggest something. You can use this to report a bug, '
