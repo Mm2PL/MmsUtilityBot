@@ -21,8 +21,6 @@ import typing
 from typing import List
 
 import regex
-import sqlalchemy
-from sqlalchemy.orm import relationship, joinedload
 from twitchirc import Event
 
 try:
@@ -41,6 +39,7 @@ except ImportError:
     exit()
 # noinspection PyUnresolvedReferences
 import twitchirc
+import plugins.models.blacklistentry as blacklistentry_model
 
 NAME = 'blacklist'
 __meta_data__ = {
@@ -50,76 +49,10 @@ __meta_data__ = {
 }
 log = main.make_log_function(NAME)
 expire_queue = queue.Queue()
-
-
-class BlacklistEntry(main.Base):
-    __tablename__ = 'blacklist'
-    id = sqlalchemy.Column(sqlalchemy.Integer, autoincrement=True, primary_key=True)
-    target_alias = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'))
-    target = relationship('User', foreign_keys=[target_alias])
-
-    command = sqlalchemy.Column(sqlalchemy.String, nullable=True)  # command name
-
-    channel_alias = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'))
-    channel = relationship('User', foreign_keys=[channel_alias])
-
-    expires_on = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
-    is_active = sqlalchemy.Column(sqlalchemy.Boolean, default=True)
-
-    def _check_expire(self):
-        if self.expires_on is not None and self.expires_on <= datetime.datetime.now():
-            blacklists.remove(self)
-            expire_queue.put(self)
-
-    @staticmethod
-    def _load_all(session):
-        return (session.query(BlacklistEntry)
-                .options(joinedload('*'))
-                .all())
-
-    @staticmethod
-    def load_all(session=None):
-        if session is None:
-            with main.session_scope() as s:
-                return BlacklistEntry._load_all(s)
-        else:
-            return BlacklistEntry._load_all(session)
-
-    def _check_channel(self, message: twitchirc.ChannelMessage):
-        if self.channel is None:
-            return True
-        return self.channel.last_known_username.lower() == message.channel.lower()
-
-    def _check_user(self, message: twitchirc.ChannelMessage):
-        if self.target is None:
-            return True
-        return message.user.lower() == self.target.last_known_username.lower()
-
-    def _check_command(self, command: twitchirc.Command):
-        if self.command is None:
-            return True
-        return command.chat_command.lower().rstrip(' ') == self.command.lower().rstrip(' ')
-
-    def check(self, message: twitchirc.ChannelMessage, cmd: twitchirc.Command):
-        print(self.is_active)
-        if self.is_active is False:
-            return False
-        if self._validate() is False:
-            return False
-        self._check_expire()
-        return self._check_channel(message) and self._check_command(cmd) and self._check_user(message)
-
-    def _validate(self):
-        if self.command is None and self.channel is None and self.target is None:
-            return False
-        else:
-            return True
-
-
+blacklists: List['BlacklistEntry'] = []
+BlacklistEntry = blacklistentry_model.get(main.Base, main.session_scope, blacklists, expire_queue)
 TIMEDELTA_REGEX = regex.compile(r'(\d+d(?:ays)?)?([0-5]?\dh(?:ours?)?)?([0-5]?\dm(?:inutes?)?)?'
                                 r'([0-5]?\ds(?:econds?)?)?')
-
-blacklists: List[BlacklistEntry] = []
 
 
 class Plugin(main.Plugin):
@@ -235,7 +168,7 @@ class Plugin(main.Plugin):
     def command_manage_blacklists(self, msg: twitchirc.ChannelMessage):
         argv = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
         if len(argv) == 1:
-            return f'@{msg.user}, {plugin_help.all_help["plonk"]}'
+            return f'@{msg.user}, {plugin_help.all_help[plugin_help.SECTION_COMMANDS]["plonk"]}'
         text = argv[1]
         kw = self._parse_blacklist_args(text, msg)
         if isinstance(kw, str):
@@ -312,7 +245,8 @@ class BlacklistMiddleware(twitchirc.AbstractMiddleware):
         for bl in blacklists.copy():
             r = bl.check(message, command)
             if r is True:
-                log('info', f'Ignored {message.user}\'s command ({command.chat_command!r})')
+                log('info', f'Ignored {message.user}\'s command ({command.chat_command!r}), \n'
+                            f'message: {message.text}')
                 event.cancel()
 
     def permission_check(self, event: Event) -> None:

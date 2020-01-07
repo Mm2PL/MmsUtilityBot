@@ -5,7 +5,7 @@ Pillow
 sqlalchemy
 json5
 requests
-twitchirc==1.5
+twitchirc==1.6
 srcomapi
 pymysql
 regex

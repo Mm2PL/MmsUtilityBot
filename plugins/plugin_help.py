@@ -90,7 +90,7 @@ def _try_find_link(topic, section: typing.Optional[int] = None) -> Union[Tuple[i
         return None, None
 
 
-def _find_topic(topic, section: typing.Optional[int] = None) -> typing.Optional[str]:
+def find_topic(topic, section: typing.Optional[int] = None) -> typing.Optional[str]:
     new_section, new_topic = None, None
     if topic not in ['section_doc']:  # don't try to find links for these topics
         new_section, new_topic = _try_find_link(topic, section)
@@ -283,7 +283,7 @@ def command_help(msg: twitchirc.ChannelMessage):
     if topic == '' and section is None:  # no arguments given
         topic = 'mb.help'
     elif topic == '':  # only section given
-        return f'@{msg.user} {_find_topic("section_doc", section)}'
+        return f'@{msg.user} {find_topic("section_doc", section)}'
 
     if topic in ['all', 'topics', 'all topics', 'help topics', 'commands',
                  'all commands']:
@@ -297,7 +297,7 @@ def command_help(msg: twitchirc.ChannelMessage):
         elif r is None:
             raise RuntimeError('plugin_help._command_help_check_special_topics returned None')
     else:
-        return f'@{msg.user} {_find_topic(topic, section)}'
+        return f'@{msg.user} {find_topic(topic, section)}'
 
 
 create_topic('help TOPIC', 'The topic you want to search for. It can be an existing topic or "all topics", '

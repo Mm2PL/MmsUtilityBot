@@ -14,10 +14,12 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import time
+import warnings
 from typing import Tuple
 import typing
 
 import regex
+from PIL import Image
 
 try:
     from utils import arg_parser
@@ -223,7 +225,7 @@ class Plugin(main.Plugin):
                                  ])
 
         plugin_help.create_topic('braillefy size',
-                                 'Size of the image. Defaults: max_x = 60, pad_y = 60'
+                                 'Size of the image. Defaults: max_x = 60, pad_y = 60, '
                                  'size_percent=[undefined]. max_x, pad_y are in pixels.',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
@@ -243,9 +245,10 @@ class Plugin(main.Plugin):
                                  '(responding to messages other than commands, spamming).',
                                  section=plugin_help.SECTION_MISC,
                                  links=[
-                                     'plugin_cancer.py'
+                                     'plugin_cancer.py',
                                      'cancer'
                                  ])
+        warnings.simplefilter('error', Image.DecompressionBombWarning)
 
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
@@ -269,10 +272,10 @@ class Plugin(main.Plugin):
             return f'@{msg.user}, Usage: pyramid <size> <text...>'
         args = t[1].rstrip()
         size = ''
-        for i in args.split(' '):
-            i: str
-            if i.isnumeric():
-                size = i
+        for arg in args.split(' '):
+            arg: str
+            if arg.isnumeric():
+                size = arg
                 break  # prefer first number!
         if size != '':
             args: str = args.replace(size, '', 1).rstrip() + ' '
@@ -326,16 +329,54 @@ class Plugin(main.Plugin):
         max_x = 60 if args['size_percent'] is Ellipsis else None
         max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
         size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
-        # noinspection PyTypeChecker
-        o: str = await braille.to_braille_from_url(args['url'],
-                                                   reverse=True if args['reverse'] is not Ellipsis else False,
-                                                   size_percent=size_percent,
-                                                   max_x=max_x,
-                                                   max_y=max_y,
-                                                   sensitivity=sens,
-                                                   enable_padding=True,
-                                                   pad_size=(60,
-                                                             args['pad_y'] if args['pad_y'] is not Ellipsis else 60))
+
+        img = await braille.download_image(args['url'])
+        img: Image.Image
+        if img.format.lower() != 'gif':
+            img, o = await braille.crop_and_pad_image(True,
+                                                      img,
+                                                      max_x,
+                                                      max_y,
+                                                      '',
+                                                      (60,
+                                                       args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                      size_percent)
+            o += await braille.to_braille_from_image(img,
+                                                     reverse=True if args['reverse'] is not Ellipsis else False,
+                                                     size_percent=size_percent,
+                                                     max_x=max_x,
+                                                     max_y=max_y,
+                                                     sensitivity=sens,
+                                                     enable_padding=True,
+                                                     pad_size=(60,
+                                                               args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                     enable_processing=False)
+        else:
+            missing_permissions = main.bot.check_permissions(msg, ['cancer.braille.gif'],
+                                                             enable_local_bypass=False)
+            if missing_permissions:
+                o = 'Note: missing permissions to convert a gif. \n'
+            else:
+                o = ''
+                frame = -1
+                while 1:
+                    try:
+                        img.seek(frame + 1)
+                    except EOFError:
+                        break
+                    frame += 1
+                    o += f'\nFrame {frame}\n'
+                    o += await braille.to_braille_from_image(img.copy(),
+                                                             reverse=True if args['reverse'] is not Ellipsis else False,
+                                                             size_percent=size_percent,
+                                                             max_x=max_x,
+                                                             max_y=max_y,
+                                                             sensitivity=sens,
+                                                             enable_padding=True,
+                                                             pad_size=(60,
+                                                                       (args['pad_y'] if args['pad_y'] is not Ellipsis
+                                                                        else 60)),
+                                                             enable_processing=True)
         sendable = ' '.join(o.split('\n')[1:])
         if args['hastebin'] is not Ellipsis or len(sendable) > 500:
             return (f'{"This braille was too big to be posted." if not args["hastebin"] is not Ellipsis else ""} '

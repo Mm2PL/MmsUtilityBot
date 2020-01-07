@@ -12,15 +12,15 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import atexit
-import datetime
 import queue
 import threading
 import time
 import typing
 
 import regex
-import sqlalchemy
+
+import plugins.models.logentry as logentry_model
+from plugins.models.logentry import CAUSE_TASK, CAUSE_OTHER
 
 try:
     # noinspection PyPackageRequirements
@@ -41,11 +41,7 @@ __meta_data__ = {
 }
 _print = print
 log = main.make_log_function(NAME)
-
-CAUSE_COMMAND = 0
-CAUSE_TASK = 1
-CAUSE_API = 2
-CAUSE_OTHER = 3
+LogEntry = logentry_model.get(main.Base)
 
 
 class Logger:
@@ -108,7 +104,17 @@ class Plugin(main.Plugin):
         return []
 
     def on_reload(self):
-        raise NotImplementedError('This method is not implemented.')
+        print('on reload/exit')
+        try:
+            self._logger_thread_stop_lock.acquire()
+            self._logger_queue.put(None)
+            self._print_log('logs',
+                            0,
+                            'Stopping logging...',
+                            cause=CAUSE_OTHER)
+            self._logger_thread.join()
+        except:
+            pass
 
     def _db_log(self, source: str, level: int, message: str, cause):
         if self.db_log_level <= level:
@@ -175,22 +181,6 @@ class Plugin(main.Plugin):
             _print(LogEntry.static_pretty(source, level, message, cause))
 
     def _register_atexit(self):
-        def on_exit(*args):
-            print('on exit')
-            try:
-                self._logger_thread_stop_lock.acquire()
-                self._logger_queue.put(None)
-                self._print_log('logs',
-                                0,
-                                'Stopping logging...',
-                                cause=CAUSE_OTHER)
-                self._logger_thread.join()
-            except:
-                pass
-
-        # atexit.register(on_exit)
-        main.bot.handlers['exit'].append(on_exit)
-
         def write_post_dis_conn(*args):
             del args
             self.log('logs',
@@ -199,43 +189,3 @@ class Plugin(main.Plugin):
                      cause=CAUSE_TASK)
 
         main.bot.handlers['post_disconnect'].append(write_post_dis_conn)
-
-
-LOG_LEVELS_DISPLAY = {
-    -1: 'debug',
-    0: '\x1b[32minfo\x1b[m',
-    1: '\x1b[33mwarn\x1b[m',  # weak warning
-    2: '\x1b[33mWARN\x1b[m',  # warning
-    3: '\x1b[31mERR\x1b[m',  # error
-    10: '\x1b[5;31mFATAL\x1b[m',  # fatal error
-}
-CAUSES = {
-    CAUSE_OTHER: 'other',
-    CAUSE_TASK: 'task',
-    CAUSE_API: 'api',
-    CAUSE_COMMAND: 'command',
-}
-
-
-class LogEntry(main.Base):
-    __tablename__ = 'logs'
-    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, nullable=False)
-    time = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now, nullable=False)
-    source = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
-    level = sqlalchemy.Column(sqlalchemy.SmallInteger, nullable=False)
-    message = sqlalchemy.Column(sqlalchemy.UnicodeText, nullable=False)
-
-    cause = sqlalchemy.Column(sqlalchemy.SmallInteger, nullable=False)
-
-    @staticmethod
-    def static_pretty(source, level, message, cause):
-        output = []
-        for line in message.split('\n'):
-            output.append(f'[{datetime.datetime.now().strftime("%H:%M:%S")}] '
-                          f'[{source}/{LOG_LEVELS_DISPLAY[level]} ({CAUSES[cause]})] '
-                          f'{line}')
-        return '\n'.join(output)
-
-    @property
-    def pretty(self):
-        return LogEntry.static_pretty(self.source, self.level, str(self.message), self.cause)

@@ -17,7 +17,6 @@ import atexit
 import builtins
 import contextlib
 import inspect
-import threading
 import types
 import urllib.parse
 import importlib.util
@@ -30,10 +29,10 @@ import typing
 from dataclasses import dataclass
 import datetime
 from types import ModuleType
-from typing import List, Dict, Union
+from typing import List, Dict
 import argparse
+import traceback
 
-import sqlalchemy
 import twitchirc
 import json5 as json
 from cryptography.exceptions import InvalidSignature
@@ -43,12 +42,11 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from twitchirc import Command, ChannelMessage
+from twitchirc import Command
 from sqlalchemy.ext.declarative import declarative_base
 
+import plugins.models.user as user_model
 import twitch_auth
-
-CACHE_EXPIRE_TIME = 15 * 60
 
 LOG_LEVELS = {
     'info': '\x1b[32minfo\x1b[m',
@@ -270,174 +268,7 @@ subs = {
     # }
 }
 
-cached_users: Dict[int, Dict[str, Union[datetime.datetime, int, ChannelMessage]]] = {
-    # base_id
-    # 123: {
-    #     'last_active': datetime.datetime.now(),
-    #     'msg': twitchirc.ChannelMessage(),
-    #     'expire_time': time.time() + CACHE_EXPIRE_TIME
-    # }
-}
-
-
-class User(Base):
-    __tablename__ = 'users'
-    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    twitch_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
-    last_known_username = sqlalchemy.Column(sqlalchemy.Text)
-
-    mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
-    sub_in_raw = sqlalchemy.Column(sqlalchemy.Text)
-
-    last_active = sqlalchemy.Column(sqlalchemy.DateTime)
-    last_message = sqlalchemy.Column(sqlalchemy.UnicodeText)
-    last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
-
-    first_active = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.first_active = datetime.datetime.now()
-
-    @staticmethod
-    def _get_by_message(msg, no_create, session):
-        user: User = (session.query(User)
-                      .filter(User.twitch_id == msg.flags['user-id'])
-                      .first())
-
-        if user is None and not no_create:
-            user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
-                        sub_in_raw='')
-            session.add(user)
-        session.expunge(user)
-        return user
-
-    @staticmethod
-    def get_by_message(msg: twitchirc.ChannelMessage, no_create=False, session=None):
-        if session is None:
-            with session_scope() as s:
-                return User._get_by_message(msg, no_create, s)
-        else:
-            return User._get_by_message(msg, no_create, session)
-
-    @staticmethod
-    def get_by_twitch_id(id_: int):
-        with session_scope() as session:
-            user: User = session.query(User).filter(User.twitch_id == id_).first()
-            if user is not None:
-                session.refresh(user)
-            return user
-
-    @staticmethod
-    def _get_by_local_id(id_: int, session=None):
-        user: User = session.query(User).filter(User.id == id_).first()
-        if user is not None:
-            session.refresh(user)
-        return user
-
-    @staticmethod
-    def get_by_local_id(id_: int, s=None):
-        if s is None:
-            with session_scope() as session:
-                return User._get_by_local_id(id_, session)
-        else:
-            return User._get_by_local_id(id_, s)
-
-    @staticmethod
-    def _get_by_name(name: str, session):
-        users: typing.List[User] = session.query(User).filter(User.last_known_username == name).all()
-        for user in users:
-            session.refresh(user)
-        return users
-
-    @staticmethod
-    def get_by_name(name: str, s=None) -> typing.List[typing.Any]:
-        if s is None:
-            with session_scope() as session:
-                return User._get_by_name(name, session)
-        else:
-            return User._get_by_name(name, s)
-
-    def _update(self, msg, update, session):
-        self.last_active = update['last_active']
-        self.last_message = msg.text
-        self.last_message_channel = msg.channel
-        if _is_mod(msg):
-            self.add_mod_in(msg.channel)
-        else:
-            self.remove_mod_in(msg.channel)
-        if _is_pleb(msg):
-            self.remove_sub_in(msg.channel)
-        else:
-            self.add_sub_in(msg.channel)
-        if msg.user != self.last_known_username:
-            other_users = User.get_by_name(msg.user)
-            self.last_known_username = msg.user
-            for user in other_users:
-                user: User
-                user.last_known_username = '<UNKNOWN_USERNAME>'
-                session.add(user)
-        session.add(self)
-
-    def update(self, update, s=None):
-        # update = cached_users[self.id]
-        msg = update['msg']
-        if s is None:
-            with session_scope_local_thread() as session:
-                self._update(msg, update, session)
-        else:
-            self._update(msg, update, s)
-
-    def schedule_update(self, msg: twitchirc.ChannelMessage):
-        global cached_users
-        cached_users[self.id] = {
-            'last_active': datetime.datetime.now(),
-            'msg': msg,
-            'expire_time': time.time() + CACHE_EXPIRE_TIME
-        }
-
-    @property
-    def mod_in(self):
-        return [] if self.mod_in_raw == '' else self.mod_in_raw.replace(', ', ',').split(',')
-
-    @property
-    def sub_in(self):
-        return [] if self.sub_in_raw == '' else self.sub_in_raw.replace(', ', ',').split(',')
-
-    def add_sub_in(self, channel):
-        channel = channel.lower()
-        if channel in self.sub_in:
-            return
-        sub_in = self.sub_in
-        sub_in.append(channel)
-        self.sub_in_raw = ', '.join(sub_in)
-
-    def remove_sub_in(self, channel):
-        channel = channel.lower()
-        if channel not in self.sub_in:
-            return
-        sub_in = self.sub_in
-        sub_in.remove(channel)
-        self.sub_in_raw = ', '.join(sub_in)
-
-    def remove_mod_in(self, channel):
-        channel = channel.lower()
-        if channel not in self.mod_in:
-            return
-        mod_in = self.mod_in
-        mod_in.remove(channel)
-        self.mod_in_raw = ', '.join(mod_in)
-
-    def add_mod_in(self, channel):
-        channel = channel.lower()
-        if channel in self.mod_in:
-            return
-        mod_in = self.mod_in
-        mod_in.append(channel)
-        self.mod_in_raw = ', '.join(mod_in)
-
-    def __repr__(self):
-        return f'<User {self.last_known_username}, alias {self.id}>'
+User, flush_users = user_model.get(Base, session_scope, log)
 
 
 def fix_pleb_list(chat: str):
@@ -739,52 +570,6 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
         print(event, '(sub)', msg)
 
 
-users_lock = threading.Lock()
-
-
-def flush_users():
-    # print('flush users: pre lock')
-    if users_lock.locked():
-        return
-    # print('flush users: post lock')
-    users_lock.acquire()
-    current_time = int(time.time())
-    to_update = {}
-    for db_id, user in cached_users.copy().items():
-        if user['expire_time'] <= current_time:
-            print(f'flush user {db_id}')
-            to_update[db_id] = user
-    if to_update:
-        # print(f'updating users: {to_update}')
-        print(f'users cache is of length {len(cached_users)}, {len(to_update)} are going to be removed from the '
-              f'cache.')
-
-        def _update_users():
-            try:
-                with session_scope_local_thread() as session:
-                    for db_id, update in to_update.copy().items():
-                        print(db_id, 'updating dankCircle')
-                        if db_id is None:
-                            print('create new')
-                            user = User.get_by_message(update['msg'])
-                            user.update(update, session)
-                            continue
-
-                        user = User.get_by_local_id(db_id)
-                        user.update(update, session)
-                print('Deleting to_updates.')
-                for db_id in to_update:
-                    del cached_users[db_id]
-            finally:
-                print('release lock.')
-                users_lock.release()
-
-        t = threading.Thread(target=_update_users, args=(), kwargs={})
-        t.start()
-    else:
-        users_lock.release()
-
-
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
 
 
@@ -831,7 +616,7 @@ class Plugin:
         return self.meta['commands']
 
     @property
-    def no_reload(self) -> str:
+    def no_reload(self) -> bool:
         return self.meta['no_reload'] if 'no_reload' in self.meta else False
 
     @property
@@ -1184,8 +969,6 @@ if prog_args.restart_from:
 try:
     bot.run()
 except BaseException as e:
-    import traceback
-
     traceback.print_exc()
     bot.call_middleware('fire',
                         {
@@ -1193,13 +976,21 @@ except BaseException as e:
                         },
                         False)
 finally:
-    bot.call_handlers('exit', ())
     print('finally')
+    # bot.call_handlers('exit', ())
+    for name, pl in plugins.items():
+        # noinspection PyBroadException
+        try:
+            if pl.on_reload is not None:
+                pl.on_reload()
+        except BaseException as e:
+            print(f'Failed to call on_reload for plugin {name!r}')
+            traceback.print_exc()
     print('flush cached users')
-    users_lock.acquire()
-    for k, v in cached_users.items():
-        cached_users[k]['expire_time'] = 0
-    users_lock.release()
+    user_model.users_lock.acquire()
+    for k, v in user_model.cached_users.items():
+        user_model.cached_users[k]['expire_time'] = 0
+    user_model.users_lock.release()
     flush_users()
     print('flush cached users: done')
     print('update channels and counters')

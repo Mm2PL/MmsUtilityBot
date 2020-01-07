@@ -36,13 +36,8 @@ POSITIONS = [
 ]
 
 
-async def to_braille_from_url(image_url: str, reverse: bool = False, size_percent: typing.Optional[float] = None,
-                              max_x: typing.Optional[int] = None, max_y: typing.Optional[int] = None,
-                              sensitivity: typing.Tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.5),
-                              enable_padding=True, pad_size=(60, 60)):
-    if size_percent is None and max_x is None and max_y is None:
-        raise RuntimeError('You have to specify either size_percent, max_x or max_y for to_braille to work.')
-    r = requests.get(image_url, stream=True)
+async def download_image(url: str) -> Image.Image:
+    r = requests.get(url, stream=True)
 
     if int(r.headers.get('Content-Length')) > SIZE_LIMIT:  # 10M
         raise ValueError('Response is over the size limit.')
@@ -55,6 +50,16 @@ async def to_braille_from_url(image_url: str, reverse: bool = False, size_percen
             raise ValueError('Response is over the size limit.')
 
     img = Image.open(img_data)
+    return img
+
+
+async def to_braille_from_url(image_url: str, reverse: bool = False, size_percent: typing.Optional[float] = None,
+                              max_x: typing.Optional[int] = None, max_y: typing.Optional[int] = None,
+                              sensitivity: typing.Tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.5),
+                              enable_padding=True, pad_size=(60, 60)):
+    if size_percent is None and max_x is None and max_y is None:
+        raise RuntimeError('You have to specify either size_percent, max_x or max_y for to_braille to work.')
+    img = download_image(image_url)
     return await to_braille_from_image(img, reverse=reverse, size_percent=size_percent, max_x=max_x, max_y=max_y,
                                        sensitivity=sensitivity, enable_padding=enable_padding, pad_size=pad_size)
 
@@ -62,44 +67,13 @@ async def to_braille_from_url(image_url: str, reverse: bool = False, size_percen
 async def to_braille_from_image(img: Image, reverse: bool = False, size_percent: typing.Optional[float] = None,
                                 max_x: typing.Optional[int] = None, max_y: typing.Optional[int] = None,
                                 sensitivity: typing.Tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.5),
-                                enable_padding=True, pad_size=(60, 60)):
+                                enable_padding=True, pad_size=(60, 60), enable_processing=True):
     """this function should be run in a separate thread not to take a long time."""
     if size_percent is None and max_x is None and max_y is None:
         raise RuntimeError('You have to specify either size_percent, max_x or max_y for to_braille to work.')
     output: str = ''
-
-    org_size = (img.width, img.height)
-    img = img.convert('RGBA')
-    await asyncio.sleep(0)
-    if size_percent is None:
-        img.thumbnail((max_x, max_y))
-    else:
-        new_size = (org_size[0] * (size_percent / 100), org_size[1] * (size_percent / 100))
-        if size_percent > 100:
-            img = img.resize((round(new_size[0]), round(new_size[1])))
-        else:
-            img.thumbnail(new_size)
-    await asyncio.sleep(0)
-    percent_area = ((img.width * img.height)
-                    / (org_size[0] * org_size[1])
-                    * 100)
-    percent_x = (img.width / org_size[0] * 100)
-    percent_y = (img.height / org_size[1] * 100)
-    if enable_padding:
-        expand_size = (pad_size[0] - img.size[0], pad_size[1] - img.size[1])
-        if expand_size[0] < 0:
-            expand_size = (0, expand_size[1])
-        if expand_size[1] < 0:
-            expand_size = (expand_size[0], 0)
-        print(expand_size)
-        img = ImageOps.expand(img, expand_size)
-        output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
-                   f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size. Added padding of '
-                   f'{"x".join([str(i) for i in expand_size])} pixels\n')
-        await asyncio.sleep(0)
-    else:
-        output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
-                   f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size.\n')
+    if enable_processing:
+        img, output = await crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size, size_percent)
 
     real_y = 0
 
@@ -147,3 +121,39 @@ async def to_braille_from_image(img: Image, reverse: bool = False, size_percent:
         real_y += 4
         output += '\n'
     return output
+
+
+async def crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size, size_percent):
+    org_size = (img.width, img.height)
+    img = img.convert('RGBA')
+    await asyncio.sleep(0)
+    if size_percent is None:
+        img.thumbnail((max_x, max_y))
+    else:
+        new_size = (org_size[0] * (size_percent / 100), org_size[1] * (size_percent / 100))
+        if size_percent > 100:
+            img = img.resize((round(new_size[0]), round(new_size[1])))
+        else:
+            img.thumbnail(new_size)
+    await asyncio.sleep(0)
+    percent_area = ((img.width * img.height)
+                    / (org_size[0] * org_size[1])
+                    * 100)
+    percent_x = (img.width / org_size[0] * 100)
+    percent_y = (img.height / org_size[1] * 100)
+    if enable_padding:
+        expand_size = (pad_size[0] - img.size[0], pad_size[1] - img.size[1])
+        if expand_size[0] < 0:
+            expand_size = (0, expand_size[1])
+        if expand_size[1] < 0:
+            expand_size = (expand_size[0], 0)
+        print(expand_size)
+        img = ImageOps.expand(img, expand_size)
+        output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
+                   f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size. Added padding of '
+                   f'{"x".join([str(i) for i in expand_size])} pixels\n')
+        await asyncio.sleep(0)
+    else:
+        output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
+                   f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size.\n')
+    return img, output

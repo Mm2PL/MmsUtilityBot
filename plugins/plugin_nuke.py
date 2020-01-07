@@ -98,23 +98,23 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('nuke_url',
                                  'Timeout or ban in bulk, uses provided url.'
                                  'Usage: nuke_url url:URL [+perma] [+force] timeout:TIME [+dry-run]',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke regex',
+                                 section=plugin_help.SECTION_COMMANDS)
+        plugin_help.create_topic('nuke_url url',
                                  'Download this and use this as a list of users to punish.',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke perma',
+        plugin_help.create_topic('nuke_url perma',
                                  'Ban users permanently USE THIS WITH CAUTION',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke timeout',
+        plugin_help.create_topic('nuke_url timeout',
                                  'Amount of time to timeout the users for.',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke search',
+        plugin_help.create_topic('nuke_url search',
                                  'How much of the message history to search',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke dry-run',
+        plugin_help.create_topic('nuke_url dry-run',
                                  'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke force',
+        plugin_help.create_topic('nuke_url force',
                                  f'Ban or timeout more than {self.max_nuke} users.',
                                  section=plugin_help.SECTION_ARGS)
 
