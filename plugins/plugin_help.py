@@ -328,3 +328,8 @@ create_topic(
         'help sections'
     ]
 )
+create_topic(
+    'me',
+    'What do you need help with? Do you need one of these? https://en.wikipedia.org/wiki/List_of_suicide_crisis_lines',
+    section=SECTION_MISC
+)
