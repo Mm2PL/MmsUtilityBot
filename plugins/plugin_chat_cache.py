@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import json
 import time
 import typing
 from collections import defaultdict
@@ -33,6 +34,7 @@ except ImportError:
     exit()
 # noinspection PyUnresolvedReferences
 import twitchirc
+import traceback
 
 NAME = 'chat_cache'
 __meta_data__ = {
@@ -68,7 +70,13 @@ class Plugin(main.Plugin):
     def _load_recents(self, channel):
         log('info', f'Attempting to fetch recent messages for channel {channel}.')
         req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}')
-        data = req.json()
+        try:
+            data = req.json()
+        except json.decoder.JSONDecodeError as e:
+            log('err', f'Unable to fetch recent messages for channel {channel}!\n'
+                       f'{e}\n'
+                       f'{traceback.format_exc()}')
+            return
         if req.status_code != 200:
             log('err', f'Unable to fetch recent messages for channel {channel}!')
             log('info', repr(data))

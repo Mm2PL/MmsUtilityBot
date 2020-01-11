@@ -283,7 +283,7 @@ class ExceptionDetectionMiddleware(twitchirc.AbstractMiddleware):
                 print(user, perms)
                 if ((twitchirc.permission_names.GLOBAL_BYPASS_PERMISSION in perms
                      or 'util.fire_ping' in perms
-                     or 'parent.bot_admin')
+                     or 'parent.bot_admin' in perms)
                         and 'util.fire_ping_disable' not in perms):
                     pinged += f' @{user}'
         e = event.data['exception']
