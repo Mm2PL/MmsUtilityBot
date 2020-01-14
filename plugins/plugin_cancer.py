@@ -194,7 +194,7 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
-        self.time_before_status = plugin_manager.Setting(
+        self.time_before_status_setting = plugin_manager.Setting(
             self,
             'cancer.time_before_status',
             default_value=5,
