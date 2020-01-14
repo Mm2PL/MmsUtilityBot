@@ -1,0 +1,60 @@
+<!--
+  ~ This is a simple utility bot
+  ~ Copyright (C) 2020 Mm2PL
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Mm's bot (suggestion stats)</title>
+    <link rel="stylesheet" href="global.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+</head>
+<body>
+<noscript>
+    <h1>Did you forget to enable js?</h1>
+</noscript>
+<h1>Suggestion stats</h1>
+<div id="loading_info">
+    Loading...
+    <div class="dankCircle"></div>
+</div>
+<div id="loading_failed" hidden>
+    Loading failed
+    <div class="peepoSadDank"></div>
+</div>
+<h1>Misc</h1>
+<ol>
+    <li id="suggestion_count" hidden>
+        <strong>Suggestion count:</strong>
+    </li>
+    <li id="hidden_suggestion_count" hidden>
+        <strong>Hidden suggestion count:</strong>
+    </li>
+</ol>
+<h1>States</h1>
+<ol id="state_stats">
+</ol>
+
+<h1>Top 10 suggesters</h1>
+<ol id="top_suggesters">
+</ol>
+
+<script src="suggestion_stats.js"></script>
+</body>
+</html>
