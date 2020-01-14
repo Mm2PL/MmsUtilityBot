@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import time
 import warnings
 from typing import Tuple
@@ -56,7 +57,7 @@ main.load_file('plugins/plugin_hastebin.py')
 try:
     import plugin_hastebin as plugin_hastebin
 except ImportError:
-    from plugins.plugin_hastebin import PluginHastebin
+    from plugins.plugin_hastebin import Plugin as PluginHastebin
 
     plugin_hastebin: PluginHastebin
 
@@ -165,6 +166,16 @@ class Plugin(main.Plugin):
     def cookie_optin(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.cookie_optin_setting)
 
+    @property
+    def status_every_frames(self):
+        return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
+                .get(self.status_every_frames_setting))
+
+    @property
+    def time_before_status(self):
+        return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
+                .get(self.time_before_status_setting))
+
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
@@ -175,6 +186,21 @@ class Plugin(main.Plugin):
                                                       default_value=1.2,
                                                       scope=plugin_manager.SettingScope.GLOBAL,
                                                       write_defaults=True)
+
+        self.status_every_frames_setting = plugin_manager.Setting(
+            self,
+            'cancer.status_every_frames',
+            default_value=10,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+        self.time_before_status = plugin_manager.Setting(
+            self,
+            'cancer.time_before_status',
+            default_value=5,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
 
         self._sneeze = (-1, None)
         self.storage = main.PluginStorage(self, main.bot.storage)
@@ -359,6 +385,7 @@ class Plugin(main.Plugin):
             else:
                 o = ''
                 frame = -1
+                start_time = time.time()
                 while 1:
                     try:
                         img.seek(frame + 1)
@@ -366,6 +393,7 @@ class Plugin(main.Plugin):
                         break
                     frame += 1
                     o += f'\nFrame {frame}\n'
+                    frame_start = time.time()
                     o += await braille.to_braille_from_image(img.copy(),
                                                              reverse=True if args['reverse'] is not Ellipsis else False,
                                                              size_percent=size_percent,
@@ -377,6 +405,16 @@ class Plugin(main.Plugin):
                                                                        (args['pad_y'] if args['pad_y'] is not Ellipsis
                                                                         else 60)),
                                                              enable_processing=True)
+                    time_taken = round(time.time() - start_time)
+                    frame_time = round(time.time() - frame_start)
+
+                    if frame % self.status_every_frames == 0 and time_taken > self.time_before_status:
+                        speed = round(1 / frame_time)
+                        main.bot.send(msg.reply(f'@{msg.user}, ppCircle Converted {frame} frames in '
+                                                f'{time_taken} seconds, speed: {round(speed)} fps, '
+                                                f'eta: {(img.n_frames - frame) * speed} seconds.'))
+                        await asyncio.sleep(0)
+
         sendable = ' '.join(o.split('\n')[1:])
         if args['hastebin'] is not Ellipsis or len(sendable) > 500:
             return (f'{"This braille was too big to be posted." if not args["hastebin"] is not Ellipsis else ""} '

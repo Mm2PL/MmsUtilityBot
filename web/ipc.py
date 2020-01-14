@@ -18,6 +18,8 @@ import select
 import socket
 from typing import List, Tuple
 
+import typing
+
 
 class Connection:
     def __init__(self, address='ipc_server'):
@@ -55,7 +57,7 @@ class Connection:
             msgs += self.decode(self.sock.recv(self.max_recv))
         return msgs
 
-    def receive(self, block: bool = True, recv_until_complete=False):
+    def receive(self, block: bool = True, recv_until_complete=False) -> typing.Optional[List[Tuple[str, str]]]:
         if block:
             return self._receive(recv_until_complete)
         else:

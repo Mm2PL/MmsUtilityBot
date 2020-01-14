@@ -19,6 +19,7 @@ import enum
 import sqlalchemy
 from sqlalchemy.orm import relationship
 
+
 def get(Base):
     class Suggestion(Base):
         class SuggestionState(enum.Enum):
