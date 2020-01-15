@@ -74,14 +74,17 @@ def init(register_endpoint, ipc_conn, main_module):
                                       .first())
             if user is None:
                 r = jsonify({
-                    'status': 404,
-                    'data': f'User id {user_id} not found.'
+                    'status': 200,
+                    'page': page,
+                    'page_size': main_module.PAGE_SIZE,
+                    'count': 0,
+                    'data': []
                 })
-                r.status_code = 404
-                abort(r)
+                return r
 
             suggestion_query = (session.query(Suggestion)
-                                .filter(Suggestion.author_alias == user_id))
+                                .filter(Suggestion.author_alias == user.id)
+                                .filter(Suggestion.is_hidden == False))
             count = suggestion_query.count()
             suggestions = (suggestion_query.offset(page * main_module.PAGE_SIZE)
                            .limit(main_module.PAGE_SIZE)

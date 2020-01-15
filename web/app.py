@@ -42,7 +42,7 @@ else:
     raise RuntimeError('Set the DBADDR envirionment variable to the base address.\n'
                        'mysql+pymysql://USERNAME:PASSWORD@HOST/DBNAME')
 Base = declarative_base()
-db_engine = create_engine(base_address, echo=True)
+db_engine = create_engine(base_address)
 Session = sessionmaker(bind=db_engine)
 PAGE_SIZE = 50
 app = Flask(__name__)
