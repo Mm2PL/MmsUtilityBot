@@ -103,7 +103,6 @@ def get_user_name(msg):
 def command_vote(msg: twitchirc.ChannelMessage):
     if msg.user in ['__vote_info', '__vote_results']:
         return f'@{get_user_name(msg)} No crashing the bot for you ;)'
-        return
     cd_state = main.do_cooldown('vote', msg, global_cooldown=0, local_cooldown=1 * 60)
     if cd_state:
         return
@@ -128,8 +127,8 @@ def command_vote(msg: twitchirc.ChannelMessage):
             if not invalid_votes:
                 votes[msg.channel][msg.user] = user_votes
                 if already_voted:
-                    main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully overridden vote. '
-                                            f'New vote is {user_votes!r}'))
+                    return (f'@{get_user_name(msg)} Successfully overridden vote. '
+                            f'New vote is {user_votes!r}')
                 else:
                     return f'@{get_user_name(msg)} Successfully voted for {user_votes!r}'
             else:
@@ -141,8 +140,9 @@ def command_vote(msg: twitchirc.ChannelMessage):
         if argv[1] in vote_obj.options:
             votes[msg.channel][msg.user] = argv[1]
             if already_voted:
-                main.bot.send(msg.reply(f'@{get_user_name(msg)} Successfully overridden vote. '
-                                        f'New vote is {argv[1]!r}'))
+                return (f'@{get_user_name(msg)} Successfully overridden vote. '
+                        f'New vote is {argv[1]!r}')
+
             else:
                 return f'@{get_user_name(msg)} Successfully voted for {argv[1]!r}'
         else:
@@ -212,7 +212,11 @@ def _load_template(template_name):
 
 @main.bot.add_command('poll', required_permissions=['poll.manage'], enable_local_bypass=True)
 def command_vote_admin(msg: twitchirc.ChannelMessage):
-    args = vote_admin_parser.parse_args(shlex.split(msg.text.replace('!poll', '', 1)))
+    argv = shlex.split(main.delete_spammer_chrs(msg.text))
+    if len(argv) == 1:
+        usage = re.sub('\n +', ' ', vote_admin_parser.format_usage())
+        return f'@{get_user_name(msg)} {usage}'
+    args = vote_admin_parser.parse_args(argv)
 
     print(msg.channel, msg.user, args)
     if args is None:
