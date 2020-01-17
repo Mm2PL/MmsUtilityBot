@@ -68,8 +68,10 @@ class Plugin(main.Plugin):
         super().__init__(module, source)
         self.c_nuke = main.bot.add_command('nuke', required_permissions=['util.nuke'],
                                            enable_local_bypass=True)(self.c_nuke)
-        self.c_nuke_url = main.bot.add_command('nuke_url', required_permissions=['util.nuke'],
-                                               enable_local_bypass=True)(self.c_nuke)
+        self.c_nuke_url = main.bot.add_command('nuke_url', required_permissions=['util.nuke_url'],
+                                               enable_local_bypass=True)(self.c_nuke_url)
+        self.c_unnuke = main.bot.add_command('unnuke', required_permissions=['util.unnuke'],
+                                             enable_local_bypass=True)(self.c_unnuke)
         self.max_nuke = 30
 
         plugin_help.create_topic('nuke',
@@ -108,14 +110,25 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('nuke_url timeout',
                                  'Amount of time to timeout the users for.',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke_url search',
-                                 'How much of the message history to search',
-                                 section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('nuke_url dry-run',
                                  'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('nuke_url force',
                                  f'Ban or timeout more than {self.max_nuke} users.',
+                                 section=plugin_help.SECTION_ARGS)
+
+        plugin_help.create_topic('unnuke',
+                                 'Unyimeout or unban in bulk, uses provided url.'
+                                 'Usage: unnuke url:URL [+perma] [+dry-run]',
+                                 section=plugin_help.SECTION_COMMANDS)
+        plugin_help.create_topic('unnuke url',
+                                 'Download this and use this as a list of users to revert.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('unnuke perma',
+                                 'Use /unban instead of /untimeout',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('nuke_url dry-run',
+                                 'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
 
     async def c_nuke(self, msg: twitchirc.ChannelMessage):
@@ -161,9 +174,9 @@ class Plugin(main.Plugin):
                                          })
         except arg_parser.ParserError as e:
             return f'@{msg.user}, error: {e.message}'
-        arg_parser.check_required_keys(args, ('url', 'timeout', 'search', 'perma', 'dry-run'))
-        if args['url'] is ... or (args['timeout'] is ... and not args['perma']) or args['search'] is ...:
-            return f'@{msg.user}, url, timeout and search are required parameters'
+        arg_parser.check_required_keys(args, ('url', 'timeout', 'perma', 'dry-run'))
+        if args['url'] is ... or (args['timeout'] is ... and not args['perma']):
+            return f'@{msg.user}, url, timeout are required parameters'
         if args['perma'] is ...:
             args['perma'] = False
 
@@ -214,6 +227,38 @@ class Plugin(main.Plugin):
                f'Full list here: {url}']
         ret.extend(timeouts)
         return ret
+
+    async def c_unnuke(self, msg: twitchirc.ChannelMessage):
+        try:
+            args = arg_parser.parse_args(main.delete_spammer_chrs(msg.text),
+                                         {
+                                             'dry-run': bool,
+                                             'url': str,
+                                             'perma': bool,
+                                             'force': bool,
+                                             'timeout': datetime.timedelta
+                                         })
+        except arg_parser.ParserError as e:
+            return f'@{msg.user}, error: {e.message}'
+        arg_parser.check_required_keys(args, ('url', 'timeout', 'perma', 'dry-run'))
+        if args['url'] is ... or (args['timeout'] is ... and not args['perma']):
+            return f'@{msg.user}, url, timeout are required parameters'
+        if args['perma'] is ...:
+            args['perma'] = False
+
+        url = args['url']
+        if url.startswith(plugin_hastebin.hastebin_addr):
+            url = url.replace(plugin_hastebin.hastebin_addr, plugin_hastebin.hastebin_addr + 'raw/')
+        async with aiohttp.request('get', url) as req:
+            if req.status != 200:
+                return f'@{msg.user}, failed to download user list :('
+            if req.content_type == 'text/plain':
+                users = (await req.text('utf-8')).replace('\r\n', '\n').replace('$(newline)', '\n').split('\n')
+
+                while '' in users:
+                    users.remove('')
+
+                return await self.unnuke(args, msg, users)
 
     async def unnuke(self, args, msg, users):
         users.remove(msg.user)
