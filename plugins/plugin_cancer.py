@@ -93,7 +93,15 @@ COOKIE_PATTERN = regex.compile(
     rf'^\[Cookies\] '
     rf'\[(?P<rank>(?:P[1-4]: )?'
     rf'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader))\] '
-    rf'(?P<name>[a-z0-9]+) \U0001f3ab'
+    rf'(?P<name>[a-z0-9_]+) \U0001f3ab'
+)
+RAID_PATTERN = regex.compile(
+    r'A Raid Event at Level \[[0-9]+\] has appeared\. Type \+join to join the raid! The raid '
+    r'will begin in [0-9]+ seconds!'
+)
+ED_FAIL_PATTERN = regex.compile(
+    r', you have already entered the dungeon recently, [0-9]:(?P<time>[0-9]{2}:[0-9]{2}) left until you can enter '
+    r'again! ⌛'
 )
 COOLDOWN_TIMEOUT = 1.5
 
@@ -149,10 +157,29 @@ class Plugin(main.Plugin):
             # don't respond if the playsound didn't play
             self._sneeze = (-1, None)
 
+        if msg.channel == self.ed_channel:
+            m = RAID_PATTERN.match(msg.text)
+            if m:
+                main.bot.send(msg.reply('+join'))
+
+            if msg.text.casefold().startswith(main.bot.username.casefold()):
+                text = regex.sub(main.bot.username, '', msg.text, flags=regex.I)
+                print(repr(text))
+                m2 = ED_FAIL_PATTERN.match(text)
+                if m2:
+                    new_time = m2.group('time')
+                    minutes, seconds = new_time.split(':')
+                    try:
+                        self.next_ed_time = time.time() + (int(minutes) * 60) + int(seconds)
+                        print('updated timer!!')
+                    except Exception as e:
+                        log('err', f'Pepega: {e}')
+
     def waytoodank_timer(self):
         if self._sneeze[0] <= time.time() and self._sneeze[1] is not None:
             main.bot.send(self._sneeze[1].reply('WAYTOODANK'))
             self._sneeze = (-1, None)
+        self._enter_dungeon()
 
     @property
     def cooldown_timeout(self):
@@ -176,11 +203,17 @@ class Plugin(main.Plugin):
         return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
                 .get(self.time_before_status_setting))
 
+    @property
+    def ed_channel(self):
+        return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
+                .get(self.ed_channel_setting))
+
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
     def __init__(self, module, source):
         super().__init__(module, source)
+        warnings.simplefilter('error', Image.DecompressionBombWarning)
         self.timeout_setting = plugin_manager.Setting(self,
                                                       'cancer.waytoodank_timeout',
                                                       default_value=1.2,
@@ -198,6 +231,13 @@ class Plugin(main.Plugin):
             self,
             'cancer.time_before_status',
             default_value=5,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+        self.ed_channel_setting = plugin_manager.Setting(
+            self,
+            'cancer.ed_channel',
+            default_value=None,
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
@@ -274,7 +314,28 @@ class Plugin(main.Plugin):
                                      'plugin_cancer.py',
                                      'cancer'
                                  ])
-        warnings.simplefilter('error', Image.DecompressionBombWarning)
+
+        plugin_help.create_topic('+ed',
+                                 'The `cancer` plugin sends a message containing +ed every five minutes to '
+                                 'activate HuwoBot.',
+                                 section=plugin_help.SECTION_MISC,
+                                 links=[
+                                     'ed',
+                                     'enterdungeon',
+                                     '+enterdungeon'
+                                 ])
+        self.next_ed_time = 0
+        main.bot.schedule_event(0.1, 1, self._enter_dungeon, (), {})
+
+    def _enter_dungeon(self):
+        if self.ed_channel is None:
+            return
+        if time.time() < self.next_ed_time:
+            return
+        msg = twitchirc.ChannelMessage('+ed', main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
+        main.bot.send(msg)
+        log('info', 'Queued enter dungeon message :)')
+        self.next_ed_time = time.time() + 10 * 60 + 1
 
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
