@@ -267,11 +267,17 @@ class Plugin(main.Plugin):
         # register commands
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
-        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text', None)(self.command_pyramid)
+        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
+                                                  'Usage: pyramid <size> <text...>',
+                                                  None)(self.command_pyramid)
 
         self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
                                                       required_permissions=['cancer.braille'])(self.c_braillefy)
-        plugin_help.add_manual_help_using_command('Convert an image into braille.', None)(self.command_braillefy)
+        plugin_help.add_manual_help_using_command('Convert an image into braille. '
+                                                  'Usage: braillefy url:URL [+reverse] '
+                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
+                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
+                                                  None)(self.command_braillefy)
 
         # arguments.
         plugin_help.create_topic('braillefy url',
