@@ -65,9 +65,9 @@ class Plugin(main.Plugin):
         except arg_parser.ParserError as e:
             return f'@{msg.user}, Error: {e}'
 
-        if 'time' not in args:
+        if args['time'] is ...:
             args['time'] = datetime.timedelta(seconds=30)
-        if 'channel' not in args:
+        if args['channel'] is ...:
             args['channel'] = msg.channel
 
         async with aiohttp.request('get', 'https://api.twitch.tv/helix/users',
@@ -109,11 +109,9 @@ class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
         self.c_replay = main.bot.add_command('replay')(self.c_replay)
-        plugin_help.add_manual_help_using_command('Create a link to the VOD.'
+        plugin_help.add_manual_help_using_command('Create a link to the VOD. '
                                                   'Usage: replay [channel:STR] [time:TIME_DELTA]')(self.c_replay)
 
-        plugin_help.create_topic('replay usage', 'replay [channel:STR] [time:TIME_DELTA]',
-                                 section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('replay channel', 'Channel to create the replay from. Must be live.',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
