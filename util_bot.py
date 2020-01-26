@@ -44,6 +44,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from twitchirc import Command
 from sqlalchemy.ext.declarative import declarative_base
+from apis.supibot import SupibotApi
 
 import plugins.models.user as user_model
 import twitch_auth
@@ -911,6 +912,11 @@ def uptime() -> datetime.timedelta:
     return datetime.datetime.now() - start_time
 
 
+with open('supibot_auth.json', 'r') as f:
+    supibot_auth = json.load(f)
+
+supibot_api = SupibotApi(supibot_auth['id'], supibot_auth['key'],
+                         user_agent='Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot')
 try:
     load_commands()
 except FileNotFoundError:

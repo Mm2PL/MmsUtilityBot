@@ -63,7 +63,9 @@ async def new_handler(message: twitchirc.ChannelMessage):
             if not was_handled:
                 main.bot._do_unknown_command(message)
         else:
-            return
+            for handler in main.bot.commands:
+                if callable(handler.matcher_function) and handler.matcher_function(message, handler):
+                    await plugin_manager._acall_handler(handler, message)
     else:
         await old_handler(message)
 
@@ -140,6 +142,13 @@ def command_prefix(msg: twitchirc.ChannelMessage):
             return f'@{msg.user} Set prefix to {args.set!r} for channel {chan}.'
         else:
             return f'@{msg.user} Invalid prefix {args.set!r}.'
+
+
+def get_prefix(channel: str):
+    if channel in channel_prefixes:
+        return channel_prefixes[channel]
+    else:
+        return main.bot.prefix
 
 
 if 'plugin_prefixes' in main.bot.storage.data:

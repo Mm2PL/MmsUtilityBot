@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import datetime
 import time
 import warnings
 from typing import Tuple
@@ -107,17 +108,22 @@ COOLDOWN_TIMEOUT = 1.5
 
 PRESTIGE_PATTERN = regex.compile('P([1-4]):')
 COOKIE_PRESTIGE_TIMES = {
-    0: '2h',
-    1: '1h',
-    2: '30m',
-    3: '20m'
+    0: 2 * 60 * 60,
+    1: 60 * 60,
+    2: 30 * 60,
+    3: 20 * 60,
+
+    # 0: '2h',
+    # 1: '1h',
+    # 2: '30m',
+    # 3: '20m'
 }
 
 
 class Plugin(main.Plugin):
     _sneeze: Tuple[float, typing.Optional[twitchirc.ChannelMessage]]
 
-    def _time_from_rank(self, text) -> str:
+    def _time_from_rank(self, text) -> int:
         prestige_match = PRESTIGE_PATTERN.findall(text)
         if prestige_match:
             level = int(prestige_match[0])
@@ -128,52 +134,6 @@ class Plugin(main.Plugin):
                 return COOKIE_PRESTIGE_TIMES[0] + ' monkaS unknown prestige level.'
         else:
             return COOKIE_PRESTIGE_TIMES[0]
-
-    def chan_msg_handler(self, event: str, msg: twitchirc.ChannelMessage):
-        if msg.user in ['supibot', 'mm2pl'] and msg.text.startswith('HONEYDETECTED RECONNECTED') \
-                and msg.channel == 'supinic':
-            random_msg = random.choice(RECONNECTION_MESSAGES)
-            while '{ping}' in random_msg:
-                random_msg = random_msg.replace('{ping}', random.choice(self.random_pings), 1)
-            main.bot.send(msg.reply(random_msg))
-        if msg.channel in ['supinic', 'mm2pl'] and msg.user in ['thepositivebot', 'linkusbanned'] \
-                and msg.text.startswith('\x01ACTION [Cookies]'):
-            m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
-            if m and m[0][1].lower() in self.cookie_optin:
-                time_ = self._time_from_rank(msg.text)
-
-                main.bot.send(msg.reply(f'$remind {m[0][1].lower()} cookie :) in {time_}'))
-            elif not m:
-                log('warn', f'matching against regex failed: {msg.text!r}')
-
-        if msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']:
-            self._sneeze = (time.time() + self.cooldown_timeout, msg)
-
-        if msg.user == 'supibot' and self._sneeze[1] is not None and (
-                msg.text.startswith(
-                    self._sneeze[1].user + ', The playsound\'s cooldown has not passed yet! Try again in')
-                or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
-        ):
-            # don't respond if the playsound didn't play
-            self._sneeze = (-1, None)
-
-        if msg.channel == self.ed_channel:
-            m = RAID_PATTERN.match(msg.text)
-            if m:
-                main.bot.send(msg.reply('+join'))
-
-            if msg.text.casefold().startswith(main.bot.username.casefold()):
-                text = regex.sub(main.bot.username, '', msg.text, flags=regex.I)
-                print(repr(text))
-                m2 = ED_FAIL_PATTERN.match(text)
-                if m2:
-                    new_time = m2.group('time')
-                    minutes, seconds = new_time.split(':')
-                    try:
-                        self.next_ed_time = time.time() + (int(minutes) * 60) + int(seconds)
-                        print('updated timer!!')
-                    except Exception as e:
-                        log('err', f'Pepega: {e}')
 
     def waytoodank_timer(self):
         if self._sneeze[0] <= time.time() and self._sneeze[1] is not None:
@@ -214,12 +174,42 @@ class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
         warnings.simplefilter('error', Image.DecompressionBombWarning)
-        self.timeout_setting = plugin_manager.Setting(self,
-                                                      'cancer.waytoodank_timeout',
-                                                      default_value=1.2,
-                                                      scope=plugin_manager.SettingScope.GLOBAL,
-                                                      write_defaults=True)
 
+        self.next_ed_time = 0
+        self._sneeze = (-1, None)
+        self.storage = main.PluginStorage(self, main.bot.storage)
+
+        # region Settings
+        self.timeout_setting = plugin_manager.Setting(
+            self,
+            'cancer.waytoodank_timeout',
+            default_value=1.2,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+        self.random_ping_setting = plugin_manager.Setting(
+            self,
+            'cancer.random_pings',
+            default_value=['{my pings run out}'],
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+
+        self.pyramid_enabled_setting = plugin_manager.Setting(
+            self,
+            'cancer.pyramid_enabled',
+            default_value=False,
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True
+        )
+
+        self.cookie_optin_setting = plugin_manager.Setting(
+            self,
+            'cancer.cookie_optin',
+            default_value=[],
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
         self.status_every_frames_setting = plugin_manager.Setting(
             self,
             'cancer.status_every_frames',
@@ -241,45 +231,9 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
+        # endregion
 
-        self._sneeze = (-1, None)
-        self.storage = main.PluginStorage(self, main.bot.storage)
-        main.bot.handlers['chat_msg'].append(self.chan_msg_handler)
-
-        self.random_ping_setting = plugin_manager.Setting(self,
-                                                          'cancer.random_pings',
-                                                          default_value=['{my pings run out}'],
-                                                          scope=plugin_manager.SettingScope.GLOBAL,
-                                                          write_defaults=True)
-
-        self.pyramid_enabled_setting = plugin_manager.Setting(self,
-                                                              'cancer.pyramid_enabled',
-                                                              default_value=False,
-                                                              scope=plugin_manager.SettingScope.PER_CHANNEL,
-                                                              write_defaults=True)
-
-        self.cookie_optin_setting = plugin_manager.Setting(self,
-                                                           'cancer.cookie_optin',
-                                                           default_value=[],
-                                                           scope=plugin_manager.SettingScope.GLOBAL,
-                                                           write_defaults=True)
-
-        # register commands
-        self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
-                                                    enable_local_bypass=True)(self.c_pyramid)
-        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
-                                                  'Usage: pyramid <size> <text...>',
-                                                  None)(self.command_pyramid)
-
-        self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
-                                                      required_permissions=['cancer.braille'])(self.c_braillefy)
-        plugin_help.add_manual_help_using_command('Convert an image into braille. '
-                                                  'Usage: braillefy url:URL [+reverse] '
-                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
-                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
-                                                  None)(self.command_braillefy)
-
-        # arguments.
+        # region Help
         plugin_help.create_topic('braillefy url',
                                  'URL pointing to image you want to convert.',
                                  section=plugin_help.SECTION_ARGS)
@@ -306,12 +260,6 @@ class Plugin(main.Plugin):
                                      'braillefy pad_y',
                                  ])
 
-        self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
-        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
-                                                  'cookies', None)(self.c_cookie_optin)
-
-        main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
-
         plugin_help.create_topic('plugin_cancer',
                                  'Plugin dedicated to things that shouldn\'t be done '
                                  '(responding to messages other than commands, spamming).',
@@ -330,8 +278,71 @@ class Plugin(main.Plugin):
                                      'enterdungeon',
                                      '+enterdungeon'
                                  ])
-        self.next_ed_time = 0
+        # endregion
+
+        # region Schedule events
         main.bot.schedule_event(0.1, 1, self._enter_dungeon, (), {})
+        main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
+        # endregion
+
+        # region Register commands
+        self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
+        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
+                                                  'cookies', None)(self.c_cookie_optin)
+        self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
+                                                    enable_local_bypass=True)(self.c_pyramid)
+        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
+                                                  'Usage: pyramid <size> <text...>',
+                                                  None)(self.command_pyramid)
+
+        self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
+                                                      required_permissions=['cancer.braille'])(self.c_braillefy)
+        plugin_help.add_manual_help_using_command('Convert an image into braille. '
+                                                  'Usage: braillefy url:URL [+reverse] '
+                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
+                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
+                                                  None)(self.command_braillefy)
+        # region Fake Commands
+        self._honeydetected = main.bot.add_command('honydetected reconnected')(self._honeydetected)
+        self._honeydetected.matcher_function = (
+            lambda msg, cmd: (
+                    msg.user in ['supibot', 'mm2pl']
+                    and msg.text.startswith('HONEYDETECTED RECONNECTED')
+                    and msg.channel in ['supinic', 'mm2pl']
+            )
+        )
+
+        self._cookie = main.bot.add_command('cookie detection')(self._cookie)
+        self._cookie.matcher_function = (
+            lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
+                              and msg.user in ['thepositivebot', 'mm2pl']
+                              and msg.text.startswith('\x01ACTION [Cookies]'))
+        )
+        self._huwobot_integration = main.bot.add_command('huwobot integration')(self._huwobot_integration)
+        self._huwobot_integration.matcher_function = (
+            lambda msg, cmd: (
+                    msg.channel == self.ed_channel
+            )
+        )
+        self._ps_sneeze_cancel = main.bot.add_command('ps sneeze cancel')(self._ps_sneeze_cancel)
+        self._ps_sneeze_cancel.matcher_function = (
+            lambda msg, cmd: (
+                    msg.user == 'supibot' and self._sneeze[1] is not None
+                    and (
+                            msg.text.startswith(self._sneeze[1].user + ', The playsound\'s cooldown has not passed '
+                                                                       'yet! Try again in')
+                            or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
+                    )
+            )
+        )
+        self._ps_sneeze_init = main.bot.add_command('ps sneeze init')(self._ps_sneeze_init)
+        self._ps_sneeze_init.matcher_function = (
+            lambda msg, cmd: (
+                    msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']
+            )
+        )
+        # endregion
+        # endregion
 
     def _enter_dungeon(self):
         if self.ed_channel is None:
@@ -343,15 +354,79 @@ class Plugin(main.Plugin):
         log('info', 'Queued enter dungeon message :)')
         self.next_ed_time = time.time() + 10 * 60 + 1
 
+    async def _ps_sneeze_init(self, msg: twitchirc.ChannelMessage):
+        self._sneeze = (time.time() + self.cooldown_timeout, msg)
+
+    async def _ps_sneeze_cancel(self, msg: twitchirc.ChannelMessage):
+        # don't respond if the playsound didn't play
+        self._sneeze = (-1, None)
+
+    async def _huwobot_integration(self, msg: twitchirc.ChannelMessage):
+        m = RAID_PATTERN.match(msg.text)
+        if m:
+            return '+join'
+
+        if msg.text.casefold().startswith(main.bot.username.casefold()):
+            text = regex.sub(main.bot.username, '', msg.text, flags=regex.I)
+            print(repr(text))
+            m2 = ED_FAIL_PATTERN.match(text)
+            if m2:
+                new_time = m2.group('time')
+                minutes, seconds = new_time.split(':')
+                try:
+                    self.next_ed_time = time.time() + (int(minutes) * 60) + int(seconds)
+                    print('updated timer!!')
+                except Exception as e:
+                    log('err', f'Pepega: {e}')
+
+    async def _cookie(self, msg: twitchirc.ChannelMessage):
+        m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
+        print(msg.user, m)
+        if m and m[0][1].lower() in self.cookie_optin:
+            time_ = self._time_from_rank(msg.text)
+            print('cookie opt in okay')
+
+            async with (await main.supibot_api.request('post /bot/reminder/',
+                                                       params={
+                                                           'username': m[0][1].lower(),
+                                                           'text': 'Cookie :)',
+                                                           'schedule': (datetime.datetime.fromtimestamp(
+                                                               time.time()
+                                                               + time_).isoformat()),
+                                                           'private': 'true',
+                                                       })) as r:
+                print(f'request {r}')
+                if r.status == 200:
+                    main.bot.send(msg.reply(f'@{msg.user}, I set up a cookie reminder for you :), '
+                                            f'id: {(await r.json())["data"]["reminderID"]}'))
+                else:
+                    main.bot.send(msg.reply(f'@{msg.user}, monkaS {chr(0x1f6a8)}'
+                                            f'failed to create cookie reminder '))
+
+        elif not m:
+            log('warn', f'matching against regex failed: {msg.text!r}')
+
+    async def _honeydetected(self, msg: twitchirc.ChannelMessage):
+        random_msg = random.choice(RECONNECTION_MESSAGES)
+        while '{ping}' in random_msg:
+            random_msg = random_msg.replace('{ping}', random.choice(self.random_pings), 1)
+        return random_msg
+
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
         if cd_state:
             return
         if msg.user.lower() in self.cookie_optin:
             self.cookie_optin.remove(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with main.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
             return f'@{msg.user} You have been removed from the cookie opt-in list.'
         else:
             self.cookie_optin.append(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with main.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
             return f'@{msg.user} You have been added to the cookie opt-in list.'
 
     def c_pyramid(self, msg: twitchirc.ChannelMessage):
@@ -473,12 +548,14 @@ class Plugin(main.Plugin):
                                                                         else 60)),
                                                              enable_processing=True)
                     time_taken = round(time.time() - start_time)
-                    frame_time = round(time.time() - frame_start)
+                    frame_time = time.time() - frame_start
+                    if frame_time > 1:
+                        frame_time = round(frame_time)  # avoid division by zero
 
                     if frame % self.status_every_frames == 0 and time_taken > self.time_before_status:
-                        speed = round(1 / frame_time)
+                        speed = round(1 / frame_time, 1)
                         main.bot.send(msg.reply(f'@{msg.user}, ppCircle Converted {frame} frames in '
-                                                f'{time_taken} seconds, speed: {round(speed)} fps, '
+                                                f'{time_taken} seconds, speed: {speed} fps, '
                                                 f'eta: {(img.n_frames - frame) * speed} seconds.'))
                         await asyncio.sleep(0)
 

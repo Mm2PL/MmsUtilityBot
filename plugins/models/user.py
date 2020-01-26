@@ -55,9 +55,9 @@ def get(Base, session_scope, log):
         mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
         sub_in_raw = sqlalchemy.Column(sqlalchemy.Text)
 
-        last_active = sqlalchemy.Column(sqlalchemy.DateTime)
-        last_message = sqlalchemy.Column(sqlalchemy.UnicodeText)
-        last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
+        # last_active = sqlalchemy.Column(sqlalchemy.DateTime)
+        # last_message = sqlalchemy.Column(sqlalchemy.UnicodeText)
+        # last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
 
         first_active = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
 
@@ -124,10 +124,11 @@ def get(Base, session_scope, log):
             else:
                 return User._get_by_name(name, s)
 
-        def _update(self, msg, update, session):
-            self.last_active = update['last_active']
-            self.last_message = msg.text
-            self.last_message_channel = msg.channel
+        def _update(self, update, session):
+            # self.last_active = update['last_active']
+            # self.last_message = msg.text
+            # self.last_message_channel = msg.channel
+            msg = update['msg']
             if 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']:
                 self.add_mod_in(msg.channel)
             else:
@@ -146,12 +147,11 @@ def get(Base, session_scope, log):
             session.add(self)
 
         def update(self, update, s=None):
-            msg = update['msg']
             if s is None:
                 with session_scope() as session:
-                    self._update(msg, update, session)
+                    self._update(update, session)
             else:
-                self._update(msg, update, s)
+                self._update(update, s)
 
         def schedule_update(self, msg: twitchirc.ChannelMessage):
             global cached_users
@@ -205,11 +205,29 @@ def get(Base, session_scope, log):
             return f'<User {self.last_known_username}, alias {self.id}>'
 
 
+    def _update_users(to_update):
+        try:
+            with session_scope() as session:
+                for db_id, update in to_update.copy().items():
+                    log('debug', db_id, 'updating dankCircle')
+                    if db_id is None:
+                        log('debug', 'create new')
+                        user = User.get_by_message(update['msg'])
+                        user.update(update, session)
+                        continue
+
+                    user = User.get_by_local_id(db_id)
+                    user.update(update, session)
+            log('debug', 'Deleting to_updates.')
+            for db_id in to_update:
+                del cached_users[db_id]
+        finally:
+            log('debug', 'release lock.')
+            users_lock.release()
+
     def flush_users():
-        # print('flush users: pre lock')
         if users_lock.locked():
             return
-        # print('flush users: post lock')
         users_lock.acquire()
         current_time = int(time.time())
         to_update = {}
@@ -218,31 +236,10 @@ def get(Base, session_scope, log):
                 log('debug', f'flush user {db_id}')
                 to_update[db_id] = user
         if to_update:
-            # print(f'updating users: {to_update}')
-            log('debug', f'users cache is of length {len(cached_users)}, {len(to_update)} are going to be removed from the '
-                  f'cache.')
+            log('debug', f'users cache is of length {len(cached_users)}, {len(to_update)} are going to be '
+                         f'removed from the cache.')
 
-            def _update_users():
-                try:
-                    with session_scope() as session:
-                        for db_id, update in to_update.copy().items():
-                            log('debug', db_id, 'updating dankCircle')
-                            if db_id is None:
-                                log('debug', 'create new')
-                                user = User.get_by_message(update['msg'])
-                                user.update(update, session)
-                                continue
-
-                            user = User.get_by_local_id(db_id)
-                            user.update(update, session)
-                    log('debug', 'Deleting to_updates.')
-                    for db_id in to_update:
-                        del cached_users[db_id]
-                finally:
-                    log('debug', 'release lock.')
-                    users_lock.release()
-
-            t = threading.Thread(target=_update_users, args=(), kwargs={})
+            t = threading.Thread(target=_update_users, args=(to_update,), kwargs={})
             t.start()
         else:
             users_lock.release()
@@ -251,4 +248,3 @@ def get(Base, session_scope, log):
 
 
 users_lock = threading.Lock()
-

@@ -51,9 +51,9 @@ async def command_title(msg: twitchirc.ChannelMessage):
                                headers={'Client-ID': twitch_auth.json_data['client_id']}) as request:
         json_data = await request.json()
         if request.status == 200 and 'data' in json_data and len(json_data['data']) > 0:
-            return f'@{msg.user} {json_data["data"][0]["title"]}'
+            return f'@{msg.user}, {json_data["data"][0]["title"]}'
         else:
-            return f'@{msg.user} eShrug Stream not found.'
+            return f'@{msg.user}, eShrug Stream not found.'
 
 
 @main.bot.add_command('uptime')
@@ -71,9 +71,9 @@ async def command_uptime(msg: twitchirc.ChannelMessage):
             start_time = datetime.datetime(*(time.strptime(data['started_at'],
                                                            "%Y-%m-%dT%H:%M:%SZ")[0:6]))
             uptime = round_time_delta(datetime.datetime.utcnow() - start_time)
-            return f'@{msg.user} {msg.channel} has been live for {uptime!s}'
+            return f'@{msg.user}, {msg.channel} has been live for {uptime!s}'
         else:
-            return f'@{msg.user} {msg.channel} is not live.'
+            return f'@{msg.user}, {msg.channel} is not live.'
 
 
 @main.bot.add_command('downtime')
@@ -86,7 +86,7 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
         json_data = await uptime_req.json()
         data = json_data['data']
         if data:
-            return f'@{msg.user} {msg.channel} is live.'
+            return f'@{msg.user}, {msg.channel} is live.'
     async with aiohttp.request('get', 'https://api.twitch.tv/helix/users', params={'login': msg.channel},
                                headers={'Client-ID': twitch_auth.json_data['client_id']}) as user_req:
         # channel is not live
@@ -125,7 +125,7 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
         offline_for = round_time_delta(time_start_difference - duration)
 
         print(duration, created_at, offline_for)
-        return f'@{msg.user} {msg.channel} has been offline for {offline_for}'
+        return f'@{msg.user}, {msg.channel} has been offline for {offline_for}'
 
 
 def round_time_delta(td):
