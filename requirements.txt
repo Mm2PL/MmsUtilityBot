@@ -1,3 +1,4 @@
+twitterscraper
 aiohttp
 cryptography
 flask

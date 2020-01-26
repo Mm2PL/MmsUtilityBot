@@ -131,7 +131,7 @@ class Plugin(main.Plugin):
                 return COOKIE_PRESTIGE_TIMES[level]
             else:
                 log('warn', f'Unknown prestige level: {level!r}. Message {text!r}')
-                return COOKIE_PRESTIGE_TIMES[0] + ' monkaS unknown prestige level.'
+                return COOKIE_PRESTIGE_TIMES[0]
         else:
             return COOKIE_PRESTIGE_TIMES[0]
 
@@ -384,23 +384,30 @@ class Plugin(main.Plugin):
         print(msg.user, m)
         if m and m[0][1].lower() in self.cookie_optin:
             time_ = self._time_from_rank(msg.text)
+            print(time_)
             print('cookie opt in okay')
 
+            params = {
+                'username': m[0][1].lower(),
+                'text': 'Cookie :)',
+                'schedule': (
+                    (
+                            datetime.datetime.utcnow() + datetime.timedelta(seconds=time_)
+                    ).isoformat() + 'Z'
+                ),
+                'private': 1,
+            }
+            print(params)
             async with (await main.supibot_api.request('post /bot/reminder/',
-                                                       params={
-                                                           'username': m[0][1].lower(),
-                                                           'text': 'Cookie :)',
-                                                           'schedule': (datetime.datetime.fromtimestamp(
-                                                               time.time()
-                                                               + time_).isoformat()),
-                                                           'private': 'true',
-                                                       })) as r:
+                                                       params=params)) as r:
                 print(f'request {r}')
+                j = await r.json()
+                print(j)
                 if r.status == 200:
-                    main.bot.send(msg.reply(f'@{msg.user}, I set up a cookie reminder for you :), '
-                                            f'id: {(await r.json())["data"]["reminderID"]}'))
+                    main.bot.send(msg.reply(f'@{m[0][1].lower()}, I set up a cookie reminder for you :), '
+                                            f'id: {j["data"]["reminderID"]}'))
                 else:
-                    main.bot.send(msg.reply(f'@{msg.user}, monkaS {chr(0x1f6a8)}'
+                    main.bot.send(msg.reply(f'@{m[0][1].lower()}, monkaS {chr(0x1f6a8)}'
                                             f'failed to create cookie reminder '))
 
         elif not m:
