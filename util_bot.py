@@ -425,11 +425,6 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
     return command
 
 
-tasks: List[typing.Dict[
-    str, typing.Union[sp.Popen, str, twitchirc.ChannelMessage]
-]] = []
-
-
 class AliasCommand(twitchirc.Command):
     pass
 
@@ -451,17 +446,6 @@ def add_alias(bot_obj, alias):
         return command
 
     return decorator
-
-
-@add_alias(bot, 'qc')
-@bot.add_command('quick_clip', required_permissions=['util.clip'])
-def command_quick_clip(msg: twitchirc.ChannelMessage):
-    cd_state = do_cooldown(cmd='quick_clip', msg=msg)
-    if cd_state:
-        return
-    bot.send(msg.reply(f'@{msg.flags["display-name"]}: Clip is on the way!'))
-    qc_proc = sp.Popen(['python3.7', 'clip.py', '-cC', msg.channel], stdout=sp.PIPE)
-    tasks.append({'proc': qc_proc, 'owner': msg.user, 'msg': msg})
 
 
 @bot.add_command('not_active', required_permissions=['util.not_active'])
@@ -487,71 +471,8 @@ def command_not_active(msg: twitchirc.ChannelMessage):
             bot.send(msg.reply(f'@{msg.user} {text[0]!r}: Marked person as not active.'))
 
 
-def check_quick_clips():
-    for i in tasks.copy():
-        if i['proc'].poll() is not None:  # process exited.
-            if i['proc'].poll() not in [0, 2]:
-                # sub process didn't return any information for the user and didn't return 0
-                more_info = (" Check the logs for more information"
-                             if not bot.check_permissions(i["msg"], permissions=['group.bot_admin'])
-                             else '')
-                bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
-                                        f'creation of your clip. '
-                                        f'Exit code: {i["proc"].poll()}.'
-                                        f'{more_info}'))
-                print('=' * 80)
-                print(b''.join(i['proc'].stdout.readlines()).decode('utf-8', 'replace'))
-                print('=' * 80)
-            elif i['proc'].poll() == 2:
-                # Sub process has information for the user.
-                next_line = ''
-                error_name = ''
-                error_message = ''
-                print('=' * 80)
-
-                # pick out the lines that need to be shown to the user
-                for line in i['proc'].stdout.readlines():
-                    line = line.decode('utf-8', errors='ignore').replace('\n', '')
-                    print(line)
-                    if line == '@error':
-                        next_line = 'name'
-                        continue
-                    if next_line == 'message':
-                        error_message = line
-                    if next_line == 'name':
-                        error_name = line
-                        next_line = 'message'
-                print('=' * 80)
-                bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
-                                        f'creation of your clip. Error name: {error_name}, message: {error_message}'))
-            else:
-                # The process returned 0
-                clip_url = 'CLIP URL UNKNOWN'
-                print('=' * 80)
-                for line in i['proc'].stdout.readlines():
-                    line = line.decode('utf-8', errors='ignore').replace('\n', '')
-                    print(line)
-                    if line.startswith('#'):
-                        continue
-                    clip_url = line
-                print('=' * 80)
-
-                if clip_url == 'CLIP URL UNKNOWN':
-                    more_info = (" Check the logs for more information"
-                                 if not bot.check_permissions(i["msg"], permissions=['group.bot_admin'])
-                                 else '')
-                    bot.send(i['msg'].reply(f'@{i["msg"].flags["display-name"]}, An error was encountered during the '
-                                            f'creation of your clip. Error name: NO_URL, '
-                                            f'message: The sub-program responsible for creating the clip didn\'t '
-                                            f'give a url back.{more_info}'))
-                    continue
-                bot.send(i['msg'].reply(f'@{i["msg"].user}, Your clip is here: {clip_url}'))
-            tasks.remove(i)
-
-
 def any_msg_handler(event: str, msg: twitchirc.Message, *args):
     del event, args, msg
-    check_quick_clips()
 
 
 def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):

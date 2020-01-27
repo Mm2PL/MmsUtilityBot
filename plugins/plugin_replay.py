@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import datetime
 import typing
 import math
@@ -43,6 +44,7 @@ except ImportError:
 
 # noinspection PyUnresolvedReferences
 import twitchirc
+import random
 
 NAME = 'replay'
 __meta_data__ = {
@@ -106,11 +108,70 @@ class Plugin(main.Plugin):
                                               f'{math.floor((t.seconds % 3600) / 60):0>.0f}m' \
                                               f'{math.floor((t.seconds % 3600) % 60):0>.0f}s'
 
+    async def c_clip(self, msg: twitchirc.ChannelMessage):
+        cd_state = main.do_cooldown(cmd='quick_clip', msg=msg)
+        if cd_state:
+            return
+        # bot.send(msg.reply(f'@{msg.flags["display-name"]}: Clip is on the way!'))
+        async with aiohttp.request('get', 'https://api.twitch.tv/helix/users', params={'login': msg.channel},
+                                   headers={'Client-ID': main.twitch_auth.json_data['client_id']}) as r:
+            data = await r.json()
+            if not ('data' in data and data['data'] and 'id' in data['data'][0]):
+                print(data)
+                return f'@{msg.user}, api error :('
+        user_id = data['data'][0]['id']
+        clip_url = await self.create_clip(user_id)
+        if clip_url == 'OFFLINE':
+            return f'@{msg.user}, Cannot create a clip of an offline channel'
+        else:
+            rand = random.randint(0, 100)
+            if rand == 69:
+                return f'@{msg.user}, Cliped it LUL {clip_url} (btw this message has a 1/100 chance of appearing)'
+            else:
+                return f'@{msg.user}, Created clip FeelsDankMan {chr(0x1f449)} {clip_url}'
+
+    async def create_clip(self, user_id: int):
+        # attempt to create the clip
+        async with aiohttp.request('post', 'https://api.twitch.tv/helix/clips', params={
+            'broadcaster_id': str(user_id)
+        }, headers={
+            'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}'
+        }) as r:
+            json = await r.json()
+            if 'status' in json and json['status'] == 401:
+                main.twitch_auth.refresh()
+                main.twitch_auth.save()
+                return await self.create_clip(user_id)
+            if ('status' in json and json['status'] == 404
+                    and json['message'] == 'Clipping is not possible for an offline channel.'):
+                return 'OFFLINE'
+        clip_id = json['data'][0]['id']
+        await asyncio.sleep(0.2)
+        while 1:
+            async with aiohttp.request('get', 'https://api.twitch.tv/helix/clips', params={
+                'id': clip_id
+            }, headers={
+                'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}'
+            }) as r:
+                retrieved_clip_data = await r.json()
+                if retrieved_clip_data['data']:
+                    return retrieved_clip_data['data'][0]['url']
+            await asyncio.sleep(2)
+
     def __init__(self, module, source):
         super().__init__(module, source)
         self.c_replay = main.bot.add_command('replay')(self.c_replay)
+        self.c_clip = main.bot.add_command('quick_clip', required_permissions=['util.clip'])(self.c_clip)
+        main.add_alias(main.bot, 'qc')(self.c_clip)
+
         plugin_help.add_manual_help_using_command('Create a link to the VOD. '
                                                   'Usage: replay [channel:STR] [time:TIME_DELTA]')(self.c_replay)
+
+        plugin_help.add_manual_help_using_command('Creates a clip quickly, usage: quick_clip',
+                                                  aliases=[
+                                                      'qc',
+                                                      'clip'
+                                                  ])
 
         plugin_help.create_topic('replay channel', 'Channel to create the replay from. Must be live.',
                                  section=plugin_help.SECTION_ARGS,
