@@ -93,14 +93,14 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
         json_data = await user_req.json()
         data = json_data['data']
         user_id = data[0]['id']
-    with aiohttp.request('get', 'https://api.twitch.tv/helix/videos',
-                         params={
-                             'user_id': user_id,
-                             'sort': 'time',
-                             'type': 'archive',
-                             'first': '1'
-                         },
-                         headers={'Client-ID': twitch_auth.json_data['client_id']}) as video_r:
+    async with aiohttp.request('get', 'https://api.twitch.tv/helix/videos',
+                               params={
+                                   'user_id': user_id,
+                                   'sort': 'time',
+                                   'type': 'archive',
+                                   'first': '1'
+                               },
+                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as video_r:
 
         json_data = await video_r.json()
         print(json_data)
