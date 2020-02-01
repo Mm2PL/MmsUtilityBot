@@ -62,6 +62,14 @@ except ImportError:
 
     plugin_hastebin: PluginHastebin
 
+main.load_file('plugins/plugin_emotes.py')
+try:
+    import plugin_emotes as plugin_emotes
+except ImportError:
+    from plugins.plugin_emotes import Plugin as PluginEmotes
+
+    plugin_emotes: PluginEmotes
+
 import random
 
 import twitchirc
@@ -391,9 +399,9 @@ class Plugin(main.Plugin):
                 'username': m[0][1].lower(),
                 'text': 'Cookie :)',
                 'schedule': (
-                    (
-                            datetime.datetime.utcnow() + datetime.timedelta(seconds=time_)
-                    ).isoformat() + 'Z'
+                        (
+                                datetime.datetime.utcnow() + datetime.timedelta(seconds=time_)
+                        ).isoformat() + 'Z'
                 ),
                 'private': 1,
             }
@@ -495,7 +503,7 @@ class Plugin(main.Plugin):
             if is_zero:
                 return f'Error: Sensitivity cannot be zero. MEGADANK'
         elif num_defined == 0:
-            sens = (1, 1, 1, 1)
+            sens = (2, 2, 2, 1)
         else:
             return f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.'
         if args['size_percent'] is not ... and args['max_y'] is not ...:
@@ -505,7 +513,15 @@ class Plugin(main.Plugin):
         max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
         size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
 
-        img = await braille.download_image(args['url'])
+        url = args['url']
+        if not url.startswith('http'):
+            emote_found = await plugin_emotes.find_emote(url, channel_id=msg.flags['room-id'])
+            if emote_found:
+                url = emote_found.url
+            else:
+                return f'@{msg.user}, Invalid url, couldn\'t find an emote matching this.'
+
+        img = await braille.download_image(url)
         img: Image.Image
         if img.format.lower() != 'gif':
             img, o = await braille.crop_and_pad_image(True,
