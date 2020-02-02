@@ -161,7 +161,8 @@ class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
         self.c_replay = main.bot.add_command('replay')(self.c_replay)
-        self.c_clip = main.bot.add_command('quick_clip', required_permissions=['util.clip'])(self.c_clip)
+        self.c_clip = main.bot.add_command('quick_clip', required_permissions=['util.clip'],
+                                           available_in_whispers=False)(self.c_clip)
         main.add_alias(main.bot, 'qc')(self.c_clip)
 
         plugin_help.add_manual_help_using_command('Create a link to the VOD. '

@@ -22,7 +22,6 @@ import urllib.parse
 import importlib.util
 import importlib.abc
 import os
-import subprocess as sp
 import sys
 import time
 import typing
@@ -42,10 +41,10 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from twitchirc import Command
+from twitchirc import Command, Event
 from sqlalchemy.ext.declarative import declarative_base
-from apis.supibot import SupibotApi
 
+from apis.supibot import SupibotApi
 import plugins.models.user as user_model
 import twitch_auth
 
@@ -471,10 +470,6 @@ def command_not_active(msg: twitchirc.ChannelMessage):
             bot.send(msg.reply(f'@{msg.user} {text[0]!r}: Marked person as not active.'))
 
 
-def any_msg_handler(event: str, msg: twitchirc.Message, *args):
-    del event, args, msg
-
-
 def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
     global plebs
     user = User.get_by_message(msg, no_create=False)
@@ -493,6 +488,47 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
 
 
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
+
+
+def check_spamming_allowed(channel: str):
+    if channel == 'whispers':
+        return False
+    if channel in bot_user_state:
+        return bot_user_state[channel]['mode'] in ('mod', 'vip')
+    else:
+        return False
+
+
+def check_moderation(channel: str):
+    if channel == 'whispers':
+        return False
+    if channel in bot_user_state:
+        return bot_user_state[channel]['mode'] == 'mod'
+    else:
+        return False
+
+
+bot_user_state: typing.Dict[str, typing.Dict[str, typing.Union[str, twitchirc.Message, list]]] = {
+    # 'channel': {
+    #     'message': twitchirc.Message(),
+    #     'mode': 'mod' || 'vip' || 'user'
+    # }
+}
+
+
+class UserStateCapturingMiddleware(twitchirc.AbstractMiddleware):
+    def receive(self, event: Event) -> None:
+        msg = event.data.get('message', None)
+        if isinstance(msg, twitchirc.UserstateMessage):
+            is_vip = 'vip/1' in msg.flags['badges']
+            is_mod = 'moderator/1' in msg.flags['badges']
+
+            bot_user_state[msg.channel] = {
+                'message': msg,
+                'mode': 'mod' if is_mod else (
+                    'vip' if is_vip else 'user'
+                )
+            }
 
 
 class PluginStorage:
@@ -854,7 +890,6 @@ twitchirc.log = make_log_function('TwitchIRC')
 Base.metadata.create_all(db_engine)
 Session = sessionmaker(bind=db_engine)
 bot.handlers['chat_msg'].append(chat_msg_handler)
-bot.handlers['any_msg'].append(any_msg_handler)
 twitchirc.get_join_command(bot)
 twitchirc.get_part_command(bot)
 twitchirc.get_perm_command(bot)

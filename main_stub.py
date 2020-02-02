@@ -18,6 +18,7 @@ import importlib.util
 # noinspection PyProtectedMember
 import importlib._bootstrap
 import io
+import json
 import os
 import sys
 import typing
@@ -319,8 +320,9 @@ if __name__ == '__main__':
     p.add_argument('--machine-readable', '-m', dest='machine_readable', action='store_true')
     p.add_argument('--all-help', '-A', dest='all_help', action='store_true')
     args = p.parse_args()
-    twitchirc.log = lambda *args: None
+    twitchirc.log = lambda *a: None
     enable_color = args.color
+    patch_output()
     machine_readable = args.machine_readable
     import_stack.append(args.plugin)
     if not machine_readable:
@@ -331,7 +333,7 @@ if __name__ == '__main__':
         load_file(args.plugin, exact_name=True)
 
     if machine_readable:
-        print(requirements)
+        print(json.dumps(requirements))
 
     if args.extract_help:
         if 'plugins/plugin_help.py' in plugins:
@@ -359,6 +361,8 @@ if __name__ == '__main__':
                     'section_doc',
                     'sections',
                     'help sections',
+
+                    'me'
                 ]
             for section, topics in plugin_help.all_help.items():
                 if not machine_readable:
@@ -370,7 +374,7 @@ if __name__ == '__main__':
                     if not machine_readable:
                         print(f'    - {k}: {v}')
             if machine_readable:
-                print(o)
+                print(json.dumps(o))
 
         else:
             if not machine_readable:

@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
+import re
 import unittest
 from unittest import TestCase
 
@@ -42,7 +43,6 @@ class Test(TestCase):
         self.assertEqual(output, {'test': True})
 
     # converters
-
     def test_parse_args_str(self):
         output = arg_parser.parse_args('test=value', args_types={'test': str})
         self.assertEqual(output, {'test': 'value'})
@@ -75,6 +75,34 @@ class Test(TestCase):
         except arg_parser.ParserError:
             return
         self.fail()
+
+    def test_parse_duplicate_argument(self):
+        try:
+            arg_parser.parse_args('test:test test:test', {'test': str})
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
+        try:
+            arg_parser.parse_args('+test +test', {'test': bool})
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
+
+        try:
+            arg_parser.parse_args('-test -test', {'test': bool})
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
+
+        try:
+            arg_parser.parse_args('-test +test', {'test': bool})
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
 
     def test_converter_timedelta_single(self):
         self.assertEqual(arg_parser._time_converter(datetime.timedelta, {}, '1s'),
@@ -113,6 +141,46 @@ class Test(TestCase):
         self.assertEqual(arg_parser._time_converter(datetime.datetime, {'format': '%Y-%m-%d %H:%M:%S'},
                                                     now.strftime('%Y-%m-%d %H:%M:%S')),
                          now)
+
+    def test_converter_regex(self):
+        test_string = 'this is a test'
+        result = arg_parser._regex_converter('regex', {
+            'regex': re.compile(r'this ?is ?a ?test')
+        }, test_string)
+        if not result or result[0] != test_string:
+            self.fail('regex didn\'t match')
+
+    def test_converter_regex_bad_input(self):
+        test_string = 'this isn\'t a test'
+        result = arg_parser._regex_converter('regex', {
+            'regex': re.compile(r'this ?is ?a ?test')
+        }, test_string)
+        if result:
+            self.fail()
+
+    def test_converter_regex_string_pattern(self):
+        test_string = 'this is a test'
+        result = arg_parser._regex_converter('regex', {
+            'regex': r'this ?is ?a ?test'
+        }, test_string)
+        if not result or result[0] != test_string:
+            self.fail('regex didn\'t match')
+
+    def test_converter_regex_invalid_pattern(self):
+        try:
+            arg_parser._regex_converter('regex', {
+                'regex': 0
+            }, 'test')
+        except arg_parser.ParserError:
+            return
+        self.fail()
+
+    def test_converter_regex_missing_pattern(self):
+        try:
+            arg_parser._regex_converter('regex', {}, 'test')
+        except arg_parser.ParserError:
+            return
+        self.fail()
 
     # split test
     def test_split_args(self):
@@ -154,6 +222,63 @@ class Test(TestCase):
     def test_split_args_escape_quote(self):
         self.assertEqual(arg_parser._split_args('\\"', strict_escapes=True), ['"'])
 
+    def test_split_args_unknown_escape_non_scrict(self):
+        self.assertEqual(arg_parser._split_args('\\a', strict_escapes=False), ['\\a'])
+
+    def test_split_args_tailing_backslash_non_strict(self):
+        self.assertEqual(arg_parser._split_args('\\', strict_escapes=False), ['\\'])
+
+    # handle_typed_argument
+    def test_handle_typed_argument_tuple_converter(self):
+        arg_parser.handle_typed_argument('1', (int, {}))
+
+    def test_handle_typed_argument_unknown_converter(self):
+        def _test(test):
+            return test
+
+        self.assertEqual(arg_parser.handle_typed_argument('1', (_test, {})), '1')
+
+    def test_handle_typed_argument_known_converter(self):
+        self.assertEqual(arg_parser.handle_typed_argument('1h', (datetime.timedelta, {})), datetime.timedelta(hours=1))
+
+    def test_handle_typed_argument_uncallable_unknown_converter(self):
+        try:
+            arg_parser.handle_typed_argument('asd', ('non_existent_converter', {}))
+        except arg_parser.ParserError:
+            return
+        self.fail()
+
+    # check_missing_keys
+    def test_check_missing_keys_empty(self):
+        self.assertEqual(arg_parser.check_required_keys({}, []), [])
+
+    def test_check_missing_keys_missing_required_key(self):
+        self.assertEqual(arg_parser.check_required_keys({}, ['test']), ['test'])
+
+    # _fill_optional_keys
+    def test_fill_optional_keys_empty(self):
+        before = {}
+        new = before.copy()
+        arg_parser._fill_optional_keys(new, {})
+        self.assertEqual(new, before)
+
+    def test_fill_optional_keys_missing_required_key(self):
+        test = {}
+        arg_parser._fill_optional_keys(test, {'test': str})
+        self.assertEqual(test, {'test': ...})
+
+    def test_fill_optional_keys_additional(self):
+        test = {'test': 'test'}
+        arg_parser._fill_optional_keys(test, {'test': str})
+        self.assertEqual(test, {'test': 'test'})
+
+    # _parse_simple_value
+    def test_parse_simple_value_normal(self):
+        self.assertEqual(arg_parser._parse_simple_value('a=b', ['a=b'], 0), ('a', 'b'))
+
+    def test_parse_simple_value_with_space(self):
+        self.assertEqual(arg_parser._parse_simple_value('a=', ['a=', 'b'], 0), ('a', 'b'))
+
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    unittest.main(verbosity=2, warnings='error')
