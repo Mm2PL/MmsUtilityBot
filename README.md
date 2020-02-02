@@ -1,7 +1,7 @@
-#Mm's utility bot
+# Mm's utility bot
 This is a code repository of the [Twitch bot](https://www.twitch.tv/mm_sutilitybot).
 
-#Installing
+# Installing
 
 1. Clone the repo, for example using `git clone https://github.com/Mm2PL/MmsUtilityBot`
 2. Install requirements from `requirements.txt` using pip (`pip install -r requirements.txt`)
