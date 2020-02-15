@@ -53,6 +53,10 @@ except ImportError:
     from plugins.plugin_hastebin import Plugin as PluginHastebin
 
     plugin_hastebin: PluginHastebin
+try:
+    import plugin_plugin_manager as plugin_manager
+except ImportError:
+    import plugins.plugin_manager as plugin_manager
 # noinspection PyUnresolvedReferences
 import twitchirc
 
@@ -67,16 +71,28 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
+    @property
+    def max_nuke(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.max_nuke_setting)
+
+    @property
+    def max_connections(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name] \
+            .get(self.max_connections_setting)
+
     def __init__(self, module, source):
         super().__init__(module, source)
+        # region commands
         self.c_nuke = main.bot.add_command('nuke', required_permissions=['util.nuke'],
-                                           enable_local_bypass=True)(self.c_nuke)
+                                           enable_local_bypass=True, available_in_whispers=False)(self.c_nuke)
         self.c_nuke_url = main.bot.add_command('nuke_url', required_permissions=['util.nuke_url'],
-                                               enable_local_bypass=True)(self.c_nuke_url)
+                                               enable_local_bypass=True, available_in_whispers=False)(self.c_nuke_url)
         self.c_unnuke = main.bot.add_command('unnuke', required_permissions=['util.unnuke'],
-                                             enable_local_bypass=True)(self.c_unnuke)
-        self.max_nuke = 30
+                                             enable_local_bypass=True, available_in_whispers=False)(self.c_unnuke)
+        # endregion
+        # self.max_nuke = 30
 
+        # region help
         plugin_help.create_topic('nuke',
                                  'Timeout or ban in bulk, searches by message. '
                                  'Usage: nuke regex:REGEX [+perma] timeout:TIME search:TIME [+dry-run] [+force]',
@@ -130,9 +146,26 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('unnuke perma',
                                  'Use /unban instead of /untimeout',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('nuke_url dry-run',
+        plugin_help.create_topic('unnuke dry-run',
                                  'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
+        # endregion
+        # region settings
+        self.max_nuke_setting = plugin_manager.Setting(
+            self,
+            'nuke.max_safe',
+            default_value=30,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+        self.max_connections_setting = plugin_manager.Setting(
+            self,
+            'nuke.max_connections',
+            default_value=30,
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
+        # region
         self.connections = []
         self.tasks = []
 
@@ -340,14 +373,23 @@ class Plugin(main.Plugin):
                     reason += f' - {reasons[u]}'
                 timeouts.append(msg.reply(f'/ban {u} {reason}', force_slash=True))
 
-        time_taken = await self._send_using_multiple_connections(msg, timeouts, msg.channel)
-        return (f'@{msg.user}, {"timed out" if not args["perma"] else "banned (!!)"} {len(users)} users. '
-                f'Full list here: {url}, time taken {round(time_taken)}, '
-                f'speed {round(time_taken / len(timeouts)) if timeouts else "N/A"}')
+        number_of_needed_connections = self._calculate_number_of_connections(timeouts)
+        main.bot.send(msg.reply_directly(f'@{msg.user}, {"timing out" if not args["perma"] else "banning"} '
+                                         f'{len(users)} users. This operation will use {number_of_needed_connections} '
+                                         f'connections, at 10 Hz, it will take about {0.1 * len(timeouts)}s, '
+                                         f'please wait patiently '
+                                         f'monkaS'))
 
-    async def _send_using_multiple_connections(self, msg, timeouts, channel):
+        time_taken = await self._send_using_multiple_connections(msg, timeouts, msg.channel,
+                                                                 number_of_needed_connections)
+        return [
+            msg.reply(f'@{msg.user}, {"timed out" if not args["perma"] else "banned (!!)"} {len(users)} users. '
+                      f'Full list here: {url}, time taken {round(time_taken)}, '
+                      f'speed {round(time_taken / len(timeouts)) if timeouts else "N/A"}'),
+        ]
+
+    async def _send_using_multiple_connections(self, msg, timeouts, channel, number_of_needed_connections):
         start_time = time.time()
-        number_of_needed_connections = math.ceil(len(timeouts) / 100)
         conns = []
         for i in range(number_of_needed_connections):
             batch = []
@@ -359,6 +401,12 @@ class Plugin(main.Plugin):
         await asyncio.gather(*conns)
         end_time = time.time()
         return end_time - start_time
+
+    def _calculate_number_of_connections(self, timeouts):
+        number_of_needed_connections = math.ceil(len(timeouts) / 100)
+        if number_of_needed_connections > self.max_connections:
+            number_of_needed_connections = self.max_connections
+        return number_of_needed_connections
 
     async def c_unnuke(self, msg: twitchirc.ChannelMessage):
         try:
