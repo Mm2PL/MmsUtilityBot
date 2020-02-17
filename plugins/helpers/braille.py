@@ -39,7 +39,7 @@ POSITIONS = [
 async def download_image(url: str) -> Image.Image:
     r = requests.get(url, stream=True)
 
-    if int(r.headers.get('Content-Length')) > SIZE_LIMIT:  # 10M
+    if r.headers.get('Content-Length') and int(r.headers.get('Content-Length')) > SIZE_LIMIT:  # 10M
         raise ValueError('Response is over the size limit.')
     img_data = io.BytesIO()
     num = 0
