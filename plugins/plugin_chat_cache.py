@@ -13,16 +13,14 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import asyncio
 import json
 import time
 import typing
 from collections import defaultdict
-from typing import Dict, List, Union, Any
+from typing import Dict
 
 import regex
 import requests
-from twitchirc import ChannelMessage
 
 try:
     # noinspection PyPackageRequirements
@@ -46,7 +44,6 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
-
     cache: Dict[str, typing.List[typing.Tuple[twitchirc.ChannelMessage, float]]]
 
     def __init__(self, module, source):
@@ -69,7 +66,8 @@ class Plugin(main.Plugin):
 
     def _load_recents(self, channel):
         log('info', f'Attempting to fetch recent messages for channel {channel}.')
-        req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}')
+        req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}',
+                           timeout=5)
         try:
             data = req.json()
         except json.decoder.JSONDecodeError as e:
@@ -135,7 +133,7 @@ class Plugin(main.Plugin):
             self.cache[message.channel] = []
         t = None
         if 'tmi-sent-ts' in message.flags:
-            t = int(message.flags['tmi-sent-ts'])/1000
+            t = int(message.flags['tmi-sent-ts']) / 1000
         else:
             t = time.time()
         self.cache[message.channel].append(
