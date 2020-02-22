@@ -63,6 +63,15 @@ class AutorefreshMiddleware(twitchirc.AbstractMiddleware):
         super().__init__()
         self.is_reconnect = False
 
+    def rejoin(self, bot: twitchirc.Bot):
+        chans = bot.channels_connected
+        try:
+            bot.channels_connected = []
+            for ch in chans:
+                bot.join(ch)
+        except:
+            bot.channels_connected = chans
+
     def reconnect(self, event: Event) -> None:
         log('info', 'Received reconnect event.\n'
                     'Attempting token refresh...')
@@ -73,9 +82,6 @@ class AutorefreshMiddleware(twitchirc.AbstractMiddleware):
         self.is_reconnect = True
 
     def connect(self, event: Event) -> None:
-        if self.is_reconnect:
-            self.is_reconnect = False
-            chans = event.source.channels_connected.copy()
-            event.source.channels_connected = []  # reconnecting kicked out of all channels.
-            for ch in chans:
-                event.source.join(ch)
+        event.source.schedule_event(
+            0.1, 1_000, self.rejoin, (event.source,), {}
+        )
