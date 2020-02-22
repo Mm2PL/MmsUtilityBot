@@ -95,7 +95,9 @@ RECONNECTION_MESSAGES = [
     f'Look, this cancerous "feature" is only {file_length} characters',
     f'Look, this cancerous "feature" is only {file_lines} lines',
     'FeelsGoodMan Clap spam',
-    '🅱ing @{ping} PepeS'
+    '🅱ing @{ping} PepeS',
+    'NaM',
+    'Look, I made Mm\'s packets come back PagChomp',
 ]
 
 COOKIE_PATTERN = regex.compile(
@@ -514,8 +516,15 @@ class Plugin(main.Plugin):
         size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
 
         url = args['url']
+        if url.startswith('file://'):
+            return f'@{msg.user}, you can\'t do this BabyRage'
+
         if not url.startswith('http'):
-            emote_found = await plugin_emotes.find_emote(url, channel_id=msg.flags['room-id'])
+            channel_id = None
+            if isinstance(msg, twitchirc.ChannelMessage):
+                channel_id = msg.flags['room-id']
+
+            emote_found = await plugin_emotes.find_emote(url, channel_id=channel_id)
             if emote_found:
                 url = emote_found.url
             else:
