@@ -60,7 +60,7 @@ class Plugin(main.Plugin):
         super().__init__(module, source)
         self.expire_lock = threading.Lock()
         main.bot.schedule_event(0.1, 10, self._post_init, (), {})
-        self.expire_thread = threading.Thread(target=self._periodically_expire, args=(), kwargs={})
+        self.expire_thread = threading.Thread(target=self._periodically_expire, args=(), kwargs={}, daemon=True)
         self.expire_thread.start()
         main.reloadables['blacklist'] = self.reload_blacklist
         decorator = main.bot.add_command('plonk', enable_local_bypass=False, required_permissions=['blacklist.plonk'])
