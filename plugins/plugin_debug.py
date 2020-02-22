@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import builtins
 
 try:
@@ -59,10 +60,7 @@ def command_say(msg: twitchirc.ChannelMessage):
     return msg.text.split(' ', 1)[1]
 
 
-@main.bot.add_command('mb.eval', required_permissions=['util.admin.eval'], enable_local_bypass=False)
-async def command_eval(msg: twitchirc.ChannelMessage):
-    assert msg.user == 'mm2pl' and msg.flags['user-id'] == '117691339', 'no.'
-    code = main.delete_spammer_chrs(msg.text.split(' ', 1)[1])
+def do_eval(code: str, msg: twitchirc.ChannelMessage):
     log('warn', f'Eval from {msg.user}({msg.flags["user-id"]}): {code!r}')
     glob = {name: getattr(builtins, name) for name in dir(builtins)}
     glob.update({
@@ -75,3 +73,11 @@ async def command_eval(msg: twitchirc.ChannelMessage):
         return result
     else:
         return str(result)
+
+
+@main.bot.add_command('mb.eval', required_permissions=['util.admin.eval'], enable_local_bypass=False)
+async def command_eval(msg: twitchirc.ChannelMessage):
+    assert msg.user == 'mm2pl' and msg.flags['user-id'] == '117691339', 'no.'
+    code = main.delete_spammer_chrs(msg.text.split(' ', 1)[1])
+    eval_result = await asyncio.get_event_loop().run_in_executor(None, do_eval, code, msg)
+    return eval_result
