@@ -75,7 +75,8 @@ class Plugin(main.Plugin):
         self.log_level = self.log_levels['debug']
         self.db_log_level = self.log_levels['info']
         self._logger_queue = queue.Queue()
-        self._logger_thread = threading.Thread(target=self._logger_thread_func, args=(self._logger_queue,))
+        self._logger_thread = threading.Thread(target=self._logger_thread_func, args=(self._logger_queue,),
+                                               daemon=True)
         self._logger_thread.start()
         self._logger_thread_stop_lock = threading.Lock()
         self.oauth_pat = regex.compile(
@@ -85,11 +86,9 @@ class Plugin(main.Plugin):
         self._register_atexit()
 
     def _patch_main(self):
-        print('patching logger')
         main.make_log_function = self.create_logger
         main.log = self.create_logger('main')
-        main.print = lambda *args, **kwargs: log('info', *args, **kwargs)
-        print('patched logger')
+        main.print = lambda *args, **kwargs: main.log('info', *args, **kwargs)
 
     @property
     def no_reload(self):
