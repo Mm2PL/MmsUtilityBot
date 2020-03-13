@@ -42,7 +42,7 @@ __meta_data__ = {
 log = main.make_log_function('uptime')
 
 
-@main.bot.add_command('title')
+@main.bot.add_command('title', available_in_whispers=False)
 async def command_title(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('title', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
@@ -56,7 +56,7 @@ async def command_title(msg: twitchirc.ChannelMessage):
             return f'@{msg.user}, eShrug Stream not found.'
 
 
-@main.bot.add_command('uptime')
+@main.bot.add_command('uptime', available_in_whispers=False)
 async def command_uptime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('uptime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
@@ -76,7 +76,7 @@ async def command_uptime(msg: twitchirc.ChannelMessage):
             return f'@{msg.user}, {msg.channel} is not live.'
 
 
-@main.bot.add_command('downtime')
+@main.bot.add_command('downtime', available_in_whispers=False)
 async def command_downtime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('downtime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
