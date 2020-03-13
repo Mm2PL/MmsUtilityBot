@@ -65,6 +65,7 @@ class AutorefreshMiddleware(twitchirc.AbstractMiddleware):
 
     def rejoin(self, bot: twitchirc.Bot):
         chans = bot.channels_connected
+        bot.cap_reqs(False)
         try:
             bot.channels_connected = []
             for ch in chans:
