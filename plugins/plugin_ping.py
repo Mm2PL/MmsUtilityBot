@@ -16,6 +16,7 @@
 
 import datetime
 
+import psutil
 # noinspection PyUnresolvedReferences
 import twitchirc
 
@@ -69,6 +70,9 @@ def _channel_info():
         return ''
 
 
+current_process = psutil.Process()
+
+
 @plugin_help.add_manual_help_using_command('Show that the bot is running, how long has it been running for, '
                                            'the amount of registered commands and if possible how many commands are '
                                            'blacklisted',
@@ -80,6 +84,7 @@ def command_ping_simple(msg: twitchirc.ChannelMessage):
     if cd_state:
         return
     return (f'@{msg.user} PONG! Bot has been running for '
-            f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))}. '
+            f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))} and is using '
+            f'{current_process.memory_info().rss/1_000_000}MB of ram, '
             f'{len(main.bot.commands)} '
             f'commands registered. {_blacklist_info(msg.channel)}{_channel_info()}')
