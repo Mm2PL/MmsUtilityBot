@@ -21,7 +21,9 @@ from typing import Tuple
 import typing
 
 import regex
-from PIL import Image
+from PIL import Image, ImageFilter
+
+NEEDED_FOR_ED = 75
 
 try:
     from utils import arg_parser
@@ -119,9 +121,9 @@ COOLDOWN_TIMEOUT = 1.5
 PRESTIGE_PATTERN = regex.compile('P([1-4]):')
 COOKIE_PRESTIGE_TIMES = {
     0: 2 * 60 * 60,
-    1: 60 * 60,
-    2: 30 * 60,
-    3: 20 * 60,
+    1: 75 * 60,
+    2: 50 * 60,
+    3: 45 * 60,
 
     # 0: '2h',
     # 1: '1h',
@@ -243,53 +245,6 @@ class Plugin(main.Plugin):
         )
         # endregion
 
-        # region Help
-        plugin_help.create_topic('braillefy url',
-                                 'URL pointing to image you want to convert.',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('braillefy reverse',
-                                 'Should the output braille be reversed.',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('braillefy sensitivity',
-                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha)',
-                                 section=plugin_help.SECTION_ARGS,
-                                 links=[
-                                     'braillefy sensitivity_r',
-                                     'braillefy sensitivity_g',
-                                     'braillefy sensitivity_b',
-                                     'braillefy sensitivity_a'
-                                 ])
-
-        plugin_help.create_topic('braillefy size',
-                                 'Size of the image. Defaults: max_x = 60, pad_y = 60, '
-                                 'size_percent=[undefined]. max_x, pad_y are in pixels.',
-                                 section=plugin_help.SECTION_ARGS,
-                                 links=[
-                                     'braillefy size_percent',
-                                     'braillefy max_x',
-                                     'braillefy pad_y',
-                                 ])
-
-        plugin_help.create_topic('plugin_cancer',
-                                 'Plugin dedicated to things that shouldn\'t be done '
-                                 '(responding to messages other than commands, spamming).',
-                                 section=plugin_help.SECTION_MISC,
-                                 links=[
-                                     'plugin_cancer.py',
-                                     'cancer'
-                                 ])
-
-        plugin_help.create_topic('+ed',
-                                 'The `cancer` plugin sends a message containing +ed every five minutes to '
-                                 'activate HuwoBot.',
-                                 section=plugin_help.SECTION_MISC,
-                                 links=[
-                                     'ed',
-                                     'enterdungeon',
-                                     '+enterdungeon'
-                                 ])
-        # endregion
-
         # region Schedule events
         main.bot.schedule_event(0.1, 1, self._enter_dungeon, (), {})
         main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
@@ -297,21 +252,12 @@ class Plugin(main.Plugin):
 
         # region Register commands
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
-        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
-                                                  'cookies', None)(self.c_cookie_optin)
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
-        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
-                                                  'Usage: pyramid <size> <text...>',
-                                                  None)(self.command_pyramid)
 
         self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
                                                       required_permissions=['cancer.braille'])(self.c_braillefy)
-        plugin_help.add_manual_help_using_command('Convert an image into braille. '
-                                                  'Usage: braillefy url:URL [+reverse] '
-                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
-                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
-                                                  None)(self.command_braillefy)
+
         # region Fake Commands
         self._honeydetected = main.bot.add_command('honydetected reconnected')(self._honeydetected)
         self._honeydetected.matcher_function = (
@@ -346,12 +292,76 @@ class Plugin(main.Plugin):
             )
         )
         self._ps_sneeze_init = main.bot.add_command('ps sneeze init')(self._ps_sneeze_init)
+        self._ps_sneeze_init.limit_to_channels = ['supinic', 'mm2pl']
         self._ps_sneeze_init.matcher_function = (
             lambda msg, cmd: (
-                    msg.text.startswith('$ps sneeze') and msg.channel in ['supinic', 'mm2pl']
+                msg.text.startswith('$ps sneeze')
+            )
+        )
+        self.c_asd = main.bot.add_command('asd')(self.c_asd)
+        self.c_asd.limit_to_channels = ['simon36']
+        self.c_asd.matcher_function = (
+            lambda msg, cmd: (
+                msg.text.startswith('asd')
             )
         )
         # endregion
+        # endregion
+
+        # region Help
+        plugin_help.create_topic('braillefy url',
+                                 'URL pointing to image you want to convert.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy reverse',
+                                 'Should the output braille be reversed.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy sensitivity',
+                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha)',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy sensitivity_r',
+                                     'braillefy sensitivity_g',
+                                     'braillefy sensitivity_b',
+                                     'braillefy sensitivity_a'
+                                 ])
+        plugin_help.create_topic('braillefy size',
+                                 'Size of the image. Defaults: max_x = 60, pad_y = 60, '
+                                 'size_percent=[undefined]. max_x, pad_y are in pixels.',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'braillefy size_percent',
+                                     'braillefy max_x',
+                                     'braillefy pad_y',
+                                 ])
+
+        plugin_help.create_topic('plugin_cancer',
+                                 'Plugin dedicated to things that shouldn\'t be done '
+                                 '(responding to messages other than commands, spamming).',
+                                 section=plugin_help.SECTION_MISC,
+                                 links=[
+                                     'plugin_cancer.py',
+                                     'cancer'
+                                 ])
+
+        plugin_help.create_topic('+ed',
+                                 'The `cancer` plugin has a chance to send a message containing +ed every thirty '
+                                 'minutes to activate HuwoBot.',
+                                 section=plugin_help.SECTION_MISC,
+                                 links=[
+                                     'ed',
+                                     'enterdungeon',
+                                     '+enterdungeon'
+                                 ])
+        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
+                                                  'cookies', None)(self.c_cookie_optin)
+        plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
+                                                  'Usage: pyramid <size> <text...>',
+                                                  None)(self.command_pyramid)
+        plugin_help.add_manual_help_using_command('Convert an image into braille. '
+                                                  'Usage: braillefy url:URL [+reverse] '
+                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
+                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
+                                                  None)(self.command_braillefy)
         # endregion
 
     def _enter_dungeon(self):
@@ -359,10 +369,18 @@ class Plugin(main.Plugin):
             return
         if time.time() < self.next_ed_time:
             return
+        rand = random.randint(1, 100)
+        if rand < NEEDED_FOR_ED:
+            msg = twitchirc.ChannelMessage(f'info: skipping entering dungeon, rolled {rand}, '
+                                           f'needed at least {NEEDED_FOR_ED}',
+                                           main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
+            main.bot.send(msg)
+            return
+
         msg = twitchirc.ChannelMessage('+ed', main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
         main.bot.send(msg)
         log('info', 'Queued enter dungeon message :)')
-        self.next_ed_time = time.time() + 10 * 60 + 1
+        self.next_ed_time = time.time() + 30 * 60 + 1
 
     async def _ps_sneeze_init(self, msg: twitchirc.ChannelMessage):
         self._sneeze = (time.time() + self.cooldown_timeout, msg)
@@ -472,6 +490,9 @@ class Plugin(main.Plugin):
             for i in range(size, 0, -1):
                 main.bot.send(msg.reply(args * i))
 
+    def c_asd(self, msg):
+        return 'NaM !!!'
+
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         cd_state = main.do_cooldown('braille', global_cooldown=0, local_cooldown=60, msg=msg)
         if cd_state:
@@ -487,7 +508,8 @@ class Plugin(main.Plugin):
                 'max_y': int,
                 'pad_y': int,
                 'reverse': bool,
-                'hastebin': bool
+                'hastebin': bool,
+                'sobel': bool
             }, strict_escapes=True, strict_quotes=True)
         except arg_parser.ParserError as e:
             return f'Error: {e.message}'
@@ -526,7 +548,7 @@ class Plugin(main.Plugin):
 
             emote_found = await plugin_emotes.find_emote(url, channel_id=channel_id)
             if emote_found:
-                url = emote_found.url
+                url = emote_found.get_url('3x')
             else:
                 return f'@{msg.user}, Invalid url, couldn\'t find an emote matching this.'
 
@@ -541,6 +563,8 @@ class Plugin(main.Plugin):
                                                       (60,
                                                        args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
                                                       size_percent)
+            if args['sobel'] is not ... and args['sobel']:
+                img = img.filter(ImageFilter.FIND_EDGES)
             o += await braille.to_braille_from_image(img,
                                                      reverse=True if args['reverse'] is not Ellipsis else False,
                                                      size_percent=size_percent,
@@ -568,7 +592,20 @@ class Plugin(main.Plugin):
                     frame += 1
                     o += f'\nFrame {frame}\n'
                     frame_start = time.time()
-                    o += await braille.to_braille_from_image(img.copy(),
+                    new_img, _ = await braille.crop_and_pad_image(True,
+                                                                  img.copy(),
+                                                                  max_x,
+                                                                  max_y,
+                                                                  '',
+                                                                  (60,
+                                                                   args['pad_y'] if args[
+                                                                                        'pad_y'] is not Ellipsis else
+                                                                   60),
+                                                                  size_percent)
+                    if args['sobel'] is not ... and args['sobel']:
+                        new_img = new_img.filter(ImageFilter.FIND_EDGES)
+
+                    o += await braille.to_braille_from_image(new_img,
                                                              reverse=True if args['reverse'] is not Ellipsis else False,
                                                              size_percent=size_percent,
                                                              max_x=max_x,
@@ -578,7 +615,7 @@ class Plugin(main.Plugin):
                                                              pad_size=(60,
                                                                        (args['pad_y'] if args['pad_y'] is not Ellipsis
                                                                         else 60)),
-                                                             enable_processing=True)
+                                                             enable_processing=False)
                     time_taken = round(time.time() - start_time)
                     frame_time = time.time() - frame_start
                     if frame_time > 1:
@@ -586,9 +623,14 @@ class Plugin(main.Plugin):
 
                     if frame % self.status_every_frames == 0 and time_taken > self.time_before_status:
                         speed = round(1 / frame_time, 1)
-                        main.bot.send(msg.reply(f'@{msg.user}, ppCircle Converted {frame} frames in '
-                                                f'{time_taken} seconds, speed: {speed} fps, '
-                                                f'eta: {(img.n_frames - frame) * speed} seconds.'))
+                        speed_msg = (f'@{msg.user}, Converted {frame} frames in '
+                                     f'{time_taken} seconds, speed: {speed} fps, '
+                                     f'eta: {(img.n_frames - frame) * speed} seconds.')
+                        if main.check_spamming_allowed(msg.channel):
+                            main.bot.send(msg.reply(speed_msg))
+                        else:
+                            if frame % (self.status_every_frames * 2) == 0:
+                                main.bot.send(msg.reply_directly(speed_msg))
                         await asyncio.sleep(0)
 
         sendable = ' '.join(o.split('\n')[1:])
