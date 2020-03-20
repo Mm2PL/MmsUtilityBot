@@ -89,6 +89,48 @@ class Plugin(main.Plugin):
         main.reloadables['mailbox_channels'] = self._reload_channels
         main.bot.schedule_event(0.1, 10, self._reload_channels, (), {})  # load channels
 
+        plugin_help.create_topic('mailbox', 'Manage the mailbox game. Subcommands: mailbox start, '
+                                            'mailbox stop, mailbox draw', section=plugin_help.SECTION_COMMANDS)
+
+        plugin_help.create_topic('mailbox stop',
+                                 'Stop accepting new guesses into the minigame',
+                                 section=plugin_help.SECTION_ARGS)
+
+        plugin_help.create_topic('mailbox draw',
+                                 'Draw winner(s) of the minigame. Syntax: mailbox draw NN NN NN, '
+                                 'where NN is a number, numbers need to be separated by spaces, '
+                                 'they don\'t need leading zeros',
+                                 section=plugin_help.SECTION_ARGS)
+
+        plugin_help.create_topic('mailbox start',
+                                 'Start the mailbox minigame. Possible arguments are guesses, '
+                                 'plebs, subs, mods, vips, '
+                                 'find_best, help is at "mailbox start ARGUMENT"',
+                                 section=plugin_help.SECTION_ARGS)
+
+        plugin_help.create_topic('mailbox start plebs',
+                                 'Should plebs (non-subs) be allowed to guess, Use -plebs to disallow plebs to guess. '
+                                 'Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start guesses',
+                                 'How many guesses should people have. Use guesses:NUMBER to change. Default: 1.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start subs',
+                                 'Should subs be allowed to guess. Use -subs to disallow subs to guess. '
+                                 'Broadcaster can vote if this argument or the mods argument is true. Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start mods',
+                                 'Should mods be allowed to guess. Use -mods to disallow mods to guess'
+                                 'Broadcaster can vote if this argument or the subs argument is true. Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start vip',
+                                 'Should vip be allowed to guess. Use -vip to disallow mods to guess. Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start find_best',
+                                 'Should the best matches be shown. If false only shows full matches. '
+                                 'Use -find_best to disable that behaviour. Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+
     def _reload_channels(self):
         self.command_mailbox.limit_to_channels = []
         for channel, settings in plugin_manager.channel_settings.items():
