@@ -105,7 +105,7 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('mailbox start',
                                  'Start the mailbox minigame. Possible arguments are guesses, '
                                  'plebs, subs, mods, vips, '
-                                 'find_best, help is at "mailbox start ARGUMENT"',
+                                 'find_best, winners. Help for these is at "mailbox start ARGUMENT"',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('mailbox start plebs',
@@ -129,6 +129,10 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('mailbox start find_best',
                                  'Should the best matches be shown. If false only shows full matches. '
                                  'Use -find_best to disable that behaviour. Default: true',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start winners',
+                                 'Highest amount of names shown when drawing winner(s)'
+                                 'Use winners:NUMBER to change this number. Default: 3',
                                  section=plugin_help.SECTION_ARGS)
 
     def _reload_channels(self):
