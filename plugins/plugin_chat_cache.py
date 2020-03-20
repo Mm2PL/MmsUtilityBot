@@ -66,8 +66,11 @@ class Plugin(main.Plugin):
 
     def _load_recents(self, channel):
         log('info', f'Attempting to fetch recent messages for channel {channel}.')
-        req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}',
-                           timeout=5)
+        try:
+            req = requests.get(f'https://recent-messages.robotty.de/api/v2/recent-messages/{channel}',
+                               timeout=5)
+        except:
+            return
         try:
             data = req.json()
         except json.decoder.JSONDecodeError as e:
