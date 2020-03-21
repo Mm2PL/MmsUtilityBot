@@ -123,8 +123,8 @@ class Plugin(main.Plugin):
                                  'Should mods be allowed to guess. Use -mods to disallow mods to guess'
                                  'Broadcaster can vote if this argument or the subs argument is true. Default: true',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('mailbox start vip',
-                                 'Should vip be allowed to guess. Use -vip to disallow mods to guess. Default: true',
+        plugin_help.create_topic('mailbox start vips',
+                                 'Should vip be allowed to guess. Use -vips to disallow vips to guess. Default: true',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start find_best',
                                  'Should the best matches be shown. If false only shows full matches. '
@@ -162,9 +162,9 @@ class Plugin(main.Plugin):
         return output
 
     def command_mailbox(self, msg: twitchirc.ChannelMessage):
-        argv = msg.text.split(' ', 2)
+        argv = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 2)
         if len(argv) == 1:
-            return plugin_help.find_topic('mailbox')
+            return plugin_help.find_topic('mailbox') + ' For full help see the help command.'
         action = argv[1]
         if action == 'start':
             return self._mailbox_start(argv, msg)
