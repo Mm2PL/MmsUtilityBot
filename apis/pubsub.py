@@ -134,12 +134,17 @@ class PubsubClient:
                 break
 
     async def _run(self):
+        is_reconnect = False
         while 1:
             last_pong = time.time() + 20
             async with websockets.connect('wss://pubsub-edge.twitch.tv') as ws:
                 print('Connected to pubsub')
                 sender_task = asyncio.create_task(self._sender(self.send_queue, ws))
                 pinger_task = asyncio.create_task(self._pinger(self.send_queue))
+                if is_reconnect:
+                    topics = self.topics.copy()
+                    self.listen(topics)
+                is_reconnect = True
                 while 1:
                     try:
                         recved_msg = await asyncio.wait_for(ws.recv(), timeout=5)
