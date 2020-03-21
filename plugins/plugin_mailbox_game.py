@@ -258,7 +258,7 @@ class Plugin(main.Plugin):
                 return settings['subs'] or settings['mods']
             elif grp in 'subscriber':
                 return settings['subs']
-            elif grp == ('moderator', 'staff'):
+            elif grp in ('moderator', 'staff'):
                 return settings['mods']
             else:
                 return False
