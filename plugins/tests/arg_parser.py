@@ -27,9 +27,11 @@ except ImportError:
 class Test(TestCase):
     # general tests
     def test_parse_args_unknown(self):
-        # ignore unknown
-        output = arg_parser.parse_args('this is a simple test', args_types={})
-        self.assertEqual(output, {})
+        try:
+            arg_parser.parse_args('this is a simple test', args_types={})
+        except arg_parser.ParserError:
+            return
+        self.fail()
 
     def test_parse_args_bool_not_specified(self):
         try:
@@ -41,6 +43,10 @@ class Test(TestCase):
     def test_parse_args_bool_specified(self):
         output = arg_parser.parse_args('+test', args_types={'test': bool})
         self.assertEqual(output, {'test': True})
+
+    def test_parse_args_positional(self):
+        output = arg_parser.parse_args('argument', args_types={0: str})
+        self.assertEqual(output, {0: 'argument'})
 
     # converters
     def test_parse_args_str(self):

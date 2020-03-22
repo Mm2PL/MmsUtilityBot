@@ -30,27 +30,52 @@ class ParserError(ValueError):
         return f'ParserError: {self.message}'
 
 
-def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False):
+POSITIONAL = -1
+
+
+def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False, no_arg_fill=False,
+               ignore_arg_zero=True):
     args = {}
+    current_positional = 0
     argv = _split_args(text, strict_escapes=strict_escapes, strict_quotes=strict_quotes)
     for num, token in enumerate(argv.copy()):
+        if num == 0 and ignore_arg_zero:
+            continue
         if ':' in token or '=' in token:
             k, v = _parse_simple_value(token, argv, num)
             if k in args:
                 raise ParserError(f'Duplicate argument: {k}')
             args[k] = v
-        elif token.startswith('+'):
-            if token.lstrip('+') in args:
-                raise ParserError(f'Duplicate argument: {token.lstrip("+")}')
-            args[token.lstrip('+')] = True
-        elif token.startswith('-'):
-            if token.lstrip('-') in args:
-                raise ParserError(f'Duplicate argument: {token.lstrip("-")}')
-            args[token.lstrip('-')] = False
+        elif token.startswith(('-', '+')):
+            if token.startswith('-'):
+                arg_key = token.lstrip("-")
+                val = False
+                if token.startswith('--'):
+                    val = True
+            else:
+                arg_key = token.lstrip('+')
+                val = True
+
+            if arg_key in args:
+                raise ParserError(f'Duplicate argument: {arg_key}')
+            if arg_key not in args_types:
+                raise ParserError(f'Unknown argument: {arg_key}')
+
+            if args_types[arg_key] is not bool:
+                raise ParserError(f'Cannot use argument {arg_key} as [+-]{arg_key}, type of {arg_key} is not boolean.')
+
+            args[arg_key] = val
+        else:
+            if current_positional in args_types or POSITIONAL in args_types:
+                args[current_positional] = token
+                current_positional += 1
+            else:
+                raise ParserError(f'Unexpected positional argument {current_positional}: {token!r}')
 
     _parse_non_string_args(args, args_types)  # args is modified
 
-    _fill_optional_keys(args, args_types)  # args is modified
+    if not no_arg_fill:
+        _fill_optional_keys(args, args_types)  # args is modified
     return args
 
 
@@ -128,7 +153,11 @@ def _parse_non_string_args(args, args_types):
             type_ = args_types[key]
             args[key] = handle_typed_argument(value, (type_, {}))
         else:
-            raise ParserError(f'Unexpected argument: {key}')
+            if isinstance(key, int) and POSITIONAL in args_types:
+                type_ = args_types[POSITIONAL]
+                args[key] = handle_typed_argument(value, (type_, {}))
+            else:
+                raise ParserError(f'Unexpected argument: {key}')
 
 
 TIMEDELTA_REGEX = regex.compile(r'(?:(?P<years>\d+)y(?:ears?)?)?'
@@ -171,7 +200,6 @@ def _time_converter(converter, options, value):
 
 def _regex_converter(converter, options, value):
     if 'regex' in options:
-        # noinspection PyProtectedMember
         if isinstance(options['regex'], (str, bytes)):
             pat = regex.compile(options['regex'])
         elif hasattr(options['regex'], 'pattern'):
@@ -227,5 +255,5 @@ def check_required_keys(args, required):
 
 def _fill_optional_keys(args, arg_types):
     for a in arg_types:
-        if a not in args:
+        if a not in args and a != POSITIONAL:
             args[a] = Ellipsis
