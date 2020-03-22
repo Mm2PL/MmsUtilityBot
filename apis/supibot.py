@@ -20,8 +20,9 @@ import aiohttp
 
 
 class ApiError(Exception):
-    def __init__(self, message):
+    def __init__(self, message, data):
         self.message = message
+        self.data = data
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.message!r})'
@@ -78,10 +79,10 @@ class SupibotApi:
 
         if schedule is not None:
             params['schedule'] = schedule.isoformat()
-        async with self.request('post /bot/reminder', params=params) as r:
+        async with (await self.request('post /bot/reminder', params=params)) as r:
             if r.status == 200:
                 data = await r.json()
                 return data['data']['reminderID']
             else:
-                print(await r.content)
-                raise ApiError(f'API returned non 200 status code: {r.status}')
+                print(r.content)
+                raise ApiError(f'API returned non 200 status code: {r.status}', await r.text())
