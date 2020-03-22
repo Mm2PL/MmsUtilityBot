@@ -25,7 +25,7 @@ except ImportError:
 
 
 class Test(TestCase):
-    # general tests
+    # region general tests
     def test_parse_args_unknown(self):
         try:
             arg_parser.parse_args('this is a simple test', args_types={})
@@ -35,7 +35,8 @@ class Test(TestCase):
 
     def test_parse_args_bool_not_specified(self):
         try:
-            arg_parser.parse_args('+test', args_types={})
+            output = arg_parser.parse_args('+test', args_types={})
+            print(output)
         except arg_parser.ParserError:
             return
         self.fail()
@@ -43,12 +44,63 @@ class Test(TestCase):
     def test_parse_args_bool_specified(self):
         output = arg_parser.parse_args('+test', args_types={'test': bool})
         self.assertEqual(output, {'test': True})
+        output = arg_parser.parse_args('-test', args_types={'test': bool})
+        self.assertEqual(output, {'test': False})
+        output = arg_parser.parse_args('--test', args_types={'test': bool})
+        self.assertEqual(output, {'test': True})
 
+    def test_parse_args_bool_bad_type(self):
+        try:
+            arg_parser.parse_args('+test', {'test': str})
+        except:
+            pass
+        else:
+            self.fail()
+
+    # region positionals
     def test_parse_args_positional(self):
-        output = arg_parser.parse_args('argument', args_types={0: str})
+        output = arg_parser.parse_args('argument', args_types={0: str}, ignore_arg_zero=False)
         self.assertEqual(output, {0: 'argument'})
 
-    # converters
+    def test_parse_args_positional_non_string(self):
+        output = arg_parser.parse_args('1.2', args_types={arg_parser.POSITIONAL: float},
+                                       ignore_arg_zero=False)
+        self.assertEqual(output, {0: 1.2})
+
+    # endregion
+    # region defaults
+    def test_parse_args_defaults(self):
+        output = arg_parser.parse_args('', {'test': bool}, defaults={
+            'test': False
+        })
+        try:
+            self.assertEqual(output['test'], False)
+        except KeyError:
+            self.fail()
+
+    def test_parse_args_defaults_used(self):
+        output = arg_parser.parse_args('+test', {'test': bool}, defaults={
+            'test': False
+        })
+
+        try:
+            self.assertEqual(output['test'], True)
+        except KeyError:
+            self.fail()
+
+    def test_parse_args_defaults_no_type(self):
+        try:
+            arg_parser.parse_args('', {}, defaults={'test': 'test 123'})
+        except ValueError:
+            pass
+        else:
+            self.fail()
+
+    # endregion
+
+    # endregion
+
+    # region converters
     def test_parse_args_str(self):
         output = arg_parser.parse_args('test=value', args_types={'test': str})
         self.assertEqual(output, {'test': 'value'})
@@ -110,6 +162,7 @@ class Test(TestCase):
         else:
             self.fail()
 
+    # region time
     def test_converter_timedelta_single(self):
         self.assertEqual(arg_parser._time_converter(datetime.timedelta, {}, '1s'),
                          datetime.timedelta(seconds=1))
@@ -123,6 +176,44 @@ class Test(TestCase):
                          datetime.timedelta(seconds=60 * 60 * 24 * 7))
         self.assertEqual(arg_parser._time_converter(datetime.timedelta, {}, '1y'),
                          datetime.timedelta(seconds=60 * 60 * 24 * 365))
+
+    def test_converter_timedelta_custom_regex(self):
+        self.assertEqual(
+            arg_parser._time_converter(
+                datetime.timedelta,
+                {
+                    'regex': r'(?P<seconds>0)(?P<minutes>0)(?P<hours>0)(?P<days>0)'
+                             r'(?P<weeks>0)(?P<years>1)'
+                }, '000001'
+            ),
+            datetime.timedelta(seconds=60 * 60 * 24 * 365))
+
+    def test_converter_timedelta_custom_regex_no_match(self):
+        try:
+            arg_parser._time_converter(
+                datetime.timedelta,
+                {
+                    'regex': r'(?P<seconds>0)(?P<minutes>0)(?P<hours>0)(?P<days>0)'
+                             r'(?P<weeks>0)(?P<years>1)'
+                },
+                '000002'
+            )
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
+
+    def test_converter_timedelta_no_match(self):
+        try:
+            print(arg_parser._time_converter(
+                datetime.timedelta,
+                {},
+                'test'
+            ))
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
 
     def test_converter_timedelta_multiple(self):
         self.assertEqual(arg_parser._time_converter(datetime.timedelta, {}, '1m1s'),
@@ -148,6 +239,18 @@ class Test(TestCase):
                                                     now.strftime('%Y-%m-%d %H:%M:%S')),
                          now)
 
+    def test_converter_datetime_no_match(self):
+        now = datetime.datetime.fromtimestamp(round(datetime.datetime.now().timestamp()))
+        try:
+            arg_parser._time_converter(datetime.datetime, {'format': '%H %M %S'},
+                                                    now.strftime('%Y-%m-%d %H:%M:%S'))
+        except arg_parser.ParserError:
+            pass
+        else:
+            self.fail()
+
+    # endregion
+    # region regex
     def test_converter_regex(self):
         test_string = 'this is a test'
         result = arg_parser._regex_converter('regex', {
@@ -188,7 +291,10 @@ class Test(TestCase):
             return
         self.fail()
 
-    # split test
+    # endregion
+    # endregion
+
+    # region split test
     def test_split_args(self):
         self.assertEqual(arg_parser._split_args('this is a simple test'), ['this', 'is', 'a', 'simple', 'test'])
 
@@ -234,7 +340,9 @@ class Test(TestCase):
     def test_split_args_tailing_backslash_non_strict(self):
         self.assertEqual(arg_parser._split_args('\\', strict_escapes=False), ['\\'])
 
-    # handle_typed_argument
+    # endregion
+
+    # region handle_typed_argument
     def test_handle_typed_argument_tuple_converter(self):
         arg_parser.handle_typed_argument('1', (int, {}))
 
@@ -254,14 +362,18 @@ class Test(TestCase):
             return
         self.fail()
 
-    # check_missing_keys
+    # endregion
+
+    # region check_missing_keys
     def test_check_missing_keys_empty(self):
         self.assertEqual(arg_parser.check_required_keys({}, []), [])
 
     def test_check_missing_keys_missing_required_key(self):
         self.assertEqual(arg_parser.check_required_keys({}, ['test']), ['test'])
 
-    # _fill_optional_keys
+    # endregion
+
+    # region _fill_optional_keys
     def test_fill_optional_keys_empty(self):
         before = {}
         new = before.copy()
@@ -278,12 +390,15 @@ class Test(TestCase):
         arg_parser._fill_optional_keys(test, {'test': str})
         self.assertEqual(test, {'test': 'test'})
 
-    # _parse_simple_value
+    # endregion
+
+    # region _parse_simple_value
     def test_parse_simple_value_normal(self):
         self.assertEqual(arg_parser._parse_simple_value('a=b', ['a=b'], 0), ('a', 'b'))
 
     def test_parse_simple_value_with_space(self):
         self.assertEqual(arg_parser._parse_simple_value('a=', ['a=', 'b'], 0), ('a', 'b'))
+    # endregion
 
 
 if __name__ == '__main__':

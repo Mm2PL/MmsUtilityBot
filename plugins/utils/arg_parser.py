@@ -34,13 +34,11 @@ POSITIONAL = -1
 
 
 def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False, no_arg_fill=False,
-               ignore_arg_zero=True):
+               ignore_arg_zero=True, defaults=None):
     args = {}
     current_positional = 0
     argv = _split_args(text, strict_escapes=strict_escapes, strict_quotes=strict_quotes)
     for num, token in enumerate(argv.copy()):
-        if num == 0 and ignore_arg_zero:
-            continue
         if ':' in token or '=' in token:
             k, v = _parse_simple_value(token, argv, num)
             if k in args:
@@ -70,12 +68,19 @@ def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=F
                 args[current_positional] = token
                 current_positional += 1
             else:
-                raise ParserError(f'Unexpected positional argument {current_positional}: {token!r}')
+                if num != 0 or not ignore_arg_zero:
+                    raise ParserError(f'Unexpected positional argument {current_positional}: {token!r}')
 
     _parse_non_string_args(args, args_types)  # args is modified
-
-    if not no_arg_fill:
-        _fill_optional_keys(args, args_types)  # args is modified
+    if defaults is not None:
+        for k, v in defaults.items():
+            if k not in args_types:
+                raise ValueError(f'Argument {k} has a default, but no type in arg_types.')
+            if k not in args:
+                args[k] = v
+    else:
+        if not no_arg_fill:
+            _fill_optional_keys(args, args_types)  # args is modified
     return args
 
 
@@ -160,12 +165,12 @@ def _parse_non_string_args(args, args_types):
                 raise ParserError(f'Unexpected argument: {key}')
 
 
-TIMEDELTA_REGEX = regex.compile(r'(?:(?P<years>\d+)y(?:ears?)?)?'
+TIMEDELTA_REGEX = regex.compile(r'^(?:(?P<years>\d+)y(?:ears?)?)?'
                                 r'(?:(?P<weeks>\d+)w(?:weeks?)?)?'
                                 r'(?:(?P<days>\d+)d(?:ays?)?)?'
                                 r'(?:(?P<hours>[0-5]?\d)h(?:ours?)?)?'
                                 r'(?:(?P<minutes>[0-5]?\d)m(?:inutes?)?)?'
-                                r'(?:(?P<seconds>[0-5]?\d)s(?:econds?)?)?')
+                                r'(?:(?P<seconds>[0-5]?\d)s(?:econds?)?)?$')
 
 
 def _time_converter(converter, options, value):
