@@ -70,7 +70,10 @@ def get(Base, session_scope, all_settings):
         def update(self):
             self._export()
 
-        def get(self, setting_name) -> typing.Any:
+        def get(self, setting_name, force_unknown=False) -> typing.Any:
+            if force_unknown:
+                return self._settings[setting_name]
+
             setting = Setting.find(setting_name)
             if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
                 raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
@@ -80,7 +83,11 @@ def get(Base, session_scope, all_settings):
             else:
                 return setting.default_value
 
-        def set(self, setting_name, value) -> None:
+        def set(self, setting_name, value, force_unknown=False) -> None:
+            if force_unknown:
+                self._settings[setting_name] = value
+                return
+
             setting = Setting.find(setting_name)
             if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
                 raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')

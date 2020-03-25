@@ -28,8 +28,6 @@ import re
 import traceback
 from typing import Dict
 
-import dill as dill
-import sqlalchemy.ext.declarative
 import twitchirc
 from twitchirc import Event
 
@@ -39,6 +37,13 @@ except ImportError:
     import util_bot as main
 
     exit()
+try:
+    import plugin_plugin_manager as plugin_manager
+except ImportError:
+    if typing.TYPE_CHECKING:
+        import plugins.plugin_manager as plugin_manager
+    else:
+        raise
 __meta_data__ = {
     'name': 'plugin_ipc',
     'commands': []
@@ -455,6 +460,39 @@ def _command_get_user_name(sock: socket.socket, msg: str, socket_id):
 
     t = threading.Thread(target=_fetch_user, args=(response_write_queues[socket_id],))
     t.start()
+
+
+@add_command('reload_settings')
+def _command_reload_settings(sock: socket.socket, msg: str, socket_id):
+    _, channel = msg.replace('\n', '').replace('\r\n', '').split(' ', 1)
+    user = main.User.get_by_local_id(int(channel))
+    print(user, user.last_known_username)
+    if user.last_known_username not in plugin_manager.channel_settings:
+        response_write_queues[socket_id].put(
+            b'!2\r\n'
+            b'~A user with this ID is not known to this bot.'
+            +
+            format_json({
+                'type': 'error',
+                'source': 'reload_settings',
+                'message': 'A user with this ID is not known to this bot.'
+            })
+        )
+    else:
+        del plugin_manager.channel_settings[user.last_known_username]
+        with main.session_scope() as session:
+            settings = (session.query(plugin_manager.ChannelSettings)
+                        .filter(plugin_manager.ChannelSettings.channel_alias == user.id)
+                        .first())
+            settings.fill_defaults(forced=False)
+            settings.update()
+        response_write_queues[socket_id].put(
+            format_json({
+                'type': 'reload_update',
+                'source': 'reload_settings',
+                'message': 'Reloaded settings for channel!'
+            })
+        )
 
 
 print(commands)

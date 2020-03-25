@@ -13,19 +13,23 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import base64
 import contextlib
 import html
 import importlib.util
 import inspect
+import json
 import sys
 import textwrap
 import time
+import traceback
 from typing import Dict, Any, Callable, Union, List
 import os
 import typing
 
 import regex
-from flask import Flask, jsonify
+import requests
+from flask import Flask, jsonify, abort, redirect, request, Response, session
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -41,6 +45,20 @@ if 'DBADDR' in os.environ:
 else:
     raise RuntimeError('Set the DBADDR envirionment variable to the base address.\n'
                        'mysql+pymysql://USERNAME:PASSWORD@HOST/DBNAME')
+
+
+def load_secrets():
+    global secrets
+    with open('web_secrets.json', 'r') as f:
+        secrets = json.load(f)
+    return secrets
+
+
+def save_secrets():
+    with open('web_secrets.json', 'w') as f:
+        json.dump(secrets, f)
+
+
 Base = declarative_base()
 db_engine = create_engine(base_address)
 Session = sessionmaker(bind=db_engine)
@@ -171,8 +189,23 @@ def register_endpoint(*paths):
     aliases[paths[0]] = paths[1:]
 
     def _decorator(func):
+        def _decorated_func(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                if app.debug:
+                    raise
+                traceback.print_exc()
+                resp: app.response_class = jsonify({
+                    'status': 500,
+                    'message': f'Internal server error occurred, something 🅱roke',
+                })
+                resp.status_code = 500
+                abort(resp)
+
+        _decorated_func.__name__ = func.__name__  # 4HEad
         for path in paths:
-            app.route(path)(func)
+            app.route(path)(_decorated_func)
         api_endpoints[paths[0]] = func
         api_docs[paths[0]] = _parse_docs(func.__doc__, func, paths[0])
         return func
@@ -246,6 +279,131 @@ def test():
     return 'KKaper Test successful KKaper'
 
 
+@register_endpoint('/twitch_login')
+def twitch_login_redirect():
+    """Redirects to the login url for Twitch"""
+    state = base64.b64encode(json.dumps({
+        'redirect_to': request.args.get('redirect_to', None)
+    }).encode())
+    return redirect(f'https://id.twitch.tv/oauth2/authorize'
+                    f'?client_id={secrets["app_id_twitch"]}'
+                    f'&redirect_uri={secrets["app_redirect_twitch"]}'
+                    f'&response_type=code'
+                    f'&scope='
+                    f'&state={state.decode()}')
+
+
+def refresh_oauth_token(refresh_token):
+    with requests.request('post', 'https://id.twitch.tv/oauth2/token', params={
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+        'client_id': secrets['app_id_twitch'],
+        'client_secret': secrets['app_secret_twitch'],
+    }) as r:
+        if r.status_code != 400:
+            return {
+
+            }
+        new_data = r.json()
+        return {
+            'access_token': new_data['access_token'],
+            'refresh_token': new_data['refresh_token']
+        }
+
+
+def validate_oauth_token(access_token: str, refresh_token: str,
+                         try_refresh: bool = False) -> typing.Optional[dict]:
+    with requests.request('get', 'https://id.twitch.tv/oauth2/validate', headers={
+        'Authorization': f'OAuth {access_token}'
+    }) as r:
+        if r.status_code == 400:
+            if try_refresh:
+                new_data = refresh_oauth_token(refresh_token)
+                access_token = new_data['access_token']
+                refresh_token = new_data['refresh_token']
+                return validate_oauth_token(access_token, refresh_token)
+        data = r.json()
+        data['access_token'] = access_token
+        data['refresh_token'] = refresh_token
+        return data
+
+
+@register_endpoint('/twitch_logged_in')
+def twitch_logged_in():
+    """Users will get redirected here if the Twitch auth was successful."""
+    code = request.args.get('code', None)
+    print(request.args)
+    if code is None:
+        print('bad code')
+        abort(Response(json.dumps(
+            {
+                'status': 400,
+                'error': 'Missing code argument.'
+            }
+        ), status=400, mimetype='application/json'))
+        # abort doesn't return
+
+    with requests.request('post', 'https://id.twitch.tv/oauth2/token', params={
+        'client_id': secrets['app_id_twitch'],
+        'client_secret': secrets['app_secret_twitch'],
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': secrets['app_redirect_twitch']
+    }) as r:
+        j_data = r.json()
+        print(j_data)
+        if r.status_code == 400:
+            abort(Response(json.dumps(
+                {
+                    'status': 400,
+                    'error': 'Something went wrong, try again'
+                }
+            ), status=400, content_type='application/json'))
+
+        access_token = j_data['access_token']
+        refresh_token = j_data['refresh_token']
+
+        session['access_token'] = access_token
+        session['refresh_token'] = refresh_token
+    print('pre validate')
+    token_data = validate_oauth_token(access_token, refresh_token, try_refresh=False)
+    print('post validate')
+    session['login'] = token_data['login']
+    session['user_id'] = token_data['user_id']
+    return jsonify({
+        'status': 200,
+        'message': 'Authorized successfully.'
+    })
+
+
+@register_endpoint('/whoami')
+def whoami():
+    """Retrns who you are authenticated as."""
+    return jsonify({
+        'login': session.get('login', None),
+        'user_id': session.get('user_id', None)
+    })
+
+
+try:
+    load_secrets()
+except FileNotFoundError:
+    secrets = {}
+    # will be saved after creating a secret
+
+if 'flask_secret' not in secrets:
+    secrets['flask_secret'] = base64.b64encode(os.urandom(30)).decode()
+    save_secrets()
+
+app.secret_key = base64.b64decode(secrets['flask_secret'])
+
+if 'app_id_twitch' not in secrets:
+    raise RuntimeError('Missing `app_id_twitch` key in web_secrets.json. Create an app using the Twitch developers '
+                       'website. Place the secret as `app_secret_twitch`.')
+
+if 'app_secret_twitch' not in secrets:
+    raise RuntimeError('Missing `app_secret_twitch` key in web_secrets.json')
+
 ipc_conn = ipc.Connection('../ipc_server')
 ipc_conn.max_recv = 32_768  # should capture even the biggest json message.
 time.sleep(0.5)  # wait for the welcome burst to come in fully.
@@ -259,13 +417,19 @@ except ImportError:
     import suggestions
 
 try:
+    from web import channel_settings
+except ImportError:
+    # noinspection PyUnresolvedReferences,PyPackageRequirements
+    import channel_settings
+
+try:
     import plugins.models.user as user_model
 except ImportError:
     user_model = load_model('user')
 
 User, flush_users = user_model.get(Base, session_scope, print)
 this_module = sys.modules[__name__]
-for i in [suggestions]:
-    i.init(register_endpoint, ipc_conn, this_module)
+for i in [suggestions, channel_settings]:
+    i.init(register_endpoint, ipc_conn, this_module, session_scope)
 if __name__ == '__main__':
     app.run(debug=True, port=8000)
