@@ -29,7 +29,7 @@ import typing
 
 import regex
 import requests
-from flask import Flask, jsonify, abort, redirect, request, Response, session
+from flask import Flask, jsonify, abort, redirect, request, Response, session, flash
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -279,11 +279,27 @@ def test():
     return 'KKaper Test successful KKaper'
 
 
+def allow_return_to(func):
+    def new_func(*args, **kwargs):
+        ret_val = func(*args, **kwargs)
+        return_to = request.args.get('return_to')
+        print(return_to)
+        if return_to:
+            return_to = return_to.replace('https://', '/').replace('http://', '/')
+            return redirect(return_to, code=302)
+        else:
+            return ret_val
+
+    new_func.__name__ = func.__name__
+    new_func.__doc__ = func.__doc__
+    return new_func
+
+
 @register_endpoint('/twitch_login')
 def twitch_login_redirect():
     """Redirects to the login url for Twitch"""
     state = base64.b64encode(json.dumps({
-        'redirect_to': request.args.get('redirect_to', None)
+        'redirect_to': request.args.get('return_to', None)
     }).encode())
     return redirect(f'https://id.twitch.tv/oauth2/authorize'
                     f'?client_id={secrets["app_id_twitch"]}'
@@ -370,15 +386,46 @@ def twitch_logged_in():
     print('post validate')
     session['login'] = token_data['login']
     session['user_id'] = token_data['user_id']
+
+    state = request.args.get('state')
+    redirect_to = None
+    if state:
+        try:
+            j_value = json.loads(base64.b64decode(state.encode()).decode())
+        except json.JSONDecodeError:
+            abort(Response(json.dumps(
+                {
+                    'status': 400,
+                    'error': 'Bad state.'
+                }
+            ), status=400, mimetype='application/json'))
+        if 'redirect_to' in j_value:
+            redirect_to = j_value['redirect_to']
+    if redirect_to:
+        flash('Authorized successfully.')
+        return redirect(redirect_to)
     return jsonify({
         'status': 200,
         'message': 'Authorized successfully.'
     })
 
 
+@register_endpoint('/logout')
+@allow_return_to
+def logout():
+    """Logout"""
+    for i in ('login', 'user_id', 'access_token', 'refresh_token'):
+        if i in session:
+            del session[i]
+    return jsonify({
+        'status': 200,
+        'message': 'Logged out successfully.'
+    })
+
+
 @register_endpoint('/whoami')
 def whoami():
-    """Retrns who you are authenticated as."""
+    """Returns who you are authenticated as."""
     return jsonify({
         'login': session.get('login', None),
         'user_id': session.get('user_id', None)

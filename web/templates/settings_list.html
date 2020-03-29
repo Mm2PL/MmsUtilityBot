@@ -1,0 +1,63 @@
+<!--
+  ~ This is a simple utility bot
+  ~ Copyright (C) 2020 Mm2PL
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+{% extends 'meta_template.html' %}
+{% block header %}
+    <h1>{% block title %}Settings.{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+    <table>
+        <thead>
+        <tr>
+            <td id="th_provided_by">Plugin</td>
+            <th id="th_name">Setting name</th>
+            <th id="th_value">Value</th>
+            <th id="th_actions">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for name, setting in all_settings.items() %}
+            {% if (setting.scope.name == 'PER_CHANNEL' and channel_id != -1) or (setting.scope.name == 'GLOBAL' and channel_id == -1) %}
+                <tr>
+                    <td class="setting_provided_by">
+                        <em>{{ setting.owner }}</em>
+                    </td>
+                    <td class="setting_name">{{ setting.name }}</td>
+                    {% if setting.setting_type == 'bool' %}
+                        <td class="setting_value" style="
+                                {% if settings.get(setting) %}
+                                    background-color: #00aa00;
+                                {% else %}
+                                    background-color: #aa0000;
+                                {% endif %}
+                                ">
+                            {{ get_setting_value(setting) }}
+                        </td>
+                    {% else %}
+                        <td class="setting_value">{{ get_setting_value(setting) }}</td>
+                    {% endif %}
+                    <td class="setting_edit">
+                        <a href="{{ request.url }}/{{ setting.name }}?return_to={{ request.url }}">Edit</a>
+                    </td>
+                </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

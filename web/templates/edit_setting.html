@@ -1,0 +1,149 @@
+<!--
+  ~ This is a simple utility bot
+  ~ Copyright (C) 2020 Mm2PL
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+{% extends 'meta_template.html' %}
+{% block header %}
+    <h1>
+        {% block title %}
+            Editing
+            {{ setting.name }}
+            ({% if setting.scope.name == 'PER_CHANNEL' %}setting in #
+            {{ settings.channel.last_known_username }}{% else %}
+            global setting{% endif %})
+        {% endblock %}
+    </h1>
+    <style>
+
+    </style>
+{% endblock %}
+
+{% block content %}
+    <table>
+        <thead>
+        <tr>
+            <th id="th_name" colspan="2">Setting {{ setting.name }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>
+                Type
+            </td>
+            <td>
+                {% if setting.setting_type == None %}
+                    unknown using text to set.
+                {% else %}
+                    {{ setting.setting_type }}
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Previous value
+            </td>
+            <td>
+                <code>{{ settings.get(setting) }}</code>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Default value
+            </td>
+            <td>
+                <code>{{ setting.default_value }}</code>
+                <button onclick="unset();">Set to default</button>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Edit value
+            </td>
+            <td>
+                {% if setting.setting_type == 'int' or setting.setting_type == 'float' %}
+                    <input id="set_setting_value" type="number" value="{{ settings.get(setting) }}"
+                            {{ "step=any" if setting.setting_type == 'float' else "" }}>
+                {% elif setting.setting_type == 'bool' %}
+                    <input id="set_setting_value" type="checkbox"
+                            {{ "checked" if settings.get(setting) else "" }}
+                           onclick="update_background();">
+                {% else %}
+                    <input id="set_setting_value" type="text" value="{{ settings.get(setting) }}">
+                {% endif %}
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <script type="application/javascript">
+        // submitter
+        function update_background() {
+            {% if setting.setting_type == 'bool' %}
+                const value_box = document.getElementById("set_setting_value");
+                const value = value_box.checked;
+                console.log(value);
+                if (value) {
+                    value_box.parentElement.style.background = '#00aa00';
+                } else {
+                    value_box.parentElement.style.background = '#aa0000';
+                }
+            {% endif %}
+        }
+
+        async function submit() {
+            const value_box = document.getElementById("set_setting_value");
+
+
+            {% if channel_id == -1 %}
+                const c_id = 'global';
+            {% else %}
+                const c_id = {{ channel_id }};
+            {% endif %}
+
+            {% if setting.setting_type == 'bool' %}
+                const value = value_box.checked;
+            {% else %}
+                const value = value_box.value;
+            {% endif %}
+            const request = await fetch(`/settings/${c_id}/set/{{ setting.name }}?value=${value}`);
+            window.location = (
+                `${window.location.origin}${window.location.pathname}?flash=Value(${value}) has been set`
+                + `&return_to={{ return_to }}`
+            );
+        }
+        async function unset() {
+            {% if channel_id == -1 %}
+                const c_id = 'global';
+            {% else %}
+                const c_id = {{ channel_id }};
+            {% endif %}
+
+            const request = await fetch(`/settings/${c_id}/unset/{{ setting.name }}`);
+            window.location = (
+                `${window.location.origin}${window.location.pathname}?flash=Value has been unset`
+                + `&return_to={{ return_to }}`
+            );
+        }
+
+        update_background();
+    </script>
+    <button onclick="submit();">Submit</button>
+    {% if return_to %}
+        <a href="{{ return_to }}">Back to list of settings.</a>
+    {% else %}
+        <a href="../{{ channel_id }}">Back to list of settings.</a>
+    {% endif %}
+{% endblock %}

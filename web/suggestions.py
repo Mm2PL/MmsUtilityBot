@@ -25,7 +25,7 @@ except ImportError:
     pass
 
 
-def init(register_endpoint, ipc_conn, main_module):
+def init(register_endpoint, ipc_conn, main_module, session_scope):
     suggestion_model = main_module.load_model('suggestion')
     Suggestion = suggestion_model.get(main_module.Base)
 

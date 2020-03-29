@@ -465,27 +465,45 @@ def _command_get_user_name(sock: socket.socket, msg: str, socket_id):
 @add_command('reload_settings')
 def _command_reload_settings(sock: socket.socket, msg: str, socket_id):
     _, channel = msg.replace('\n', '').replace('\r\n', '').split(' ', 1)
-    user = main.User.get_by_local_id(int(channel))
-    print(user, user.last_known_username)
-    if user.last_known_username not in plugin_manager.channel_settings:
-        response_write_queues[socket_id].put(
-            b'!2\r\n'
-            b'~A user with this ID is not known to this bot.'
-            +
-            format_json({
-                'type': 'error',
-                'source': 'reload_settings',
-                'message': 'A user with this ID is not known to this bot.'
-            })
-        )
+    channel = int(channel)
+    print(_, channel)
+    if channel != -1:
+        user = main.User.get_by_local_id(channel)
+        print(user, user.last_known_username)
+        if user.last_known_username not in plugin_manager.channel_settings:
+            response_write_queues[socket_id].put(
+                b'!2\r\n'
+                b'~A user with this ID is not known to this bot.\r\n'
+                +
+                format_json({
+                    'type': 'error',
+                    'source': 'reload_settings',
+                    'message': 'A user with this ID is not known to this bot.'
+                })
+            )
+        else:
+            print(f'update settings for {channel!r} (#{user.last_known_username!r})')
+            del plugin_manager.channel_settings[user.last_known_username]
+            with main.session_scope() as session:
+                settings = (session.query(plugin_manager.ChannelSettings)
+                            .filter(plugin_manager.ChannelSettings.channel_alias == user.id)
+                            .first())
+                plugin_manager.channel_settings[user.last_known_username] = settings
+            response_write_queues[socket_id].put(
+                format_json({
+                    'type': 'reload_update',
+                    'source': 'reload_settings',
+                    'message': 'Reloaded settings for channel!'
+                })
+            )
     else:
-        del plugin_manager.channel_settings[user.last_known_username]
+        print(f'update settings for {channel!r} (GLOBAL)')
+        del plugin_manager.channel_settings['GLOBAL']
         with main.session_scope() as session:
             settings = (session.query(plugin_manager.ChannelSettings)
-                        .filter(plugin_manager.ChannelSettings.channel_alias == user.id)
+                        .filter(plugin_manager.ChannelSettings.channel_alias == -1)
                         .first())
-            settings.fill_defaults(forced=False)
-            settings.update()
+            plugin_manager.channel_settings['GLOBAL'] = settings
         response_write_queues[socket_id].put(
             format_json({
                 'type': 'reload_update',
@@ -493,6 +511,25 @@ def _command_reload_settings(sock: socket.socket, msg: str, socket_id):
                 'message': 'Reloaded settings for channel!'
             })
         )
+
+
+@add_command('all_settings')
+def _command_all_settings(sock: socket.socket, msg: str, socket_id):
+    print('pepega all settings')
+    return format_json({
+        'type': 'all_settings',
+        'source': 'all_settings',
+        'data': {
+            k: {
+                'owner_name': v.owner.name,
+                'name': v.name,
+                'default_value': '...' if v.default_value is ... else v.default_value,
+                'scope': v.scope.name,
+                'write_defaults': v.write_defaults,
+                'setting_type': v.setting_type.__name__ if hasattr(v.setting_type, '__name__') else str(v.setting_type)
+            } for k, v in plugin_manager.all_settings.items()
+        }
+    })
 
 
 print(commands)

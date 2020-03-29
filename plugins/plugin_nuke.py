@@ -15,9 +15,12 @@
 import asyncio
 import datetime
 import math
+import select
+import sys
+import threading
 import time
 import typing
-from typing import List
+from typing import List, Dict, Any
 
 import aiohttp
 import regex
@@ -57,6 +60,17 @@ try:
     import plugin_plugin_manager as plugin_manager
 except ImportError:
     import plugins.plugin_manager as plugin_manager
+
+try:
+    import plugin_logs
+except ImportError:
+
+    if typing.TYPE_CHECKING:
+        from plugins.plugin_logs import Plugin as PluginLogs
+
+        plugin_logs: PluginLogs
+    else:
+        plugin_logs = None
 # noinspection PyUnresolvedReferences
 import twitchirc
 
@@ -68,9 +82,12 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function(NAME)
+BAN_T = 0.05
 
 
 class Plugin(main.Plugin):
+    kill_switches: Dict[Any, threading.Event]
+
     @property
     def max_nuke(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.max_nuke_setting)
@@ -82,6 +99,7 @@ class Plugin(main.Plugin):
 
     def __init__(self, module, source):
         super().__init__(module, source)
+        self.kill_switches = {}
         # region commands
         self.c_nuke = main.bot.add_command('nuke', required_permissions=['util.nuke'],
                                            enable_local_bypass=True, available_in_whispers=False)(self.c_nuke)
@@ -89,8 +107,9 @@ class Plugin(main.Plugin):
                                                enable_local_bypass=True, available_in_whispers=False)(self.c_nuke_url)
         self.c_unnuke = main.bot.add_command('unnuke', required_permissions=['util.unnuke'],
                                              enable_local_bypass=True, available_in_whispers=False)(self.c_unnuke)
+        self.c_stop_nuke = main.bot.add_command('stop_nuke', required_permissions=['util.nuke'],
+                                                enable_local_bypass=True, available_in_whispers=False)(self.c_stop_nuke)
         # endregion
-        # self.max_nuke = 30
 
         # region help
         plugin_help.create_topic('nuke',
@@ -113,7 +132,7 @@ class Plugin(main.Plugin):
                                  'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('nuke force',
-                                 f'Ban or timeout more than {self.max_nuke} users.',
+                                 f'Ban or timeout more than "nuke.max_safe" users.',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('nuke_url',
@@ -133,7 +152,7 @@ class Plugin(main.Plugin):
                                  'Don\'t perform any actions just return the results.',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('nuke_url force',
-                                 f'Ban or timeout more than {self.max_nuke} users.',
+                                 f'Ban or timeout more than "nuke.max_safe" users.',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('unnuke',
@@ -154,14 +173,14 @@ class Plugin(main.Plugin):
         self.max_nuke_setting = plugin_manager.Setting(
             self,
             'nuke.max_safe',
-            default_value=30,
+            default_value=15,
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
         self.max_connections_setting = plugin_manager.Setting(
             self,
             'nuke.max_connections',
-            default_value=30,
+            default_value=12,
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
@@ -169,12 +188,22 @@ class Plugin(main.Plugin):
         self.connections = []
         self.tasks = []
 
-    async def _send_messages(self, msgs, channels, i):
+    async def c_stop_nuke(self, msg: twitchirc.ChannelMessage):
+        if msg.channel in self.kill_switches:
+            self.kill_switches[msg.channel].set()
+            return f'@{msg.user}, Kill switch event triggered, bans should stop any second now.'
+        else:
+            return f'@{msg.user}, no nuke running in this channel'
+
+    async def _send_messages(self, msgs, channels, i, abort_event: threading.Event):
         print('send messages', msgs)
-        connection = main.bot.clone()
+
+        connection = twitchirc.Connection(main.bot.address, main.bot.port, message_cooldown=0,
+                                          no_atexit=True, secure=main.bot.secure)
         connection.name = str(i)
         connection.cap_reqs(False)
-        await asyncio.sleep(0.1)
+        connection.connect(main.bot.username, 'oauth:' + main.twitch_auth.new_api.auth.token)
+        await asyncio.sleep(0.5)
         connection.receive()
         print(connection.process_messages(max_messages=1000))
         for ch in channels:
@@ -182,17 +211,35 @@ class Plugin(main.Plugin):
         self.connections.append(connection)
         connection.message_cooldown = 0
         count_of_recv_msgs = 0
-        for msg in msgs:
-            print(i, msg)
+
+        for num, msg in enumerate(msgs):
+            if abort_event.is_set():
+                print('ABORT ABORT ABORT ABORT')
+                break
+            # print(i, msg)
+            # print(num % 100 == 0)
             connection.send(msg)
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(BAN_T)
             connection.flush_queue()
+            if num % 500 == 0:
+                sel_output, _, _ = select.select([connection.socket], [], [], 0)
+                if sel_output:
+                    print(connection.receive())
+                    recv_msgs = connection.process_messages()
+                    print(recv_msgs)
+                    count_of_recv_msgs += len(recv_msgs)
+                    print(i, recv_msgs)
+
+        await asyncio.sleep(10 * BAN_T)
+        sel_output, _, _ = select.select([connection.socket], [], [], 0)
+        if sel_output:
             connection.receive()
-            recv_msgs = connection.process_messages()
-            count_of_recv_msgs += len(recv_msgs)
-            print(i, recv_msgs)
+
+        recv_msgs = connection.process_messages()
+        count_of_recv_msgs += len(recv_msgs)
         connection.disconnect()
         print(f'connection {i} done received {count_of_recv_msgs} messages, sent {len(msgs)}')
+        return count_of_recv_msgs
 
     def _parse_line(self, line: str):
         if line.startswith(('#', '//', ';', '%%')):
@@ -271,22 +318,28 @@ class Plugin(main.Plugin):
 
     async def c_nuke_url(self, msg: twitchirc.ChannelMessage):
         try:
-            args = arg_parser.parse_args(main.delete_spammer_chrs(msg.text),
-                                         {
-                                             'dry-run': bool,
-                                             'url': str,
-                                             'perma': bool,
-                                             'force': bool,
-                                             'timeout': datetime.timedelta,
-                                             'hastebin': bool
-                                         })
+            args = arg_parser.parse_args(
+                main.delete_spammer_chrs(msg.text),
+                {
+                    'dry-run': bool,
+                    'url': str,
+                    'perma': bool,
+                    'force': bool,
+                    'timeout': datetime.timedelta,
+                    'hastebin': bool
+                },
+                defaults={
+                    'dry-run': False,
+                    'perma': False,
+                    'hastebin': False,
+                    'timeout': ...,
+                    'force': False
+                })
         except arg_parser.ParserError as e:
             return f'@{msg.user}, error: {e.message}'
-        arg_parser.check_required_keys(args, ('url', 'timeout', 'perma', 'dry-run'))
-        if args['url'] is ... or not (args['timeout'] is not ... and args['perma']):
-            return f'@{msg.user}, url, timeout are required parameters'
-        if args['perma'] is ...:
-            args['perma'] = False
+        if args['url'] is ... or (args['timeout'] is ... and not args['perma']):
+            print(args)
+            return f'@{msg.user}, url, timeout (or perma) are required parameters'
 
         url = args['url']
         if url.startswith(plugin_hastebin.hastebin_addr):
@@ -303,7 +356,9 @@ class Plugin(main.Plugin):
                     users.remove('')
 
                 return await self.nuke(args, msg, users, force_nuke=args['force'],
-                                       disable_hastebinning=not args['hastebin'])
+                                       disable_hastebinning=not args['hastebin'], reasons=reasons)
+            else:
+                return f'Refusing to use data, bad content type: {req.content_type}, expected text/plain'
 
     async def nuke_from_messages(self, args, msg, search_results: typing.List[twitchirc.ChannelMessage],
                                  force_nuke=False, ignore_vips=False, ignore_subs=False, disable_hastebinning=False):
@@ -328,9 +383,11 @@ class Plugin(main.Plugin):
                     continue
                 users.append(i.user)
 
-        return await self.nuke(args, msg, users, force_nuke, disable_hastebinning=disable_hastebinning)
+        return await self.nuke(args, msg, users, force_nuke, disable_hastebinning=disable_hastebinning,
+                               show_nuked_by=True)
 
-    async def nuke(self, args, msg, users, force_nuke=False, reasons=None, disable_hastebinning=False):
+    async def nuke(self, args, msg, users, force_nuke=False, reasons=None, disable_hastebinning=False,
+                   show_nuked_by=False):
         if reasons is None:
             reasons = {}
 
@@ -362,67 +419,203 @@ class Plugin(main.Plugin):
         if not args['perma']:
             t_o_length = int(args['timeout'].total_seconds())
             for u in users:
-                reason = f'nuked by {msg.user}'
+                if show_nuked_by:
+                    reason = f'nuked by {msg.user} - '
+                else:
+                    reason = ''
                 if u in reasons:
-                    reason += f' - {reasons[u]}'
+                    reason += reasons[u]
                 timeouts.append(msg.reply(f'/timeout {u} {t_o_length}s {reason}', force_slash=True))
         else:
             for u in users:
-                reason = f'nuked by {msg.user}'
+                if show_nuked_by:
+                    reason = f'nuked by {msg.user} - '
+                else:
+                    reason = ''
                 if u in reasons:
-                    reason += f' - {reasons[u]}'
+                    reason += reasons[u]
                 timeouts.append(msg.reply(f'/ban {u} {reason}', force_slash=True))
 
         number_of_needed_connections = self._calculate_number_of_connections(timeouts)
-        main.bot.send(msg.reply_directly(f'@{msg.user}, {"timing out" if not args["perma"] else "banning"} '
-                                         f'{len(users)} users. This operation will use {number_of_needed_connections} '
-                                         f'connections, at 10 Hz, it will take about {0.1 * len(timeouts)}s, '
-                                         f'please wait patiently '
-                                         f'monkaS'))
+        main.bot.send(msg.reply_directly(self._make_nuke_notification_whisper(args, msg, number_of_needed_connections,
+                                                                              timeouts, users)))
+        main.bot.flush_queue(1)
+        num_of_timeouts = len(timeouts)
+        db_log_level_bkup = plugin_logs.db_log_level
+        log_level_bkup = plugin_logs.log_level
+        try:
+            if plugin_logs:
+                plugin_logs.db_log_level = plugin_logs.log_levels['warn']  # don't spam the logs
+                plugin_logs.log_level = plugin_logs.log_levels['warn']
+            # time_taken = await self._send_using_multiple_connections(msg, timeouts, msg.channel,
+            #                                                          number_of_needed_connections)
+            time_taken = await self._send_using_new_connection_thread(msg, timeouts, msg.channel,
+                                                                      number_of_needed_connections)
+        finally:
+            plugin_logs.db_log_level = db_log_level_bkup
+            plugin_logs.log_level = log_level_bkup
+        return self._make_nuke_end_message(msg, args, users, url, time_taken, timeouts)
 
-        time_taken = await self._send_using_multiple_connections(msg, timeouts, msg.channel,
-                                                                 number_of_needed_connections)
-        return [
-            msg.reply(f'@{msg.user}, {"timed out" if not args["perma"] else "banned (!!)"} {len(users)} users. '
-                      f'Full list here: {url}, time taken {round(time_taken)}, '
-                      f'speed {round(time_taken / len(timeouts)) if timeouts else "N/A"}'),
-        ]
+    # async def _send_using_multiple_connections(self, msg, timeouts, channel, number_of_needed_connections):
+    #     start_time = time.time()
+    #     conns = []
+    #     messages_per_connection = len(timeouts) / number_of_needed_connections
+    #     abort_lock = asyncio.Event()
+    #     for i in range(number_of_needed_connections):
+    #         batch = []
+    #         for k, m in enumerate(timeouts.copy()):
+    #             if k > messages_per_connection:
+    #                 break
+    #             batch.append(timeouts.pop())
+    #         print(batch)
+    #         conns.append(self._send_messages(batch, [channel], i, abort_lock))
+    #     try:
+    #         await asyncio.gather(*conns)
+    #     except BaseException:
+    #         abort_lock.set()
+    #
+    #     end_time = time.time()
+    #     return end_time - start_time
 
-    async def _send_using_multiple_connections(self, msg, timeouts, channel, number_of_needed_connections):
+    async def _send_using_new_connection_thread(self, msg, timeouts, channel, number_of_conns):
         start_time = time.time()
-        conns = []
-        for i in range(number_of_needed_connections):
-            batch = []
-            for k, m in enumerate(timeouts.copy()):
-                if k > 100:
-                    break
-                batch.append(timeouts.pop())
-            conns.append(self._send_messages(batch, [channel], i))
-        await asyncio.gather(*conns)
+        kill_switch = threading.Event()
+        # await asyncio.get_event_loop().run_in_executor(None,
+        #                                                lambda: self._send_messages(timeouts, [channel], 0,
+        #                                                                            kill_switch))
+        self.kill_switches[msg.channel] = kill_switch
+        await asyncio.get_event_loop().run_in_executor(None, lambda: self._connection_thread(timeouts, channel,
+                                                                                             number_of_conns,
+                                                                                             kill_switch))
         end_time = time.time()
         return end_time - start_time
 
+    def _new_connection(self, channel, conn_number):
+        try:
+            connection = twitchirc.Connection(main.bot.address, main.bot.port, message_cooldown=0,
+                                              no_atexit=True, secure=main.bot.secure)
+            connection.name = str(conn_number)
+            connection.cap_reqs(False)
+            connection.connect(main.bot.username, 'oauth:' + main.twitch_auth.new_api.auth.token)
+            connection.receive()
+            print(connection.process_messages(max_messages=1000))
+            connection.join(channel)
+            self.connections.append(connection)
+            connection.message_cooldown = 0
+            return connection
+        except BrokenPipeError:  # rate limited?
+            print('Got broken pipe when creating connection, are we rate limited? Retrying to create this connection.')
+            time.sleep(5)
+            return self._new_connection(channel, conn_number)
+
+    def _create_connections(self, number, channel):
+        conns = []
+        for i in range(number):
+            connection = self._new_connection(channel, i)
+
+            conns.append(connection)
+        return conns
+
+    def _send_and_flush(self, conn: twitchirc.Connection, msg, conns, channel, current_connection):
+        try:
+            conn.force_send(msg)
+        except BrokenPipeError:
+            # we lost a connection
+            conns.remove(conn)
+            print('We lost a connection. Recreating.')
+            time.sleep(3)
+            conns.append(self._new_connection(channel, current_connection))
+            self._send_and_flush(conn, msg, conns, channel, current_connection)
+
+    def _connection_thread(self, timeouts, channel, number_of_needed_connections, kill_switch):
+        # works in another thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        conns = self._create_connections(number_of_needed_connections + 1, channel)
+        try:
+            current_connection = 0
+            confirmed = []
+            recv_conn = conns.pop()
+            max_timeout_id = len(timeouts) - 1
+            for num, timeout_obj in enumerate(timeouts):
+                if kill_switch.is_set():
+                    break
+                conn = conns[current_connection]
+                self._send_and_flush(conn, timeout_obj, conns, channel, current_connection)
+
+                # conn.receive()
+                conn.receive_buffer = ''
+                current_connection += 1
+                if current_connection >= len(conns):
+                    current_connection = 0
+                    time.sleep(BAN_T)  # keep rate limits
+
+                if num % 500 == 0 or num == max_timeout_id:
+                    while 1:
+                        if num == max_timeout_id:
+                            time.sleep(2)
+
+                        recv_ready, _, _ = select.select([recv_conn.socket], [], [], 0)
+                        if not recv_ready:
+                            break
+                        recv_conn.receive()
+                        msgs = recv_conn.process_messages(1000)
+                        for m in msgs:
+                            if isinstance(m, (twitchirc.ChannelMessage, twitchirc.WhisperMessage, twitchirc.JoinMessage,
+                                              twitchirc.UserstateMessage, twitchirc.NoticeMessage,
+                                              twitchirc.GlobalNoticeMessage)):
+                                continue
+
+                            if isinstance(m, twitchirc.PingMessage):
+                                conn.send(m.reply())
+                            elif isinstance(m, twitchirc.Message):  # other messages
+                                data = m.raw_data or m.args
+                                if 'CLEARCHAT' in data:
+                                    # '@room-id=117691339;target-user-id=70948394;tmi-sent-ts=1585480138749
+                                    # :tmi.twitch.tv
+                                    # CLEARCHAT
+                                    # #mm2pl :weeb123\r\n'
+                                    user = data.split(' ', 4)[-1].lstrip(':').rstrip('\r\n')
+                                    confirmed.append(user)
+
+
+        finally:
+            print(timeouts)
+            print(confirmed)
+            sys.stderr.write(f'{len(timeouts)}, {len(confirmed)}\n')
+            sys.stderr.write(f'Diff is {len(timeouts) - len(confirmed)}\n')
+            for i in conns:
+                i.disconnect()
+
     def _calculate_number_of_connections(self, timeouts):
         number_of_needed_connections = math.ceil(len(timeouts) / 100)
+        print(number_of_needed_connections)
         if number_of_needed_connections > self.max_connections:
             number_of_needed_connections = self.max_connections
+        print(number_of_needed_connections)
         return number_of_needed_connections
 
     async def c_unnuke(self, msg: twitchirc.ChannelMessage):
         try:
-            args = arg_parser.parse_args(main.delete_spammer_chrs(msg.text),
-                                         {
-                                             'dry-run': bool,
-                                             'url': str,
-                                             'perma': bool,
-                                             'force': bool,
-                                             'timeout': datetime.timedelta
-                                         })
+            args = arg_parser.parse_args(
+                main.delete_spammer_chrs(msg.text),
+                {
+                    'dry-run': bool,
+                    'url': str,
+                    'perma': bool,
+                    'force': bool,
+                    'hastebin': bool
+                },
+                defaults={
+                    'dry-run': False,
+                    'perma': False,
+                    'force': False,
+                    'hastebin': False
+                })
         except arg_parser.ParserError as e:
             return f'@{msg.user}, error: {e.message}'
-        arg_parser.check_required_keys(args, ('url', 'timeout', 'perma', 'dry-run'))
-        if args['url'] is ... or (args['timeout'] is ... and not args['perma']):
-            return f'@{msg.user}, url, timeout are required parameters'
+        if args['url'] is ...:
+            return f'@{msg.user}, url is a required parameter'
         if args['perma'] is ...:
             args['perma'] = False
 
@@ -440,14 +633,17 @@ class Plugin(main.Plugin):
                 while '' in users:
                     users.remove('')
 
-                return await self.unnuke(args, msg, users)
+                return await self.unnuke(args, msg, users, disable_hastebinning=(not args['hastebin']))
 
-    async def unnuke(self, args, msg, users):
+    async def unnuke(self, args, msg, users, disable_hastebinning=False):
         if msg.user in users:
             users.remove(msg.user)  # make the executor not get hit by the fallout.
         if main.bot.username.lower() in users:
             users.remove(main.bot.username.lower())
-        url = plugin_hastebin.hastebin_addr + await plugin_hastebin.upload("\n".join(users))
+        if not disable_hastebinning:
+            url = plugin_hastebin.hastebin_addr + await plugin_hastebin.upload("\n".join(users))
+        else:
+            url = '(disabled)'
         if args['dry-run'] is True:
             return (f'@{msg.user}, {"removing time out from" if not args["perma"] else "unbanning"} {len(users)} '
                     f'users. Full list here: '
@@ -461,11 +657,48 @@ class Plugin(main.Plugin):
             for u in users:
                 untimeouts.append(msg.reply(f'/unban {u}', force_slash=True))
         # ret.extend(untimeouts)
-        time_taken = await self._send_using_multiple_connections(msg, untimeouts, msg.channel)
+        # time_taken = await self._send_using_multiple_connections(msg, untimeouts, msg.channel)
+        number_of_needed_connections = self._calculate_number_of_connections(untimeouts)
+        main.bot.send(msg.reply_directly(self._make_nuke_notification_whisper(args, msg, number_of_needed_connections,
+                                                                              untimeouts, users, unban=True)))
+        main.bot.flush_queue(1)
+        log_level_bkup = plugin_logs.db_log_level
+        try:
+            if plugin_logs:
+                plugin_logs.db_log_level = plugin_logs.log_levels['warn']  # don't spam the logs
+            # time_taken = await self._send_using_multiple_connections(msg, timeouts, msg.channel,
+            #                                                          number_of_needed_connections)
+            time_taken = await self._send_using_new_connection_thread(msg, untimeouts, msg.channel,
+                                                                      number_of_needed_connections)
+        finally:
+            plugin_logs.db_log_level = log_level_bkup
         # await self._send_messages(untimeouts, [msg.channel], 0)
-        return (f'@{msg.user}, {"removed timeouts from" if not args["perma"] else "unbanned"} {len(users)} users. '
-                f'Full list here: {url}, time taken {round(time_taken)}, '
-                f'speed {round(time_taken / len(untimeouts)) if untimeouts else "N/A"}')
+        return self._make_nuke_end_message(msg, args, users, url, time_taken, untimeouts, unban=True)
+
+    def _make_nuke_notification_whisper(self, args, msg, number_of_needed_connections, timeouts, users,
+                                        unban=False):
+        time_prediction = 1.26 * BAN_T * len(timeouts) / number_of_needed_connections
+        ban_f = 1 / BAN_T
+        if unban:
+            action = "remove time outs from" if not args["perma"] else "unbanning"
+        else:
+            action = "timing out" if not args["perma"] else "banning"
+        return (f'@{msg.user}, {action} '
+                f'{len(users)} users. This operation will use {number_of_needed_connections} '
+                f'connections, at {ban_f} Hz * {number_of_needed_connections}, '
+                f'it will take about {time_prediction:.2f}s, please wait patiently monkaS')
+
+    def _make_nuke_end_message(self, msg, args, users, url, time_taken, timeouts, unban=False):
+        if unban:
+            return (f'@{msg.user}, {"removed timeouts from" if not args["perma"] else "unbanned"} {len(users)} users. '
+                    f'Full list here: {url} , time taken {round(time_taken)}s, '
+                    f'speed {round(len(timeouts) / time_taken) if timeouts else "N/A"}Hz')
+        else:
+            return (
+                f'@{msg.user}, {"timed out" if not args["perma"] else "banned (!!)"} {len(users)} users. '
+                f'Full list here: {url} , time taken {round(time_taken)}s, '
+                f'speed {round(len(timeouts) / time_taken) if time_taken else "N/A"}Hz'
+            )
 
     @property
     def no_reload(self):

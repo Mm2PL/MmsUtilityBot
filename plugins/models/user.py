@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import datetime
 import threading
 import time
@@ -125,18 +126,7 @@ def get(Base, session_scope, log):
                 return User._get_by_name(name, s)
 
         def _update(self, update, session):
-            # self.last_active = update['last_active']
-            # self.last_message = msg.text
-            # self.last_message_channel = msg.channel
             msg = update['msg']
-            if 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']:
-                self.add_mod_in(msg.channel)
-            else:
-                self.remove_mod_in(msg.channel)
-            if _is_pleb(msg):
-                self.remove_sub_in(msg.channel)
-            else:
-                self.add_sub_in(msg.channel)
             if msg.user != self.last_known_username:
                 other_users = User.get_by_name(msg.user)
                 self.last_known_username = msg.user
@@ -155,11 +145,38 @@ def get(Base, session_scope, log):
 
         def schedule_update(self, msg: twitchirc.ChannelMessage):
             global cached_users
-            cached_users[self.id] = {
-                'last_active': datetime.datetime.now(),
-                'msg': msg,
-                'expire_time': time.time() + CACHE_EXPIRE_TIME
-            }
+            has_state_change = False
+            was_changed = False
+            if 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']:
+                if msg.channel not in self.mod_in:
+                    self.add_mod_in(msg.channel)
+                    has_state_change = True
+                    was_changed = True
+            else:
+                if msg.channel in self.mod_in:
+                    self.remove_mod_in(msg.channel)
+                    has_state_change = True
+                    was_changed = True
+            if _is_pleb(msg):
+                if msg.channel not in self.sub_in:
+                    self.remove_sub_in(msg.channel)
+                    has_state_change = True
+                    was_changed = True
+            else:
+                if msg.channel in self.sub_in:
+                    self.add_sub_in(msg.channel)
+                    has_state_change = True
+                    was_changed = True
+
+            if msg.user != self.last_known_username:
+                was_changed = True
+
+            if was_changed:
+                cached_users[self.id] = {
+                    'last_active': datetime.datetime.now(),
+                    'msg': msg,
+                    'expire_time': (time.time()+10) if has_state_change else (time.time() + CACHE_EXPIRE_TIME)
+                }
 
         @property
         def mod_in(self):

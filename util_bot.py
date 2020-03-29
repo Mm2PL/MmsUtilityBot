@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import atexit
 import builtins
 import contextlib
@@ -44,7 +45,8 @@ from sqlalchemy.orm import sessionmaker
 from twitchirc import Command, Event
 from sqlalchemy.ext.declarative import declarative_base
 
-from apis.supibot import SupibotApi
+from apis.pubsub import PubsubClient
+from apis.supibot import SupibotApi, ApiError
 import plugins.models.user as user_model
 import twitch_auth
 
@@ -108,7 +110,7 @@ else:
                               f'@localhost/mm_sbot')
 
 bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
-                    storage=storage)
+                    storage=storage, no_atexit=True)
 bot.prefix = '!'
 del passwd
 # noinspection PyTypeHints
@@ -136,26 +138,16 @@ def session_scope_local_thread():
         yield session
         session.commit()
     except:
-        print('LS: Roll back.')
+        log('debug', 'LS: Roll back.')
         session.rollback()
         raise
     finally:
-        print('LS: Expunge all and close')
+        log('debug', 'LS: Expunge all and close')
         session.expunge_all()
         session.close()
 
 
 session_scope = session_scope_local_thread
-
-
-class DebugDict(dict):
-    def __setitem__(self, key, value):
-        print(f'DEBUG DICT: SET {key} = {value}')
-        return super().__setitem__(key, value)
-
-    def __getitem__(self, item):
-        print(f'DEBUG DICT: {item}')
-        return super().__getitem__(item)
 
 
 def _is_mod(msg: twitchirc.ChannelMessage):
@@ -249,9 +241,7 @@ def new_echo_command(command_name: str, echo_data: str,
 
 
 def _is_pleb(msg: twitchirc.ChannelMessage) -> bool:
-    print(msg.flags['badges'])
     for i in (msg.flags['badges'] if isinstance(msg.flags['badges'], list) else [msg.flags['badges']]):
-        # print(i)
         if i.startswith('subscriber'):
             return False
     return True
@@ -479,20 +469,20 @@ def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
         if msg.channel not in plebs:
             plebs[msg.channel] = {}
         plebs[msg.channel][msg.user] = time.time() + 60 * 60
-        print(event, '(pleb)', msg)
     else:
         if msg.channel not in subs:
             subs[msg.channel] = {}
         subs[msg.channel][msg.user] = time.time() + 60 * 60
-        print(event, '(sub)', msg)
 
 
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
 
 
-def check_spamming_allowed(channel: str):
+def check_spamming_allowed(channel: str, enable_online_spam=False):
     if channel == 'whispers':
         return False
+    if channel in channel_live_state and channel_live_state[channel]:  # channel is live
+        return enable_online_spam and check_spamming_allowed(channel, False)
     if channel in bot_user_state:
         return bot_user_state[channel]['mode'] in ('mod', 'vip')
     else:
@@ -514,6 +504,9 @@ bot_user_state: typing.Dict[str, typing.Dict[str, typing.Union[str, twitchirc.Me
     #     'mode': 'mod' || 'vip' || 'user'
     # }
 }
+channel_live_state: Dict[str, bool] = {
+    # 'channel': False
+}
 
 
 class UserStateCapturingMiddleware(twitchirc.AbstractMiddleware):
@@ -523,12 +516,75 @@ class UserStateCapturingMiddleware(twitchirc.AbstractMiddleware):
             is_vip = 'vip/1' in msg.flags['badges']
             is_mod = 'moderator/1' in msg.flags['badges']
 
-            bot_user_state[msg.channel] = {
+            user_state = {
                 'message': msg,
-                'mode': 'mod' if is_mod else (
-                    'vip' if is_vip else 'user'
-                )
+                'mode': None
             }
+
+            if is_mod:
+                user_state['mode'] = 'mod'
+            elif is_vip:
+                user_state['mode'] = 'vip'
+            else:
+                user_state['mode'] = 'user'
+
+            bot_user_state[msg.channel] = user_state
+            bot.call_middleware('userstate', user_state, False)
+
+
+bot.middleware.append(UserStateCapturingMiddleware())
+
+
+class PubsubMiddleware(twitchirc.AbstractMiddleware):
+    def join(self, event: Event) -> None:
+        channel: str = event.data['channel']
+        topic: str = f'video-playback.{channel}'
+        print(f'join channel {channel}')
+        pubsub.listen([
+            topic
+        ])
+        pubsub.register_callback(topic)(self.live_handler)
+
+    def part(self, event: Event) -> None:
+        channel: str = event.data['channel']
+        pubsub.unlisten([
+            f'video-playback.{channel}'
+        ])
+
+    def live_handler(self, topic: str, msg: dict):
+        channel_name = topic.replace('video-playback.', '')
+        if channel_name not in channel_live_state:
+            channel_live_state[channel_name] = False
+
+        log('info', f'MEGADANK logging!!!!!!!\n'
+                    f'{channel_name!r}\n'
+                    f'{msg!r}')
+        print(msg)
+        if msg['type'] in ['stream-up', 'viewcount']:
+            if not channel_live_state[channel_name]:
+                bot.call_middleware('stream-up', (channel_name,), False)
+            channel_live_state[channel_name] = True
+        elif msg['type'] == 'stream-down':
+            if channel_live_state[channel_name]:
+                bot.call_middleware('stream-down', (channel_name,), False)
+            channel_live_state[channel_name] = False
+
+    async def restart_pubsub(self):
+        await pubsub.stop()
+        await pubsub.initialize()
+
+    def connect(self, event: Event) -> None:
+        asyncio.get_event_loop().create_task(
+            self.restart_pubsub()
+        )
+
+    def userstate(self, event: Event) -> None:
+        pass
+
+    def on_action(self, event: Event):
+        super().on_action(event)
+        if event.name == 'userstate':
+            self.userstate(event)
 
 
 class PluginStorage:
@@ -778,19 +834,15 @@ plugin_meta_path: Dict[str, List[typing.Union[importlib._bootstrap.ModuleSpec, M
 
 class PluginMetaPathFinder(importlib.abc.MetaPathFinder):
     def __init__(self):
-        print(f'Create meta path finder')
+        pass
 
+    # noinspection PyUnusedLocal
     def find_spec(self, fullname, path, target=None):
-        print('find spec')
-        print(f'{" " * 4}{fullname}\n{" " * 4}{path}\n{" " * 4}{target}')
-        if target is None:
-            print(f'MEGADANK: target None')
         if target in plugin_meta_path:
             return plugin_meta_path[target][0]
 
     def find_module(self, fullname, path):
-        print('find module')
-        print(f'{" " * 4}{fullname}\n{" " * 4}{path}')
+        return
 
 
 sys.meta_path.append(PluginMetaPathFinder())
@@ -798,7 +850,7 @@ sys.meta_path.append(PluginMetaPathFinder())
 
 def load_file(file_name: str) -> typing.Optional[Plugin]:
     file_name = os.path.abspath(file_name)
-    print(f'Loading file {file_name}.')
+    log('info', f'Loading file {file_name}.')
 
     for name, pl_obj in plugins.items():
         if pl_obj.source == file_name:
@@ -806,7 +858,7 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
             return None
 
     plugin_name = os.path.split(file_name)[1].replace('.py', '')
-    print(f' -> Name: {plugin_name}')
+    log('info', f' -> Name: {plugin_name}')
     # noinspection PyProtectedMember
     spec: importlib._bootstrap.ModuleSpec = importlib.util.spec_from_file_location(plugin_name, file_name)
 
@@ -829,7 +881,7 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
     ]
     sys.modules[plugin_name] = pl.module
     plugins[pl.name] = pl
-    print(f' -> OKAY')
+    log('info', f' -> OKAY')
     return pl
 
 
@@ -901,13 +953,16 @@ if 'plebs' in bot.storage.data:
 if 'subs' in bot.storage.data:
     subs = bot.storage['subs']
 bot.twitch_mode()
+pubsub: typing.Optional[PubsubClient] = None
+
+loop = asyncio.get_event_loop()
 
 bot.join(bot.username.lower())
 
 if 'channels' in bot.storage.data:
     for i in bot.storage['channels']:
         if i in bot.channels_connected:
-            print(f'Skipping joining channel: {i}: Already connected.')
+            log('info', f'Skipping joining channel: {i}: Already connected.')
             continue
         bot.join(i)
 
@@ -928,8 +983,42 @@ if prog_args.restart_from:
 
 
     bot.schedule_event(1, 15, _send_restart_message, (), {})
+pubsub_middleware = PubsubMiddleware()
+bot.middleware.append(pubsub_middleware)
+
+
+async def _wait_for_pubsub_task(pubsub):
+    while 1:
+        try:
+            await pubsub.task
+        except asyncio.CancelledError:
+            continue
+
+
+async def main():
+    global pubsub
+    try:
+        uid = twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
+    except KeyError:
+        twitch_auth.refresh()
+        twitch_auth.save()
+        uid = twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
+
+    pubsub = PubsubClient(twitch_auth.new_api.auth.token)
+    await pubsub.initialize()
+    pubsub.listen([
+        f'chat_moderator_actions.{uid}.{uid}'
+    ])
+    for i in bot.channels_connected:
+        pubsub_middleware.join(twitchirc.Event('join', {'channel': i}, bot, cancelable=False, has_result=False))
+    await asyncio.gather(bot.arun(), _wait_for_pubsub_task(pubsub))
+
+
 try:
-    bot.run()
+    loop.run_until_complete(main())
+except KeyboardInterrupt:
+    print('Got SIGINT, exiting.')
+    bot.stop()
 except BaseException as e:
     traceback.print_exc()
     bot.call_middleware('fire',
@@ -938,7 +1027,7 @@ except BaseException as e:
                         },
                         False)
 finally:
-    print('finally')
+    log('debug', 'finally')
     # bot.call_handlers('exit', ())
     for name, pl in plugins.items():
         # noinspection PyBroadException
@@ -946,25 +1035,27 @@ finally:
             if pl.on_reload is not None:
                 pl.on_reload()
         except BaseException as e:
-            print(f'Failed to call on_reload for plugin {name!r}')
+            log('warn', f'Failed to call on_reload for plugin {name!r}')
             traceback.print_exc()
-    print('flush cached users')
+    log('debug', 'flush cached users')
     user_model.users_lock.acquire()
     for k, v in user_model.cached_users.items():
         user_model.cached_users[k]['expire_time'] = 0
     user_model.users_lock.release()
     flush_users()
-    print('flush cached users: done')
-    print('update channels and counters')
+    log('debug', 'flush cached users: done')
+    log('debug', 'update channels and counters')
     bot.storage.auto_save = False
-    bot.storage['channels'] = bot.channels_connected
+    if bot.channels_connected:
+        bot.storage['channels'] = bot.channels_connected
     bot.storage['counters'] = counters
-    print('update permissions')
+    log('debug', 'update permissions')
     bot.permissions.fix()
     for i in bot.permissions:
         bot.storage['permissions'][i] = bot.permissions[i]
     bot.storage['plebs'] = plebs
     bot.storage['subs'] = subs
-    print('save storage')
+    log('debug', 'save storage')
     bot.storage.save()
-    print('save storage: done')
+    log('debug', 'save storage: done')
+    log('info', 'Wrapped up')
