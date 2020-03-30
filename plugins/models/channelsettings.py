@@ -57,6 +57,10 @@ def get(Base, session_scope, all_settings):
 
         def _import(self) -> None:
             self._settings = json.loads(self.settings_raw)
+            for name in self._settings:
+                if name in all_settings:
+                    all_settings[name].call_on_load(self)
+                # otherwise, setting is not loaded.
 
         def _export(self) -> None:
             self.settings_raw = json.dumps(self._settings)
@@ -94,19 +98,44 @@ def get(Base, session_scope, all_settings):
 
             self._settings[setting.name] = value
 
+        def unset(self, setting_name: str, force_unknown: bool = False) -> None:
+            if force_unknown:
+                del self._settings[setting_name]
+                return
+
+            setting = Setting.find(setting_name)
+            if self.channel_alias != -1 and setting.scope == SettingScope.GLOBAL:
+                raise RuntimeError(f'Setting {setting_name!r} is global, it cannot be changed per channel.')
+
+            del self._settings[setting.name]
+
 
     class Setting:
         default_value: typing.Any
         name: str
         scope: SettingScope
 
+        def call_on_load(self, channel_settings):
+            if self.on_load:
+                self.on_load(channel_settings)
+
         def __init__(self, owner, name: str, default_value=..., scope=SettingScope.PER_CHANNEL,
-                     write_defaults=False):
+                     write_defaults=False, setting_type=None,
+                     on_load: typing.Optional[typing.Callable[[ChannelSettings], None]] = None):
             self.owner = owner
             self.name = name
             self.default_value = default_value
             self.scope = scope
             self.write_defaults = write_defaults
+            self.on_load = on_load
+            if setting_type is not None:
+                self.setting_type = setting_type
+            else:
+                if default_value not in [..., None]:
+                    self.setting_type = type(default_value)
+                else:
+                    self.setting_type = None  # unknown
+
             self.register()
 
         @staticmethod
@@ -135,7 +164,9 @@ def get(Base, session_scope, all_settings):
                 raise KeyError(f'Setting {self} is not registered.')
 
         def __repr__(self):
-            return f'<Setting {self.name} from plugin {self.owner.name}, scope: {self.scope.name}>'
+            return (f'<Setting {self.name} '
+                    f'from plugin {self.owner if isinstance(self.owner, (str, type(None))) else self.owner.name}, '
+                    f'scope: {self.scope.name}>')
 
 
     return ChannelSettings, Setting
