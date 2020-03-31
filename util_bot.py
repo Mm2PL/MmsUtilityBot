@@ -14,7 +14,6 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
-import atexit
 import builtins
 import contextlib
 import inspect
@@ -46,7 +45,7 @@ from twitchirc import Command, Event
 from sqlalchemy.ext.declarative import declarative_base
 
 from apis.pubsub import PubsubClient
-from apis.supibot import SupibotApi, ApiError
+from apis.supibot import SupibotApi
 import plugins.models.user as user_model
 import twitch_auth
 
@@ -67,8 +66,6 @@ class Args:
     restart_from: typing.List[str]
 
 
-# twitchirc.logging.LOG_FORMAT = '[{time}] [TwitchIRC/{level}] {message}\n'
-# twitchirc.logging.DISPLAY_LOG_LEVELS = LOG_LEVELS
 debug = False
 base_address = None
 if __name__ == '__main__':
@@ -240,59 +237,53 @@ def new_echo_command(command_name: str, echo_data: str,
     return echo_command
 
 
-def _is_pleb(msg: twitchirc.ChannelMessage) -> bool:
-    for i in (msg.flags['badges'] if isinstance(msg.flags['badges'], list) else [msg.flags['badges']]):
-        if i.startswith('subscriber'):
-            return False
-    return True
-
-
-plebs = {
-    # '{chat_name}': {
-    # '{username}': time.time() + 60 * 60  # Expiration time
-    # }
-}
-subs = {
-    # '{chat_name}': {
-    # '{username}': time.time() + 60 * 60  # Expiration time
-    # }
-}
-
 User, flush_users = user_model.get(Base, session_scope, log)
 
 
-def fix_pleb_list(chat: str):
-    global plebs
-    rem_count = 0
-    if chat not in plebs:
-        plebs[chat] = {}
-        return
-    if chat not in subs:
-        subs[chat] = {}
-    print(f'plebs: {plebs[chat]}')
-    for k, v in plebs[chat].copy().items():
-        if k in subs[chat]:
-            del plebs[chat][k]
-            rem_count += 1
-            continue
-        if v < time.time():
-            del plebs[chat][k]
-            rem_count += 1
-    print(f'Removed {rem_count} expired pleb entries.')
+class UserLoadingMiddleware(twitchirc.AbstractMiddleware):
+    def _perm_check(self, message, required_permissions, perm_list, enable_local_bypass=True):
+        missing_permissions = []
+        if message.user not in perm_list:
+            missing_permissions = required_permissions
+        else:
+            perm_state = perm_list.get_permission_state(message)
+            return self._real_perm_check(enable_local_bypass, message, missing_permissions, perm_list,
+                                         required_permissions, perm_state)
+        return missing_permissions
+
+    def _real_perm_check(self, enable_local_bypass, message, missing_permissions, perm_list, required_permissions,
+                         perm_state):
+
+        if twitchirc.GLOBAL_BYPASS_PERMISSION in perm_state or \
+                (enable_local_bypass
+                 and twitchirc.LOCAL_BYPASS_PERMISSION_TEMPLATE.format(message.channel) in perm_state):
+            return []
+        for p in required_permissions:
+            if p not in perm_state:
+                missing_permissions.append(p)
+        return missing_permissions
+
+    def permission_check(self, event: Event) -> None:
+        # pre check
+        message = event.data.get('message')
+        permissions = event.data.get('permissions')
+        enable_local_bypass = event.data.get('enable_local_bypass', False)
+
+        missing_perms = self._perm_check(message, permissions, bot.permissions, enable_local_bypass)
+        if missing_perms:
+            user = User.get_by_message(message, False)
+            perm_state = bot.permissions.get_permission_state(message)
+            perm_state += user.permissions
+
+            # noinspection PyProtectedMember
+            perm_state = bot.permissions._get_permissions_from_parents(perm_state)
+
+            real_missing_perms = self._real_perm_check(enable_local_bypass, message, [], bot.permissions, permissions,
+                                                       perm_state)
+            event.result = real_missing_perms
 
 
-def fix_sub_list(chat: str):
-    global subs
-    rem_count = 0
-    # print(f'plebs: {subs}')
-    if chat not in subs:
-        subs[chat] = {}
-        return
-    for k, v in subs[chat].copy().items():
-        if v < time.time():
-            del subs[chat][k]
-            rem_count += 1
-    print(f'Removed {rem_count} expired sub entries.')
+bot.middleware.append(UserLoadingMiddleware())
 
 
 def delete_replace(text, chars):
@@ -303,40 +294,6 @@ def delete_replace(text, chars):
 
 def delete_spammer_chrs(text):
     return delete_replace(text, f'\U000e0000\x01{chr(0x1f36a)}')
-
-
-@bot.add_command('count_subs')
-def count_subs_command(msg: twitchirc.ChannelMessage):
-    global subs
-    cd_state = do_cooldown(cmd='count_subs', msg=msg)
-    if cd_state:
-        return
-    fix_sub_list(msg.channel)
-    bot.send(msg.reply(
-        f'@{msg.flags["display-name"]} Counted {len(subs[msg.channel])} subs active in chat during the last hour.'))
-
-
-@bot.add_command('count_plebs')
-def count_pleb_command(msg: twitchirc.ChannelMessage):
-    global plebs
-    cd_state = do_cooldown(cmd='count_plebs', msg=msg)
-    if cd_state:
-        return
-    fix_pleb_list(msg.channel)
-    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel])} '
-                       f'plebs active in chat during the last hour.'))
-
-
-@bot.add_command('count_chatters')
-def count_chatters(msg: twitchirc.ChannelMessage):
-    global plebs, subs
-    cd_state = do_cooldown(cmd='count_chatters', msg=msg)
-    if cd_state:
-        return
-    fix_pleb_list(msg.channel)
-    fix_sub_list(msg.channel)
-    bot.send(msg.reply(f'@{msg.flags["display-name"]} Counted {len(plebs[msg.channel]) + len(subs[msg.channel])} '
-                       f'chatters active here in the last hour.'))
 
 
 counters = {}
@@ -437,42 +394,9 @@ def add_alias(bot_obj, alias):
     return decorator
 
 
-@bot.add_command('not_active', required_permissions=['util.not_active'])
-def command_not_active(msg: twitchirc.ChannelMessage):
-    global plebs
-    argv = delete_spammer_chrs(msg.text).split(' ')
-    if len(argv) < 2:
-        bot.send(msg.reply(f'@{msg.user} Usage: not_active <user> Marks the user as not active'))
-        return
-    text = argv[1:]
-    if len(text) == 1:
-        print(text[0])
-        rem_count = 0
-        if text[0] in plebs[msg.channel]:
-            del plebs[msg.channel][text[0]]
-            rem_count += 1
-        if text[0] in subs[msg.channel]:
-            del subs[msg.channel][text[0]]
-            rem_count += 1
-        if not rem_count:
-            bot.send(msg.reply(f'@{msg.user} {text[0]!r}: No such chatter found.'))
-        else:
-            bot.send(msg.reply(f'@{msg.user} {text[0]!r}: Marked person as not active.'))
-
-
 def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
-    global plebs
     user = User.get_by_message(msg, no_create=False)
     user.schedule_update(msg)
-
-    if _is_pleb(msg):
-        if msg.channel not in plebs:
-            plebs[msg.channel] = {}
-        plebs[msg.channel][msg.user] = time.time() + 60 * 60
-    else:
-        if msg.channel not in subs:
-            subs[msg.channel] = {}
-        subs[msg.channel][msg.user] = time.time() + 60 * 60
 
 
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
@@ -689,39 +613,13 @@ def _exec(path, args):
     os.execvp(path, args)
 
 
-@bot.add_command('mb.restart', required_permissions=['util.restart'])
-def command_restart(msg: twitchirc.ChannelMessage):
-    if 'debug' in msg.text and not prog_args.debug:
-        return
-    bot.send(msg.reply(f'Restarting MrDestructoid {chr(128299)}'))
-    # Restaring MrDestructoid :gun:
-    print('.')
-    while 1:
-        print(f'\033[A\033[KFlushing queues... Non-empty queues: {list(filter(lambda i: bool(i), bot.queue))}')
-        bot.flush_queue(1000)
-        all_empty = True
-        for q in bot.queue:
-            if bot.queue[q]:
-                all_empty = False
-        if all_empty:
-            break
-    print('\033[A\033[KFlushing queues: DONE!')
-    time.sleep(1)
-
-    bot.stop()
-    python = f'python{sys.version_info.major}.{sys.version_info.minor}'
-
-    @atexit.register
-    def run_on_shutdown():
-        if prog_args.debug:
-            _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel, '--debug'])
-        else:
-            _exec(python, [python, __file__, '--_restart_from', msg.user, msg.channel])
-
-    raise SystemExit('restart.')
+def reload_users():
+    User.empty_cache()
+    return 'emptied cache.'
 
 
 reloadables: typing.Dict[str, types.FunctionType] = {}
+reloadables['users'] = reload_users
 
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'], enable_local_bypass=False)
@@ -885,11 +783,6 @@ def load_file(file_name: str) -> typing.Optional[Plugin]:
     return pl
 
 
-@bot.add_command('mb.crash', required_permissions=['util.crash'], enable_local_bypass=False)
-def command_generate_exception(msg: twitchirc.ChannelMessage):
-    raise Exception(f'This is a test exception: {msg.text}')
-
-
 def black_list_user(user, time_to_black_list):
     global cooldowns
     cooldowns[user] = time.time() + time_to_black_list
@@ -1039,8 +932,8 @@ finally:
             traceback.print_exc()
     log('debug', 'flush cached users')
     user_model.users_lock.acquire()
-    for k, v in user_model.cached_users.items():
-        user_model.cached_users[k]['expire_time'] = 0
+    for k, v in user_model.modified_users.items():
+        user_model.modified_users[k]['expire_time'] = 0
     user_model.users_lock.release()
     flush_users()
     log('debug', 'flush cached users: done')

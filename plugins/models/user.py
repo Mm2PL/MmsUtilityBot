@@ -13,14 +13,15 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import asyncio
 import datetime
+import json
 import threading
 import time
 import typing
 
 import sqlalchemy
 import twitchirc
+from sqlalchemy.orm import reconstructor
 from twitchirc import ChannelMessage
 
 CACHE_EXPIRE_TIME = 15 * 60
@@ -35,7 +36,7 @@ def _is_pleb(msg: twitchirc.ChannelMessage) -> bool:
     return True
 
 
-cached_users: typing.Dict[int, typing.Dict[str, typing.Union[datetime.datetime, int, ChannelMessage]]] = {
+modified_users: typing.Dict[int, typing.Dict[str, typing.Union[datetime.datetime, int, ChannelMessage]]] = {
     # base_id
     # 123: {
     #     'last_active': datetime.datetime.now(),
@@ -47,7 +48,38 @@ cached_users: typing.Dict[int, typing.Dict[str, typing.Union[datetime.datetime, 
 
 # noinspection PyPep8Naming
 def get(Base, session_scope, log):
-    class User(Base):
+    class UserMeta(Base.__class__):
+        cache: typing.Dict[int, typing.Dict[str, typing.Union[float, typing.Any]]] = {
+            # 123: {
+            #     'expires': time.time() +CACHE_EXPIRE_TIME,
+            #     'obj': User
+            # }
+        }
+
+        def expire_caches(self):
+            print('expire caches')
+            current_time = time.time()
+            for obj_id, obj_data in self.cache.copy().items():
+                if obj_data['expires'] < current_time:
+                    print(obj_id, 'expired', obj_data)
+                    del self.cache[obj_id]
+
+        def add_to_cache(self, obj):
+            if obj.id in self.cache:
+                print(f'[failed] Add to cache {obj}')
+                return
+            print(f'Add to cache {obj}')
+            print(self.cache)
+            self.cache[obj.id] = {
+                'expires': time.time() + CACHE_EXPIRE_TIME,
+                'obj': obj
+            }
+
+        def empty_cache(self):
+            self.cache.clear()
+
+
+    class User(Base, metaclass=UserMeta):
         __tablename__ = 'users'
         id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
         twitch_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
@@ -61,6 +93,20 @@ def get(Base, session_scope, log):
         # last_message_channel = sqlalchemy.Column(sqlalchemy.Text)
 
         first_active = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
+        permissions_raw = sqlalchemy.Column(sqlalchemy.Text, default='[]')
+        permissions = []
+
+        def import_permissions(self):
+            self.permissions = json.loads(self.permissions_raw)
+
+        def export_permissions(self):
+            self.permissions_raw = json.dumps(self.permissions)
+
+        @reconstructor
+        def _reconstructor(self):
+            print(f'reconstructor for {self!r}')
+            self.import_permissions()
+            User.add_to_cache(self)
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -68,6 +114,13 @@ def get(Base, session_scope, log):
 
         @staticmethod
         def _get_by_message(msg, no_create, session):
+            User.expire_caches()
+            print(f'get by message {msg}')
+            for obj_id, obj_data in User.cache.items():
+                if obj_data['obj'].twitch_id == int(msg.flags['user-id']):
+                    print(f'load from cache {obj_data}')
+                    return obj_data['obj']
+
             user: User = (session.query(User)
                           .filter(User.twitch_id == msg.flags['user-id'])
                           .first())
@@ -88,12 +141,24 @@ def get(Base, session_scope, log):
                 return User._get_by_message(msg, no_create, session)
 
         @staticmethod
-        def get_by_twitch_id(id_: int):
-            with session_scope() as session:
-                user: User = session.query(User).filter(User.twitch_id == id_).first()
-                if user is not None:
-                    session.refresh(user)
-                return user
+        def _get_by_twitch_id(id_: int, session):
+            user: User = session.query(User).filter(User.twitch_id == id_).first()
+            if user is not None:
+                session.refresh(user)
+            return user
+
+        @staticmethod
+        def get_by_twitch_id(id_: int, session=None):
+            User.expire_caches()
+            for obj_id, obj_data in User.cache.items():
+                if obj_data['obj'].twitch_id == id_:
+                    return obj_data['obj']
+
+            if session:
+                return User._get_by_twitch_id(id_, session)
+            else:
+                with session_scope() as s:
+                    return User._get_by_twitch_id(id_, s)
 
         @staticmethod
         def _get_by_local_id(id_: int, session=None):
@@ -104,6 +169,10 @@ def get(Base, session_scope, log):
 
         @staticmethod
         def get_by_local_id(id_: int, s=None):
+            User.expire_caches()
+            if id_ in User.cache:
+                return User.cache[id_]['obj']
+
             if s is None:
                 with session_scope() as session:
                     return User._get_by_local_id(id_, session)
@@ -144,9 +213,10 @@ def get(Base, session_scope, log):
                 self._update(update, s)
 
         def schedule_update(self, msg: twitchirc.ChannelMessage):
-            global cached_users
+            global modified_users
             has_state_change = False
             was_changed = False
+
             if 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']:
                 if msg.channel not in self.mod_in:
                     self.add_mod_in(msg.channel)
@@ -171,11 +241,16 @@ def get(Base, session_scope, log):
             if msg.user != self.last_known_username:
                 was_changed = True
 
+            old_perms = self.permissions_raw
+            self.export_permissions()
+            if old_perms != self.permissions_raw:
+                was_changed = True
+                has_state_change = True
             if was_changed:
-                cached_users[self.id] = {
+                modified_users[self.id] = {
                     'last_active': datetime.datetime.now(),
                     'msg': msg,
-                    'expire_time': (time.time()+10) if has_state_change else (time.time() + CACHE_EXPIRE_TIME)
+                    'expire_time': (time.time() + 10) if has_state_change else (time.time() + CACHE_EXPIRE_TIME)
                 }
 
         @property
@@ -237,7 +312,7 @@ def get(Base, session_scope, log):
                     user.update(update, session)
             log('debug', 'Deleting to_updates.')
             for db_id in to_update:
-                del cached_users[db_id]
+                del modified_users[db_id]
         finally:
             log('debug', 'release lock.')
             users_lock.release()
@@ -248,12 +323,12 @@ def get(Base, session_scope, log):
         users_lock.acquire()
         current_time = int(time.time())
         to_update = {}
-        for db_id, user in cached_users.copy().items():
+        for db_id, user in modified_users.copy().items():
             if user['expire_time'] <= current_time:
                 log('debug', f'flush user {db_id}')
                 to_update[db_id] = user
         if to_update:
-            log('debug', f'users cache is of length {len(cached_users)}, {len(to_update)} are going to be '
+            log('debug', f'users cache is of length {len(modified_users)}, {len(to_update)} are going to be '
                          f'removed from the cache.')
 
             t = threading.Thread(target=_update_users, args=(to_update,), kwargs={})

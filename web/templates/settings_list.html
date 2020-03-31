@@ -18,7 +18,9 @@
 
 {% extends 'meta_template.html' %}
 {% block header %}
-    <h1>{% block title %}Settings.{% endblock %}</h1>
+    <h1>{% block title %}Settings
+        {% if channel_id != -1 %} in #{{ settings.channel.last_known_username }}{% else %}globals
+        {% endif %}{% endblock %}</h1>
 {% endblock %}
 
 {% block content %}

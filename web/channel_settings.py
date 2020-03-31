@@ -17,7 +17,8 @@ import json
 import time
 import typing
 
-from flask import session, abort, Response, jsonify, request, render_template, flash
+import twitchirc
+from flask import session, abort, Response, jsonify, request, render_template, flash, redirect
 
 try:
     from plugins.models import channelsettings as settings_model
@@ -70,7 +71,9 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 return True
 
             user = main_module.User.get_by_twitch_id(uid)
-            if setting_owner.last_known_username in user.mod_in:
+            if (setting_owner.last_known_username in user.mod_in
+                    or f'settings.{setting_owner.twitch_id}' in user.permissions
+                    or twitchirc.GLOBAL_BYPASS_PERMISSION in user.permissions):
                 return True
         return False
 
@@ -297,6 +300,8 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
 
         if channel_id == 0:
             channel_id = session.get('user_id')
+            return redirect(f'/settings/{channel_id}')
+
         _refetch_settings()
         with session_scope() as s:
             # noinspection PyProtectedMember
