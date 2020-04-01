@@ -31,6 +31,7 @@
             <th id="th_name">Setting name</th>
             <th id="th_value">Value</th>
             <th id="th_actions">Actions</th>
+            <th id="th_help">Help</th>
         </tr>
         </thead>
         <tbody>
@@ -56,6 +57,15 @@
                     {% endif %}
                     <td class="setting_edit">
                         <a href="{{ request.url }}/{{ setting.name }}?return_to={{ request.url }}">Edit</a>
+                    </td>
+                    <td class="setting_help">
+                        {% if setting.help %}
+                            {% autoescape off %}
+                            {{ setting.help.replace('\n', '<br>') }}
+                            {% endautoescape %}
+                        {% else %}
+                            <em>Not available</em>
+                        {% endif %}
                     </td>
                 </tr>
             {% endif %}

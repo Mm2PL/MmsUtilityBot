@@ -46,7 +46,8 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                               v['default_value'] if v['default_value'] != '...' else ...,
                               _prase_setting_scope(v['scope']),
                               v['write_defaults'],
-                              v['setting_type'])
+                              v['setting_type'],
+                              help_=v['help'])
             all_settings[k] = setting
 
     def _refetch_settings():

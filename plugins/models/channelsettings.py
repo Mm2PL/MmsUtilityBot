@@ -121,13 +121,15 @@ def get(Base, session_scope, all_settings):
 
         def __init__(self, owner, name: str, default_value=..., scope=SettingScope.PER_CHANNEL,
                      write_defaults=False, setting_type=None,
-                     on_load: typing.Optional[typing.Callable[[ChannelSettings], None]] = None):
+                     on_load: typing.Optional[typing.Callable[[ChannelSettings], None]] = None,
+                     help_: typing.Optional[str] = None):
             self.owner = owner
             self.name = name
             self.default_value = default_value
             self.scope = scope
             self.write_defaults = write_defaults
             self.on_load = on_load
+            self.help = help_
             if setting_type is not None:
                 self.setting_type = setting_type
             else:
