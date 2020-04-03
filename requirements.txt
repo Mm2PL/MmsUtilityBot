@@ -10,3 +10,4 @@ twitchirc
 srcomapi
 pymysql
 regex
+websockets

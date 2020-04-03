@@ -63,6 +63,7 @@ This is a code repository of the [Twitch bot](https://www.twitch.tv/mm_sutilityb
     1. Path for sqlite is `sqlite:///PATH/TO/DB`
     2. For MariaDB or Mysql it is `mysql+pymysql://user:passowrd@host/db_name`
 5. Create a key pair for signing code. Make sure to store the private key somewhere safe, if you are running the bot in a vm or on an external host, don't send the key there
+    You can use the included `generate_keys.py` script to do this for you.
     Your keys should look a bit like this:
     ```
     -----BEGIN RSA PUBLIC KEY-----
@@ -76,7 +77,7 @@ This is a code repository of the [Twitch bot](https://www.twitch.tv/mm_sutilityb
     2. For debug `python util_bot.py --debug --base-addr YOUR_DATABASE_ADDRESS`
     
     NOTE: debug mode doesn't do much right now, it just uses `storage_debug.json` instead of `storage.json`
-8. Stop the bot.
+8. Stop the bot using `Control+c`, it is fine to press it again when the bot is not outputing anything, but still running
 9. Fine tune the config:
     1. Open `storage.json` with your favourite text editor
     2. (optional) beatify the file somehow
