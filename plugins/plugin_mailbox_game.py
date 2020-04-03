@@ -15,6 +15,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
 import re
+import sys
 import time
 import typing
 
@@ -80,13 +81,15 @@ class Plugin(main.Plugin):
             'mailbox_game.enabled',
             default_value=False,
             scope=plugin_manager.SettingScope.PER_CHANNEL,
-            write_defaults=True
+            write_defaults=True,
+            on_load=self._load_from_settings
         )
         self.mailbox_games = {}
         self.command_mailbox = main.bot.add_command('mailbox', limit_to_channels=[], available_in_whispers=False,
                                                     required_permissions=['mailbox.manage'],
                                                     enable_local_bypass=True)(self.command_mailbox)
         main.reloadables['mailbox_channels'] = self._reload_channels
+        main.reloadables['plugin.mailbox'] = self._reload_self
         main.bot.schedule_event(0.1, 10, self._reload_channels, (), {})  # load channels
 
         plugin_help.create_topic('mailbox', 'Manage the mailbox game. Subcommands: mailbox start, '
@@ -134,6 +137,13 @@ class Plugin(main.Plugin):
                                  'Highest amount of names shown when drawing winner(s)'
                                  'Use winners:NUMBER to change this number. Default: 3',
                                  section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox start punish_more',
+                                 'Punish users for guessing more than they are allowed to. '
+                                 'This will make the users guesses worth zero points. '
+                                 'Use +punish_more to enable this. Default: false',
+                                 section=plugin_help.SECTION_ARGS)
+
+        self.dumps = []
 
     def _reload_channels(self):
         self.command_mailbox.limit_to_channels = []
@@ -142,6 +152,29 @@ class Plugin(main.Plugin):
             if settings.get(self.game_enabled_setting):
                 self.command_mailbox.limit_to_channels.append(channel)
         return len(self.command_mailbox.limit_to_channels)
+
+    def _load_from_settings(self, channel_settings: plugin_manager.ChannelSettings):
+        is_enabled = channel_settings.get(self.game_enabled_setting)
+        username = channel_settings.channel.last_known_username
+        if is_enabled:
+            if username not in self.command_mailbox.limit_to_channels:
+                self.command_mailbox.limit_to_channels.append(username)
+        else:
+            if username in self.command_mailbox.limit_to_channels:
+                self.command_mailbox.limit_to_channels.remove(username)
+
+    def _reload_self(self):
+        del main.plugins['mailbox_game']
+        del sys.modules['plugin_mailbox_game']
+        del main.reloadables['plugin.mailbox']
+        del main.reloadables['mailbox_channels']
+        print(sys.modules)
+        for c in main.bot.commands.copy():
+            if c.chat_command in self.commands:
+                main.bot.commands.remove(c)
+        self.game_enabled_setting.unregister()
+        main.load_file('plugins/plugin_mailbox_game.py')
+        return 'ᕕ Pepega ᕗ'
 
     @property
     def no_reload(self):
@@ -185,7 +218,8 @@ class Plugin(main.Plugin):
                 'mods': bool,
                 'vips': bool,
                 'winners': int,
-                'find_best': bool
+                'find_best': bool,
+                'punish_more': bool
             }, strict_escapes=False, strict_quotes=True, ignore_arg_zero=False)
         except arg_parser.ParserError as e:
             return f'@{msg.user}, Unexpected error when processing arguments: {e.message}'
@@ -236,11 +270,14 @@ class Plugin(main.Plugin):
         msgs = plugin_chat_cache.find_messages(msg.channel, min_timestamp=settings['start_time'],
                                                max_timestamp=settings['end_time'])
 
-        possible_guesses = self._filter_messages(msgs, settings)
+        possible_guesses = list(self._filter_messages(msgs, settings))
 
-        guesses = self._count_guesses(possible_guesses, settings)
-        good_guesses = self._find_good_guesses(guesses, good_value)
+        # guesses = self._count_guesses(possible_guesses, settings)
+        print('possible', possible_guesses)
+        good_guesses = self._find_good_guesses(possible_guesses, good_value, settings)
+        print('good', good_guesses)
         best = self._best_guess(settings, good_guesses)
+        print('best', best)
         del self.mailbox_games[msg.channel]
         if len(best) == 0:
             return (f'{"(automatically closed the game)" if show_closed else ""}'
@@ -256,7 +293,7 @@ class Plugin(main.Plugin):
                 return settings['plebs']
             elif grp == 'broadcaster':
                 return settings['subs'] or settings['mods']
-            elif grp in 'subscriber':
+            elif grp == 'subscriber':
                 return settings['subs']
             elif grp in ('moderator', 'staff'):
                 return settings['mods']
@@ -276,7 +313,7 @@ class Plugin(main.Plugin):
     def _best_guess(self, settings,
                     good_guesses: typing.Dict[str, typing.Dict[str, typing.Union[int, twitchirc.ChannelMessage]]]):
         best = []
-        for num, guess in enumerate(sorted(good_guesses.values(), key=lambda o: o['quality'])):
+        for num, guess in enumerate(sorted(good_guesses.values(), key=lambda o: o['quality'], reverse=True)):
             if num > settings['winners']:
                 break
 
@@ -289,11 +326,14 @@ class Plugin(main.Plugin):
             best.append(guess)
         return best
 
-    def _find_good_guesses(self, guesses: typing.List[twitchirc.ChannelMessage], good):
-        good_guesses: typing.Dict[str, typing.Dict[str, typing.Union[int, twitchirc.ChannelMessage]]] = {
+    def _find_good_guesses(self, guesses: typing.List[twitchirc.ChannelMessage], good, settings):
+        good_guesses: typing.Dict[str, typing.Dict[str, typing.Union[int, twitchirc.ChannelMessage,
+                                                                     typing.List[int]]]] = {
             # 'user': {
             #     'msg': twitchirc.ChannelMessage(),
             #     'quality': 3 # guess quality, 0/3 no match, 3/3 full match
+            #     'parsed': [1, 2, 3],
+            #     'count': 1
             # }
         }
         for i in guesses:
@@ -305,35 +345,26 @@ class Plugin(main.Plugin):
                     points += 1
 
             if i.user in good_guesses:  # check if user had a better guess before
+                if guess != good_guesses[i.user]['parsed']:
+                    good_guesses[i.user]['count'] += 1
+
+                if good_guesses[i.user]['count'] > settings['guesses']:
+                    if settings['punish_more']:
+                        good_guesses[i.user]['quality'] = 0
+                    continue  # ignore any further guesses.
                 if good_guesses[i.user]['quality'] < points:
                     good_guesses[i.user]['quality'] = points
                     good_guesses[i.user]['msg'] = i
+                    good_guesses[i.user]['parsed'] = guess
             else:
                 good_guesses[i.user] = {
                     'quality': points,
-                    'msg': i
+                    'msg': i,
+                    'parsed': guess,
+                    'count': 1
                 }
 
         return good_guesses
-
-    def _count_guesses(self, first_parse, settings):
-        number_guesses = {}
-        guesses = []
-
-        for message in first_parse:
-            if message.user not in number_guesses:
-                number_guesses[message.user] = 0
-            number_guesses[message.user] += 1
-            guesses.append(message)
-
-        for user, amount in number_guesses.items():
-            if amount > settings['guesses']:
-                for i in guesses.copy():
-                    if i.user == user:
-                        guesses.remove(i)
-
-        print(guesses, number_guesses)
-        return guesses
 
     def _nice_best_guesses(self, best):
         output = []
