@@ -1,64 +1,21 @@
 # Mm's utility bot
 This is a code repository of the [Twitch bot](https://www.twitch.tv/mm_sutilitybot).
 
-# Installing
+## Compatibility
+This bot uses UNIX sockets for IPC, so it may not work on Windows.
 
+# Installing
+0. Create an app for your bot and authorize your bot account with it
+    1. you can use [this](https://www.twitchapps.com/tmi/) generator instead to get an oauth token to join the chat, 
+       however you won't be able to use the API.
+ 
 1. Clone the repo, for example using `git clone https://github.com/Mm2PL/MmsUtilityBot`
 2. Install requirements from `requirements.txt` using pip (`pip install -r requirements.txt`)
-3. Create necessary configuration files:<br>
-    ```shell script
-    cat > storage.json << EOF
-    {
-      "permissions": {
-           "your lower case twitch username": ["twitchirc.bypass.permission"]
-       }
-    }
-    EOF
-   
-    # optional, only required if you are running the bot with the debug flag
-    cp storage.json storage_debug.json
-    
-    cat > twitch_api.json << EOF
-    {
-    "access_token": "your_Twitch_access_token012345",
-    "client_id": "your_Twitch_client_id012345678",
-    "client_secret": "your_Twitch_client_secret01234",
-    }
-    EOF
-   
-    cat > commands.json << EOF
-    [
-      {
-        "_comment": "Example echo command",
-        "type": "echo",
-        "channel": [
-          "list_of_channels"
-        ],
-        "message": "Your message, executor is {user}, command name is {cmd}, argument 0 is {0}, all arguments are {+}",
-      },
-      {
-        "_comment": "Example counter command",
-        "type": "counter",
-        "channel": [
-          "list_of_channels"
-        ],
-        "message": {
-          "_comment": "true is sent when the counters value changed, false otherwise",
-          "false": "Counter didn't change, name is {name}, value is {val}",
-          "true": "Counter changed, name is {name}, old value is {old_val}, {new_val}"
-        }
-      }
-    ]
-    EOF
-   
-   # required, can be filled in with bad info if you don't want Supibot integration
-   cat > supibot_auth.json << EOF
-   {
-       "id": [your bot's Supibot user alias],
-       "key": "your_bots_secret_key00000000000000000000000000000000000000000000"
-   }
-   EOF
-    ```
+3. Create necessary configuration files:
+    - Run `create_config_files.sh`,
+    - Edit `storage.json` and change `your lower case twitch username` to your username.  
+      The one you are looking for is lower case and doesn't contain any Asian characters.
+    - Edit `twitch_api.json`
 4. Pick a database, for local testing you can use sqlite, for production you can use MariaDB,
     1. Path for sqlite is `sqlite:///PATH/TO/DB`
     2. For MariaDB or Mysql it is `mysql+pymysql://user:passowrd@host/db_name`
