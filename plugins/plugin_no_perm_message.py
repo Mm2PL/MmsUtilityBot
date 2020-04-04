@@ -54,7 +54,15 @@ class Plugin(main.Plugin):
         self.no_perm_handler = plugin_manager.Setting(self,
                                                       'no_perm_handler',
                                                       default_value=NO_PERM_MESSAGE,
-                                                      scope=plugin_manager.SettingScope.PER_CHANNEL)
+                                                      scope=plugin_manager.SettingScope.PER_CHANNEL,
+                                                      help_=(
+                                                          f'Changes behaviour when a user tries to use a command they '
+                                                          f'don\'t have permission to use. \n'
+                                                          f'If set to {NO_PERM_MESSAGE} a message will be shown to the '
+                                                          f'user saying that they are missing permissions, \n'
+                                                          f'otherwise this kind of event will be ignored and no '
+                                                          f'messages will be shown.'
+                                                      ))
 
     def _no_permission_handler(self, event, message: twitchirc.ChannelMessage,
                                command: typing.Optional[twitchirc.Command], missing_permissions: typing.List[str]):

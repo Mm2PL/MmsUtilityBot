@@ -212,7 +212,8 @@ class Plugin(main.Plugin):
             'cancer.pyramid_enabled',
             default_value=False,
             scope=plugin_manager.SettingScope.PER_CHANNEL,
-            write_defaults=True
+            write_defaults=True,
+            help_='Toggles if the mb.pyramid command is enabled in the channel.'
         )
 
         self.cookie_optin_setting = plugin_manager.Setting(
@@ -369,6 +370,7 @@ class Plugin(main.Plugin):
             return
         if time.time() < self.next_ed_time:
             return
+        self.next_ed_time = time.time() + 30 * 60 + 1
         rand = random.randint(1, 100)
         if rand < NEEDED_FOR_ED:
             msg = twitchirc.ChannelMessage(f'info: skipping entering dungeon, rolled {rand}, '
@@ -380,7 +382,6 @@ class Plugin(main.Plugin):
         msg = twitchirc.ChannelMessage('+ed', main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
         main.bot.send(msg)
         log('info', 'Queued enter dungeon message :)')
-        self.next_ed_time = time.time() + 30 * 60 + 1
 
     async def _ps_sneeze_init(self, msg: twitchirc.ChannelMessage):
         self._sneeze = (time.time() + self.cooldown_timeout, msg)

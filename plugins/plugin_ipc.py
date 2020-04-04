@@ -526,7 +526,8 @@ def _command_all_settings(sock: socket.socket, msg: str, socket_id):
                 'default_value': '...' if v.default_value is ... else v.default_value,
                 'scope': v.scope.name,
                 'write_defaults': v.write_defaults,
-                'setting_type': v.setting_type.__name__ if hasattr(v.setting_type, '__name__') else str(v.setting_type)
+                'setting_type': v.setting_type.__name__ if hasattr(v.setting_type, '__name__') else str(v.setting_type),
+                'help': v.help
             } for k, v in plugin_manager.all_settings.items()
         }
     })
