@@ -13,7 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+import asyncio
 import typing
 
 try:
@@ -39,10 +39,12 @@ log = main.make_log_function(NAME)
 class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
-        main.bot.schedule_repeated_event(0.1, 100, self._flush, (), {})
+        self.task = asyncio.get_event_loop().create_task(self._flush())
 
-    def _flush(self):
-        main.bot.flush_queue(10)
+    async def _flush(self):
+        while 1:
+            await main.bot.flush_queue(10)
+            await asyncio.sleep(0.5)
 
     @property
     def no_reload(self):

@@ -76,8 +76,9 @@ class Plugin(main.Plugin):
         self.db_log_level = self.log_levels['info']
         self._logger_queue = queue.Queue()
         self._logger_thread = threading.Thread(target=self._logger_thread_func, args=(self._logger_queue,),
-                                               daemon=True)
-        self._logger_thread.start()
+                                               daemon=False)
+        main.bot.schedule_event(0.1, 100, self._logger_thread.start, (), {})
+        # start logging after everything is initialized
         self._logger_thread_stop_lock = threading.Lock()
         self.oauth_pat = regex.compile(
             'oauth:[a-z0-9]{30}'
@@ -170,8 +171,9 @@ class Plugin(main.Plugin):
                     self._flush_batch(batch)
                 return
             batch.append(data)
-            if len(batch) > 50 or time.time() > batch_start + 30:
-                self._flush_batch(batch)
+            if len(batch) > 1_000 or time.time() > batch_start + 10:
+                if batch:
+                    self._flush_batch(batch)
                 batch = []
                 batch_start = time.time()
 
@@ -182,9 +184,11 @@ class Plugin(main.Plugin):
     def _register_atexit(self):
         def write_post_dis_conn(*args):
             del args
+            print('at exit of logs')
             self.log('logs',
                      0,
                      'Disconnected!',
                      cause=CAUSE_TASK)
+            self._logger_queue.put(None, True)
 
         main.bot.handlers['post_disconnect'].append(write_post_dis_conn)

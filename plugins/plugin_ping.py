@@ -64,7 +64,7 @@ def _blacklist_info(channel: str):
 
 
 def _channel_info():
-    if main.prog_args.debug:
+    if main.debug:
         return f' Running on channel debug.'
     else:
         return ''
