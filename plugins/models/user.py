@@ -83,6 +83,7 @@ def get(Base, session_scope, log):
         __tablename__ = 'users'
         id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
         twitch_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
+        discord_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
         last_known_username = sqlalchemy.Column(sqlalchemy.Text)
 
         mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
@@ -116,19 +117,38 @@ def get(Base, session_scope, log):
         def _get_by_message(msg, no_create, session):
             User.expire_caches()
             print(f'get by message {msg}')
-            for obj_id, obj_data in User.cache.items():
-                if obj_data['obj'].twitch_id == int(msg.flags['user-id']):
-                    print(f'load from cache {obj_data}')
-                    return obj_data['obj']
+            if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
+                for obj_id, obj_data in User.cache.items():
+                    if obj_data['obj'].twitch_id == int(msg.flags['user-id']):
+                        print(f'load from cache {obj_data}')
+                        return obj_data['obj']
 
-            user: User = (session.query(User)
-                          .filter(User.twitch_id == msg.flags['user-id'])
-                          .first())
+                user: User = (session.query(User)
+                              .filter(User.twitch_id == msg.flags['user-id'])
+                              .first())
+            elif hasattr(msg, 'platform') and msg.platform.name == 'DISCORD':
+                for obj_id, obj_data in User.cache.items():
+                    if obj_data['obj'].discord_id == int(msg.flags['discord-user-id']):
+                        print(f'load from cache {obj_data}')
+                        return obj_data['obj']
+
+                user: User = (session.query(User)
+                              .filter(User.discord_id == msg.flags['discord-user-id'])
+                              .first())
+            else:
+                raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
 
             if user is None and not no_create:
-                user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
-                            sub_in_raw='')
+                if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
+                    user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
+                                sub_in_raw='')
+                elif hasattr(msg, 'platform') and msg.platform.name == 'DISCORD':
+                    user = User(twitch_id=None, last_known_username=msg.user, mod_in_raw='',
+                                sub_in_raw='', discord_id=msg.flags['discord-user-id'])
+                else:
+                    raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
                 session.add(user)
+                session.commit()
             session.expunge(user)
             return user
 
@@ -278,11 +298,14 @@ def get(Base, session_scope, log):
             self.sub_in_raw = ', '.join(sub_in)
 
         def remove_mod_in(self, channel):
+            print(repr(channel))
             channel = channel.lower()
             if channel not in self.mod_in:
                 return
             mod_in = self.mod_in
+            print(mod_in)
             mod_in.remove(channel)
+            print(mod_in)
             self.mod_in_raw = ', '.join(mod_in)
 
         def add_mod_in(self, channel):

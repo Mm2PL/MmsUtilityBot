@@ -13,9 +13,12 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-from .twitch import TwitchClient
+from . import discord
+from . import twitch
 from ..platform import Platform
+
+
 CLIENTS = {
-    Platform.TWITCH: TwitchClient
+    Platform.TWITCH: twitch.TwitchClient,
+    Platform.DISCORD: discord.DiscordClient
 }

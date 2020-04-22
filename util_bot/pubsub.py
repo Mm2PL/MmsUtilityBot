@@ -49,9 +49,6 @@ class PubsubMiddleware(twitchirc.AbstractMiddleware):
         if channel_name not in channel_live_state:
             channel_live_state[channel_name] = False
 
-        log('info', f'MEGADANK logging!!!!!!!\n'
-                    f'{channel_name!r}\n'
-                    f'{msg!r}')
         print(msg)
         if msg['type'] in ['stream-up', 'viewcount']:
             if not channel_live_state[channel_name]:

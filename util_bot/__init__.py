@@ -37,10 +37,10 @@ from sqlalchemy import create_engine as _create_engine
 from sqlalchemy.ext.declarative import declarative_base as _declarative_base
 from sqlalchemy.orm import sessionmaker as _sessionmaker
 
+from util_bot.platform import Platform
 from util_bot.bot import Bot
 from util_bot.constants import *
 from util_bot.plugin import Plugin, PluginStorage
-from util_bot.platform import Platform
 from util_bot.uptime import uptime
 from util_bot.userstate import UserStateCapturingMiddleware, bot_user_state, check_moderation
 from util_bot.pubsub import channel_live_state, init_pubsub

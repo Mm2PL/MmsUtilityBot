@@ -16,6 +16,8 @@ import typing
 
 from twitchirc import Event
 
+from util_bot import Platform
+
 try:
     # noinspection PyPackageRequirements
     import main
@@ -39,7 +41,7 @@ log = main.make_log_function(NAME)
 class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
-        main.bot.middleware.append(AutorefreshMiddleware())
+        main.bot.clients[Platform.TWITCH].middleware.append(AutorefreshMiddleware())
 
     @property
     def no_reload(self):
@@ -63,26 +65,11 @@ class AutorefreshMiddleware(twitchirc.AbstractMiddleware):
         super().__init__()
         self.is_reconnect = False
 
-    def rejoin(self, bot: twitchirc.Bot):
-        chans = bot.channels_connected
-        bot.cap_reqs(False)
-        try:
-            bot.channels_connected = []
-            for ch in chans:
-                bot.join(ch)
-        except:
-            bot.channels_connected = chans
-
     def reconnect(self, event: Event) -> None:
         log('info', 'Received reconnect event.\n'
                     'Attempting token refresh...')
         main.twitch_auth.refresh()
         main.twitch_auth.save()
         log('info', 'Refreshed and saved.')
-        main.bot._password = 'oauth:' + main.twitch_auth.json_data['access_token']
-        self.is_reconnect = True
-
-    def connect(self, event: Event) -> None:
-        event.source.schedule_event(
-            0.1, 1_000, self.rejoin, (event.source,), {}
-        )
+        # noinspection PyProtectedMember
+        main.bot.clients[Platform.TWITCH].connection._password = 'oauth:' + main.twitch_auth.json_data['access_token']

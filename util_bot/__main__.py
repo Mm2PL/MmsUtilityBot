@@ -328,7 +328,6 @@ loop = asyncio.get_event_loop()
 
 pubsub_middleware = PubsubMiddleware()
 
-
 # async def _wait_for_pubsub_task(pubsub):
 #     while 1:
 #         try:
@@ -339,13 +338,28 @@ pubsub_middleware = PubsubMiddleware()
 #             return
 #             continue
 
+with open('discord_auth.json', 'r') as f:
+    try:
+        discord_auth = json.load(f)
+    except Exception as e:
+        print('Failed to load credentials for discord, disabling support')
+        print('Please wait 1s')
+        time.sleep(1)
+
 
 async def main():
     global pubsub
     name = bot.storage['self_twitch_name']
-    await bot.init_clients({
+    auth = {
         Platform.TWITCH: (name, passwd)
-    })
+    }
+    if discord_auth:
+        if 'access_token' not in discord_auth:
+            print('Failed to load `access_token` from Discord auth file.')
+            print('Please wait 1s')
+            time.sleep(1)
+        auth[Platform.DISCORD] = discord_auth['access_token']
+    await bot.init_clients(auth)
     bot.username = name
 
     try:

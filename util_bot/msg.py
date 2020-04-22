@@ -13,7 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+import re
 import typing
 
 import twitchirc
@@ -22,9 +22,11 @@ from util_bot.platform import Platform
 
 
 class StandardizedMessage(twitchirc.ChannelMessage):
-    def __init__(self, text: str, user: str, channel: str, platform: Platform, outgoing=False, parent=None):
+    def __init__(self, text: str, user: str, channel: str, platform: Platform, outgoing=False, parent=None,
+                 source_message=None):
         super().__init__(text, user, channel, outgoing=outgoing, parent=parent)
         self.platform = platform
+        self.source_message = source_message
 
     def moderate(self):
         if self.platform != Platform.TWITCH:
@@ -34,13 +36,19 @@ class StandardizedMessage(twitchirc.ChannelMessage):
     def reply(self, text: str, force_slash=False):
         if not force_slash and text.startswith(('.', '/')):
             text = '/ ' + text
+        if self.platform == Platform.DISCORD:
+            text = re.sub(r'@(<@\d+>)', r'\1', text)
         new = StandardizedMessage(text=text, user='OUTGOING', channel=self.channel, platform=self.platform)
         new.outgoing = True
+        new.flags['in_reply_to'] = self
         return new
 
     def reply_directly(self, text: str):
+        if self.platform == Platform.DISCORD:
+            text = re.sub(r'@(<@\d+>)', r'\1', text)
         new = StandardizedWhisperMessage('OUTGOING', user_to=self.user, text=text, platform=self.platform,
                                          outgoing=True)
+        new.flags['in_reply_to'] = self
         return new
 
     def __repr__(self):
@@ -60,12 +68,14 @@ class StandardizedMessage(twitchirc.ChannelMessage):
 
 class StandardizedWhisperMessage(twitchirc.WhisperMessage):
     def __init__(self, user_from, user_to, text, platform: Platform,
-                 flags: typing.Optional[typing.Dict[str, str]] = None, outgoing=False):
+                 flags: typing.Optional[typing.Dict[str, str]] = None, outgoing=False,
+                 source_message=None):
         if flags is None:
             flags = {}
 
         super().__init__(flags, user_from, user_to, text, outgoing=outgoing)
         self.platform = platform
+        self.source_message = source_message
 
     def __repr__(self):
         return (f'StandardizedWhisperMessage(platform={self.platform!r}, user_from={self.user_from!r}, '
@@ -82,7 +92,9 @@ class StandardizedWhisperMessage(twitchirc.WhisperMessage):
         return self.user_from
 
     def reply(self, text: str):
-        return StandardizedWhisperMessage(user_from=self.user_to, user_to=self.user_from, text=text,
-                                          platform=self.platform, flags=None, outgoing=True)
-
-
+        if self.platform == Platform.DISCORD:
+            text = re.sub(r'@(<@\d+>)', r'\1', text)
+        new = StandardizedWhisperMessage(user_from=self.user_to, user_to=self.user_from, text=text,
+                                         platform=self.platform, flags=None, outgoing=True)
+        new.flags['in_reply_to'] = self.source_message
+        return new

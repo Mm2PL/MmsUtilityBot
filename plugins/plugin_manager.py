@@ -13,7 +13,6 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import asyncio
 import traceback
 import typing
 from typing import Dict
@@ -23,6 +22,8 @@ from twitchirc import Event
 
 from plugins.models.channelsettings import SettingScope
 import plugins.models.channelsettings as channelsettings_model
+from util_bot import Platform
+from util_bot.msg import StandardizedMessage
 
 try:
     # noinspection PyPackageRequirements
@@ -47,35 +48,19 @@ call_command_handlers = main.bot._call_command_handlers
 blacklist: typing.Dict[
     str, typing.List[str]
 ] = {}
-error_notification_channel = main.bot.username.lower()
+error_notification_channel = (None, Platform.TWITCH)
 
 
-def _call_handler(command, message):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_acall_handler(command, message))
-
-
-async def _acall_handler(command, message):
-    if message.channel in blacklist and command.chat_command in blacklist[message.channel]:
-        # command is blocked in this channel.
-        log('info', f'User {message.user} attempted to call command {command.chat_command} in channel '
-                    f'{message.channel} where it is blacklisted.')
-        return
-    try:
-        # noinspection PyProtectedMember
-        await main.bot._call_command(command, message)
-    except Exception as e:
-        _acommand_error_handler(e, command, message)  # this shouldn't trigger but just in case.
-
-
-def _acommand_error_handler(exception, command, message):
-    msg = twitchirc.ChannelMessage(
+async def _acommand_error_handler(exception, command, message):
+    msg = StandardizedMessage(
         text=f'Errors monkaS {chr(128073)} ALERT: {exception!r}',
         user='TO_BE_SENT',
-        channel=error_notification_channel
+        channel=(error_notification_channel[0] if error_notification_channel[0] is not None
+                 else main.bot.clients[Platform.TWITCH].connection.username),
+        platform=error_notification_channel[1]
     )
     msg.outgoing = True
-    main.bot.force_send(msg)
+    await main.bot.send(msg)
     log('err', f'Error while running command {command.chat_command}')
     log('info', f'{message.user}@{message.channel}: {message.text}')
     for i in traceback.format_exc(30).split('\n'):
@@ -83,31 +68,21 @@ def _acommand_error_handler(exception, command, message):
 
     msg2 = message.reply(f'@{message.user}, an error was raised during the execution of your command: '
                          f'{command.chat_command}')
-    main.bot.send(msg2)
+    await main.bot.send(msg2)
 
 
 main.bot.command_error_handler = _acommand_error_handler
 
 
-# noinspection PyProtectedMember
-async def _acall_command_handlers(message: twitchirc.ChannelMessage):
-    """Handle commands."""
-    if message.text.startswith(main.bot.prefix):
-        was_handled = False
-        if ' ' not in message.text:
-            message.text += ' '
-        for handler in main.bot.commands:
-            if callable(handler.matcher_function) and handler.matcher_function(message, handler):
-                await _acall_handler(handler, message)
-                was_handled = True
-            if message.text.startswith(main.bot.prefix + handler.ef_command):
-                await _acall_handler(handler, message)
-                was_handled = True
-
-        if not was_handled:
-            main.bot._do_unknown_command(message)
-    else:
-        await main.bot._acall_forced_prefix_commands(message)
+class CommandBlacklistMiddleware(twitchirc.AbstractMiddleware):
+    def command(self, event: Event) -> None:
+        message = event.data.get('message')
+        command = event.data.get('command')
+        if message.channel in blacklist and command.chat_command in blacklist[message.channel]:
+            # command is blocked in this channel.
+            log('info', f'User {message.user} attempted to call command {command.chat_command} in channel '
+                        f'{message.channel} where it is blacklisted. (platform {message.platform!r})')
+            event.cancel()
 
 
 def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Command, twitchirc.ChannelMessage], bool]):
@@ -178,6 +153,7 @@ def _reload_settings():
 
 
 main.reloadables['channel_settings'] = _reload_settings
+
 
 # command definitions
 
@@ -252,8 +228,6 @@ def ensure_blacklist(channel):
     if channel not in blacklist:
         blacklist[channel] = []
 
-
-main.bot._acall_command_handlers = _acall_command_handlers
 
 if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']

@@ -18,13 +18,14 @@ import inspect
 import traceback
 import typing
 import warnings
+from typing import Dict, Tuple
 
 import twitchirc
 
 from util_bot.clients.abstract_client import AbstractClient
 from util_bot.clients.twitch import convert_twitchirc_to_standarized, TwitchClient
 from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
-from util_bot.platform import Platform
+from . import Platform
 from .clients import CLIENTS
 from .utils import Reconnect
 
@@ -33,6 +34,8 @@ RECONNECT = 'RECONNECT'
 
 
 class Bot(twitchirc.Bot):
+    prefixes: Dict[Tuple[str, Platform], str]
+
     @staticmethod
     def get():
         if bot_instance:
@@ -54,8 +57,16 @@ class Bot(twitchirc.Bot):
         self._username = ''
         super().__init__('localhost', 'xd', None, True, storage=storage, no_atexit=True, secure=False,
                          message_cooldown=0, no_connect=True)
+        self.prefixes = {
+            # ('name', Platform.TWITCH): 'prefix'
+        }
 
     async def send(self, msg: StandardizedMessage, **kwargs):
+        o = await self.acall_middleware('send', dict(message=msg, queue=msg.channel), cancelable=True)
+        if o is False:
+            twitchirc.log('debug', str(msg), ': canceled')
+            return
+
         if msg.platform in self.clients:
             await self.clients[msg.platform].send(msg)
         else:
@@ -127,6 +138,7 @@ class Bot(twitchirc.Bot):
         :param cancelable: Can the event be canceled?
         :return: False if the event was canceled, True otherwise.
         """
+        print('acall middleware', action, arguments, cancelable)
         event = twitchirc.Event(action, arguments, source=self, cancelable=cancelable)
         canceler: typing.Optional[twitchirc.AbstractMiddleware] = None
         for m in self.middleware:
@@ -248,7 +260,7 @@ class Bot(twitchirc.Bot):
         raise NotImplementedError('sync function')
 
     async def _call_command(self, handler, message):
-        o = self.call_middleware('command', {'message': message, 'command': handler}, cancelable=True)
+        o = await self.acall_middleware('command', {'message': message, 'command': handler}, cancelable=True)
         if o is False:
             return
         t = asyncio.create_task(handler.acall(message))
@@ -279,15 +291,22 @@ class Bot(twitchirc.Bot):
                         twitchirc.log('warn', line)
 
                     if self.command_error_handler is not None:
-                        self.command_error_handler(e, t['command'], t['source_msg'])
+                        if inspect.iscoroutinefunction(self.command_error_handler):
+                            await self.command_error_handler(e, t['command'], t['source_msg'])
+                        else:
+                            self.command_error_handler(e, t['command'], t['source_msg'])
                     self._tasks.remove(t)
                     continue
                 await self._send_if_possible(result, t['source_msg'])
                 self._tasks.remove(t)
 
-    async def _acall_command_handlers(self, message: typing.Union[twitchirc.ChannelMessage, twitchirc.WhisperMessage]):
+    async def _acall_command_handlers(self, message: typing.Union[StandardizedMessage, StandardizedWhisperMessage]):
         """Handle commands."""
-        if message.text.startswith(self.prefix):
+
+        prefix = self.get_prefix(message.channel, message.platform, message)
+        # print(prefix, message.text.startswith(prefix))
+
+        if message.text.startswith(prefix):
             was_handled = False
             if ' ' not in message.text:
                 message.text += ' '
@@ -295,7 +314,7 @@ class Bot(twitchirc.Bot):
                 if callable(handler.matcher_function) and handler.matcher_function(message, handler):
                     await self._call_command(handler, message)
                     was_handled = True
-                if message.text.startswith(self.prefix + handler.ef_command):
+                if message.text.startswith(prefix + handler.ef_command):
                     await self._call_command(handler, message)
                     was_handled = True
             if not was_handled:
@@ -353,6 +372,7 @@ class Bot(twitchirc.Bot):
         :return: nothing.
         """
         self.hold_send = False
+        self._load_prefixes()
         self.call_handlers('start')
         while 1:
             run_result = await self._run_once()
@@ -396,6 +416,7 @@ class Bot(twitchirc.Bot):
         self.storage.save(is_auto_save=False)
         self.call_handlers('post_save')
         await self.disconnect()
+        self.storage['prefixes'] = self._serialize_prefixes(self.prefixes)
 
     def moderate(self, channel: str, user: typing.Optional[str] = None, message_id: typing.Optional[str] = None):
         """
@@ -468,8 +489,6 @@ class Bot(twitchirc.Bot):
         futures = []
         for platform, client in self.clients.items():
             futures.append(client.receive())
-        print(futures)
-        # breakpoint()
         done, pending = await asyncio.wait(futures, return_when=asyncio.FIRST_COMPLETED)
         for i in pending:
             print(f'cancel pending {i}')
@@ -517,8 +536,6 @@ class Bot(twitchirc.Bot):
         """
         twitchirc.log('debug', 'Receiving.')
         o = await self.receive()
-        if o == RECONNECT:
-            return RECONNECT
         twitchirc.log('debug', 'Processing.')
         self.receive_queue = self.process_messages(100)  # process all the messages.
         twitchirc.log('debug', 'Calling handlers.')
@@ -532,11 +549,12 @@ class Bot(twitchirc.Bot):
                 continue
             elif isinstance(i, twitchirc.ReconnectMessage):
                 self.receive_queue.remove(i)
-                return RECONNECT
-            elif isinstance(i, twitchirc.ChannelMessage):
+                await self.reconnect_client(Platform.TWITCH)
+            elif isinstance(i, StandardizedMessage):
                 self.call_handlers('chat_msg', i)
                 await self._acall_command_handlers(i)
-            elif isinstance(i, twitchirc.WhisperMessage):
+            elif isinstance(i, StandardizedWhisperMessage):
+                print('whisper', i)
                 await self._acall_command_handlers(i)
             if i in self.receive_queue:  # this check may fail if self.part() was called.
                 self.receive_queue.remove(i)
@@ -547,6 +565,7 @@ class Bot(twitchirc.Bot):
 
     async def aconnect(self):
         for p, client in self.clients.items():
+            print(f'Connecting to {p.name}')
             await client.connect()
 
     async def init_clients(self, auths: typing.Dict[Platform, typing.Any]):
@@ -567,3 +586,73 @@ class Bot(twitchirc.Bot):
     async def reconnect_client(self, platform):
         await self.clients[platform].disconnect()
         await self.clients[platform].connect()
+
+    def _deserialize_prefixes(self, data) -> typing.Dict[typing.Tuple[str, Platform], str]:
+        output = {}
+        if isinstance(data, dict):  # plugin_prefixes data
+            for k, v in data.items():
+                output[(k, Platform.TWITCH)] = v
+            return output
+        elif isinstance(data, list):
+            for v in data:
+                chan, prefix = v['channel'], v['prefix']
+                if 'name' in chan:
+                    platform, name = chan['platform'], chan['name']
+
+                    output[(name, Platform[platform])] = prefix
+                else:
+                    platform = chan['platform']
+                    output[Platform[platform]] = prefix
+            return output
+        else:
+            raise TypeError(f'Unable to deserialize prefixes from type {type(data)!r}')
+
+    def _serialize_prefixes(self, data: dict) -> typing.List[typing.Dict[str, str]]:
+        output = []
+        for k, v in data.items():
+            if isinstance(k, Platform):
+                output.append({
+                    'channel': {
+                        'platform': k.name
+                    },
+                    'prefix': v
+                })
+            else:
+                output.append({
+                    'channel': {
+                        'name': k[0],
+                        'platform': k[1].name
+                    },
+                    'prefix': v
+                })
+        return output
+
+    def _load_prefixes(self):
+        if self.storage:
+            if 'prefixes' in self.storage.data:
+                self.prefixes = self._deserialize_prefixes(self.storage['prefixes'])
+            elif 'plugin_prefixes' in self.storage.data and 'prefixes' in self.storage['plugin_prefixes']:
+                self.prefixes = self._deserialize_prefixes(self.storage.data['plugin_prefixes']['prefixes'])
+            else:
+                self.prefixes = {}
+
+    def _save_prefixes(self):
+        if self.storage:
+            self.storage['prefixes'] = self._serialize_prefixes(self.prefix)
+            del self.storage.data['plugin_prefixes']
+
+    def get_prefix(self, channel_name, platform, msg: typing.Union[None, StandardizedMessage,
+                                                                   StandardizedWhisperMessage] = None):
+        if msg is not None:
+            if platform == Platform.DISCORD and isinstance(msg, StandardizedMessage):
+                guild_id = 'guild.' + str(msg.source_message.channel.guild.id)
+                if (guild_id, Platform.DISCORD) in self.prefixes:
+                    return self.prefixes[(guild_id, Platform.DISCORD)]
+
+        channel_ident = (channel_name, platform)
+        if channel_ident in self.prefixes:
+            return self.prefixes[channel_ident]
+        elif platform in self.prefixes:
+            return self.prefixes[platform]
+        else:
+            return self.prefix
