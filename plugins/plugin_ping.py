@@ -85,6 +85,6 @@ def command_ping_simple(msg: twitchirc.ChannelMessage):
         return
     return (f'@{msg.user} PONG! Bot has been running for '
             f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))} and is using '
-            f'{current_process.memory_info().rss/1_000_000}MB of ram, '
+            f'{current_process.memory_info().rss/1_000_000:.2f}MB of ram, '
             f'{len(main.bot.commands)} '
             f'commands registered. {_blacklist_info(msg.channel)}{_channel_info()}')
