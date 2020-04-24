@@ -20,6 +20,7 @@ import warnings
 from typing import Tuple
 import typing
 
+import aiohttp
 import regex
 from PIL import Image, ImageFilter
 
@@ -103,10 +104,13 @@ RECONNECTION_MESSAGES = [
 ]
 
 COOKIE_PATTERN = regex.compile(
-    rf'^\[Cookies\] '
-    rf'\[(?P<rank>(?:P[1-4]: )?'
-    rf'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader))\] '
-    rf'(?P<name>[a-z0-9_]+) \U0001f3ab'
+    r'^\[Cookies\] '
+    r'\['
+    r'(?P<rank>(?:P[1-4]: )?'
+    r'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader)'
+    r')\] '
+    r'(?P<name>[a-z0-9_]+) '
+    r'(?!you have already claimed)'
 )
 RAID_PATTERN = regex.compile(
     r'A Raid Event at Level \[[0-9]+\] has appeared\. Type \+join to join the raid! The raid '
@@ -359,9 +363,10 @@ class Plugin(main.Plugin):
                                                   'Usage: pyramid <size> <text...>',
                                                   None)(self.command_pyramid)
         plugin_help.add_manual_help_using_command('Convert an image into braille. '
-                                                  'Usage: braillefy url:URL [+reverse] '
-                                                  '[sensitivity_(r|g|b|a):FLOAT] [size_percent:FLOAT] '
-                                                  '[max_x:INT (default 60)] [pad_y:INT (60)]',
+                                                  'Usage: braillefy (url:URL|emote:EMOTE) [+reverse] '
+                                                  '[sensitivity_(r|g|b|a):float] [size_percent:float] '
+                                                  '[max_x:int] [pad_y:int]. See braillefy defaults for default values '
+                                                  'of the arguments',
                                                   None)(self.command_braillefy)
         # endregion
 
@@ -499,25 +504,37 @@ class Plugin(main.Plugin):
         if cd_state:
             return
         try:
-            args = arg_parser.parse_args(msg.text.split(' ', 1)[1], {
-                'url': str,
-                'sensitivity_r': float,
-                'sensitivity_g': float,
-                'sensitivity_b': float,
-                'sensitivity_a': float,
-                'size_percent': float,
-                'max_y': int,
-                'pad_y': int,
-                'reverse': bool,
-                'hastebin': bool,
-                'sobel': bool
-            }, strict_escapes=True, strict_quotes=True)
+            args = arg_parser.parse_args(
+                msg.text.split(' ', 1)[1],
+                {
+                    'url': str,
+                    'emote': str,
+                    'sensitivity_r': float,
+                    'sensitivity_g': float,
+                    'sensitivity_b': float,
+                    'sensitivity_a': float,
+                    'size_percent': float,
+                    'max_y': int,
+                    'pad_x': int,
+                    'reverse': bool,
+                    'hastebin': bool,
+                    'sobel': bool
+                },
+                strict_escapes=True,
+                strict_quotes=True
+            )
         except arg_parser.ParserError as e:
             return f'Error: {e.message}'
-        missing_args = arg_parser.check_required_keys(args, ['url'])
+
+        missing_args = []
+        if args['url'] is ... and args['emote'] is ...:
+            missing_args.append('url or emote')
         if missing_args:
             return (f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
+
+        if args['url'] is not ... and args['emote'] is not ...:
+            return f'@{msg.user}, cannot provide both an emote name and a url.'
 
         num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgb'])
         alpha = args['sensitivity_a'] if args['sensitivity_a'] is not Ellipsis else 1
@@ -538,16 +555,30 @@ class Plugin(main.Plugin):
         max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
         size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
 
-        url = args['url']
-        if url.startswith('file://'):
+        url = args['url'] if args['url'] is not ... else None
+        if url and url.startswith('file://'):
             return f'@{msg.user}, you can\'t do this BabyRage'
 
-        if not url.startswith('http'):
+        if args['emote'] is not ...:
             channel_id = None
             if isinstance(msg, twitchirc.ChannelMessage):
                 channel_id = msg.flags['room-id']
+            emote = args['emote']
+            if emote.startswith('#') and emote.count(':') == 1:
+                channel, emote = emote.split(':')
+                channel = channel.lstrip('#')
+                users = main.User.get_by_name(channel)
+                if users:
+                    u = users[0]
+                    channel_id = u.twitch_id
+                else:
+                    async with aiohttp.request('get', f'https://api.ivr.fi/twitch/resolve/{channel}') as req:
+                        if req.status == 404:
+                            return f'@{msg.user}, {channel}: channel not found'
+                        data = await req.json()
+                        channel_id = data['id']
 
-            emote_found = await plugin_emotes.find_emote(url, channel_id=channel_id)
+            emote_found = await plugin_emotes.find_emote(emote, channel_id=channel_id)
             if emote_found:
                 url = emote_found.get_url('3x')
             else:
@@ -561,8 +592,8 @@ class Plugin(main.Plugin):
                                                       max_x,
                                                       max_y,
                                                       '',
-                                                      (60,
-                                                       args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                      (args['pad_x'] if args['pad_x'] is not Ellipsis else 60,
+                                                       0),
                                                       size_percent)
             if args['sobel'] is not ... and args['sobel']:
                 img = img.filter(ImageFilter.FIND_EDGES)
@@ -573,8 +604,8 @@ class Plugin(main.Plugin):
                                                      max_y=max_y,
                                                      sensitivity=sens,
                                                      enable_padding=True,
-                                                     pad_size=(60,
-                                                               args['pad_y'] if args['pad_y'] is not Ellipsis else 60),
+                                                     pad_size=(args['pad_x'] if args['pad_x'] is not Ellipsis else 60,
+                                                               0),
                                                      enable_processing=False)
         else:
             missing_permissions = main.bot.check_permissions(msg, ['cancer.braille.gif'],
@@ -598,10 +629,10 @@ class Plugin(main.Plugin):
                                                                   max_x,
                                                                   max_y,
                                                                   '',
-                                                                  (60,
-                                                                   args['pad_y'] if args[
-                                                                                        'pad_y'] is not Ellipsis else
-                                                                   60),
+                                                                  (args['pad_x'] if args[
+                                                                                        'pad_x'] is not Ellipsis else
+                                                                   60,
+                                                                   0),
                                                                   size_percent)
                     if args['sobel'] is not ... and args['sobel']:
                         new_img = new_img.filter(ImageFilter.FIND_EDGES)
@@ -613,9 +644,9 @@ class Plugin(main.Plugin):
                                                              max_y=max_y,
                                                              sensitivity=sens,
                                                              enable_padding=True,
-                                                             pad_size=(60,
-                                                                       (args['pad_y'] if args['pad_y'] is not Ellipsis
-                                                                        else 60)),
+                                                             pad_size=((args['pad_x'] if args['pad_x'] is not Ellipsis
+                                                                        else 60),
+                                                                       0),
                                                              enable_processing=False)
                     time_taken = round(time.time() - start_time)
                     frame_time = time.time() - frame_start
