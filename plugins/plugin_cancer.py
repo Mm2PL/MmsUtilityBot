@@ -16,6 +16,7 @@
 import asyncio
 import datetime
 import time
+import unicodedata
 import warnings
 from typing import Tuple
 import typing
@@ -93,14 +94,17 @@ del lines
 RECONNECTION_MESSAGES = [
     'WYKRYTOMIÓD RECONNECTED!',
     'HONEYDETECTED YET ANOTHER SPAM MESSAGE',
-    'Look, I made Supi\'s packets come back PagChomp',
     'asd',
-    f'Look, this cancerous "feature" is only {file_length} characters',
-    f'Look, this cancerous "feature" is only {file_lines} lines',
+    f'Look, this cancerous feature is only {file_length} characters',
+    f'Look, this cancerous feature is only {file_lines} lines',
     'FeelsGoodMan Clap spam',
     '🅱ing @{ping} PepeS',
     'NaM',
-    'Look, I made Mm\'s packets come back PagChomp',
+    'RECONNECTION DETECTED HONEYDETECTED',
+    'HONEYDETECTED /',
+    'Am I next in the queue to restart? PepeS',
+    'FeelsJavascriptMan new changes?',
+    f'Suggest more reconnection messages PagChomp {unicodedata.lookup("WHITE RIGHT POINTING BACKHAND INDEX")} _suggest',
 ]
 
 COOKIE_PATTERN = regex.compile(
