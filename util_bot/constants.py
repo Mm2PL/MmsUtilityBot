@@ -22,4 +22,5 @@ LOG_LEVELS = {
     'fat': '\x1b[5;31mFATAL\x1b[m',  # fatal error
     'debug': 'debug'
 }
-__all__ = ['LOG_LEVELS']
+USER_AGENT = 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
+__all__ = ['LOG_LEVELS', 'USER_AGENT']

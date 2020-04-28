@@ -65,6 +65,11 @@ class TwitchClient(AbstractClient):
     async def flush_queues(self):
         self.connection.flush_queue(100)
 
+    async def reconnect(self):
+        self.connection.call_middleware('reconnect', (), False)
+        await self.disconnect()
+        await self.connect()
+
 
 def convert_twitchirc_to_standarized(l: typing.List[typing.Union[twitchirc.ChannelMessage, twitchirc.WhisperMessage,
                                                                  twitchirc.Message]],

@@ -396,6 +396,10 @@ async def main():
         bot.schedule_event(1, 15, _send_restart_message, (), {})
 
     pubsub = await init_pubsub(util_bot.twitch_auth.new_api.auth.token)
+
+    temp = util_bot.make_log_function('pubsub')
+    pubsub.log_function = lambda *text, **kwargs: temp('debug', *text, **kwargs)
+
     pubsub.listen([
         f'chat_moderator_actions.{uid}.{uid}'
     ])

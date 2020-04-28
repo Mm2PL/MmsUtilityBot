@@ -48,3 +48,7 @@ class AbstractClient(abc.ABC):
     @abc.abstractmethod
     async def flush_queues(self):
         pass
+
+    async def reconnect(self):
+        await self.disconnect()
+        await self.connect()

@@ -96,5 +96,5 @@ class StandardizedWhisperMessage(twitchirc.WhisperMessage):
             text = re.sub(r'@(<@\d+>)', r'\1', text)
         new = StandardizedWhisperMessage(user_from=self.user_to, user_to=self.user_from, text=text,
                                          platform=self.platform, flags=None, outgoing=True)
-        new.flags['in_reply_to'] = self.source_message
+        new.flags['in_reply_to'] = self
         return new

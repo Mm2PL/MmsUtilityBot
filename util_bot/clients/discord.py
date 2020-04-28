@@ -52,18 +52,30 @@ class DiscordClient(AbstractClient):
             return
 
         in_reply_to: StandardizedMessage = msg.flags['in_reply_to']
-        await in_reply_to.source_message.channel.send(msg.text)
+        print(in_reply_to, msg)
+        files: typing.List[discord.File] = msg.flags.get('files', None)
+        file: discord.File = msg.flags.get('file', None)
+        delete_after: float = msg.flags.get('delete_after', None)
+        await in_reply_to.source_message.channel.send(
+            msg.text,
+            files=files,
+            file=file,
+            delete_after=delete_after
+        )
 
     async def receive(self):
         return convert_discord_to_standarized([await self.connection.message_queue.get()])
 
     async def join(self, channel):
+        # Underlying client does not need an explicit join call.
         pass
 
     async def part(self, channel):
+        # Underlying client does not need an explicit part call.
         pass
 
     async def flush_queues(self):
+        # Underlying client does not need an explicit flush_queues call.
         pass
 
 

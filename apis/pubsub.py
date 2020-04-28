@@ -47,6 +47,8 @@ class PubsubClient:
 
         self.topics = set()
 
+        self.log_function = print
+
     async def initialize(self):
         self.task = asyncio.get_event_loop().create_task(self._run())
         return self.task
@@ -55,7 +57,7 @@ class PubsubClient:
         self.send_queue.put_nowait(data)
 
     def listen(self, topics: typing.Iterable[str]):
-        print('listen', topics)
+        self.log_function('listen', topics)
         for i in topics:
             if i not in self.callbacks:
                 self.callbacks[i] = []
@@ -118,7 +120,7 @@ class PubsubClient:
             try:
                 elem = await queue.get()
 
-                print(f'> {elem}')
+                self.log_function(f'> {elem}')
                 await ws.send(json.dumps(elem))
             except asyncio.CancelledError:
                 break
@@ -138,7 +140,7 @@ class PubsubClient:
         while 1:
             last_pong = time.time() + 20
             async with websockets.connect('wss://pubsub-edge.twitch.tv') as ws:
-                print('Connected to pubsub')
+                self.log_function('Connected to pubsub')
                 sender_task = asyncio.create_task(self._sender(self.send_queue, ws))
                 pinger_task = asyncio.create_task(self._pinger(self.send_queue))
                 if is_reconnect:
@@ -157,7 +159,7 @@ class PubsubClient:
                                 break
                             continue
 
-                        print(f'< {recved_msg!r}')
+                        self.log_function(f'< {recved_msg!r}')
                         msg = json.loads(recved_msg)
                         if msg['type'] == 'MESSAGE':
                             topic = msg['data']['topic']
@@ -183,12 +185,10 @@ class PubsubClient:
                             break
                         else:
                             warnings.warn(f'UNHANDLED PUBSUB MESSAGE TYPE {msg["type"]!r}, msg => {msg}', PubsubWarning)
-                    sender_task.cancel()
-                    await sender_task
-                    pinger_task.cancel()
-                    await pinger_task
-                    await ws.close()
-                except websockets.ConnectionClosedError:
-                    continue
-                except websockets.InvalidMessage:
-                    continue
+                except (websockets.InvalidMessage, websockets.ConnectionClosedError):
+                    pass
+                sender_task.cancel()
+                await sender_task
+                pinger_task.cancel()
+                await pinger_task
+                await ws.close()
