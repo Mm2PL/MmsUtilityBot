@@ -105,6 +105,8 @@ RECONNECTION_MESSAGES = [
     'Am I next in the queue to restart? PepeS',
     'FeelsJavascriptMan new changes?',
     f'Suggest more reconnection messages PagChomp {unicodedata.lookup("WHITE RIGHT POINTING BACKHAND INDEX")} _suggest',
+    f'{unicodedata.lookup("EYES")} @{{executor}}',
+    'HONEYDETECTED PRÓBA PONOWNEGO NAWIĄZANIA POŁĄCZENIA ZOSTAŁA ZAKOŃCZONA SUKCESEM',
 ]
 
 COOKIE_PATTERN = regex.compile(
@@ -453,6 +455,7 @@ class Plugin(main.Plugin):
 
     async def _honeydetected(self, msg: twitchirc.ChannelMessage):
         random_msg = random.choice(RECONNECTION_MESSAGES)
+        random_msg = random_msg.replace('{executor}', msg.user)
         while '{ping}' in random_msg:
             random_msg = random_msg.replace('{ping}', random.choice(self.random_pings), 1)
         return random_msg
