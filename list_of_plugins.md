@@ -19,6 +19,8 @@ aren't commands etc.
 1. `plugin_ping.py` Adds a simple `ping` command
 1. `plugin_ping_optout.py` Allow users to opt-out of being mentioned by the bot.
 1. `plugin_pipes.py` Allows for chaining commands using `[prefix]pipe command | another command > redirection` 
+1. `plugin_plot.py` Let users calculate things from chat, allows for plotting with the `plot(func, start, end, step)`
+                    function
 1. `plugin_prefixes.py` Change the bot's prefix per-channel
 1. `plugin_reminders.py` [tbd]
 1. `plugin_replay.py` Adds a command that links to the vod.
