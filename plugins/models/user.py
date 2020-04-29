@@ -69,7 +69,7 @@ def get(Base, session_scope, log):
                 print(f'[failed] Add to cache {obj}')
                 return
             print(f'Add to cache {obj}')
-            print(self.cache)
+            # print(self.cache)
             self.cache[obj.id] = {
                 'expires': time.time() + CACHE_EXPIRE_TIME,
                 'obj': obj
@@ -216,9 +216,12 @@ def get(Base, session_scope, log):
 
         def _update(self, update, session):
             msg = update['msg']
+            if hasattr(msg, 'platform') and msg.platform.name != 'TWITCH':  # don't update names outside of Twitch.
+                session.add(self)
+                return
+
             if msg.user != self.last_known_username:
                 other_users = User.get_by_name(msg.user)
-                self.last_known_username = msg.user
                 for user in other_users:
                     user: User
                     user.last_known_username = '<UNKNOWN_USERNAME>'
