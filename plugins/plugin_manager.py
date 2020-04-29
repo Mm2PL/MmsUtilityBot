@@ -98,6 +98,7 @@ def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Comm
     return decorator
 
 
+main.bot.middleware.append(CommandBlacklistMiddleware())
 all_settings: typing.Dict[str, 'Setting'] = {}
 ChannelSettings, Setting = channelsettings_model.get(main.Base, main.session_scope, all_settings)
 
