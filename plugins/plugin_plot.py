@@ -23,7 +23,6 @@ import ast
 # noinspection PyUnresolvedReferences
 import random
 import sys
-import traceback
 import typing
 
 import aiohttp
@@ -32,6 +31,8 @@ import matplotlib
 
 from util_bot import Platform
 from util_bot.msg import StandardizedMessage
+
+RESULT_TOO_BIG = 'result might be too big.'
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -217,17 +218,38 @@ def _plots(functions: typing.List[typing.Union[ast.Lambda, typing.Callable]], st
 
 
 class Helper(FunctionWithCtx):
-    """Returns help for the object specified"""
+    """
+    Returns help for the object specified
+
+    help(obj: object) -> str
+    How this works:
+        1. Try to lookup __doc__ for the object provided (obj.__doc__), if something was found, return it
+        2. Try to lookup __doc__ for the type of that object (type(obj).__doc__), if something was found, return it,
+        3. Give up.
+    """
 
     def __repr__(self):
         return 'See help(help).'
 
     # noinspection PyMethodOverriding
     def __call__(self, obj: object, ctx: Context):
-        if hasattr(obj, '__doc__'):
+        if hasattr(obj, '__doc__') and obj.__doc__ is not None:
             return obj.__doc__
+        elif hasattr(type(obj), '__doc__') and type(obj).__doc__ is not None:
+            return type(obj).__doc__
         else:
             return 'Don\'t know how to help'
+
+    def __init__(self):
+        super().__init__(None)
+
+
+class UnsafeError(Exception):
+    def __repr__(self):
+        return f'Possibly unsafe operation. {self.message}'
+
+    def __init__(self, message: str):
+        self.message = message
 
 
 class Math:
@@ -238,6 +260,9 @@ class Math:
     Original from: http://stackoverflow.com/a/9558001
     """
 
+    MAX_MULT = 1_000_000_000
+    MAX_SHIFT = 1_000_000
+    MAX_POW = 1_000
     # supported operators
     operators = {
         ast.Add: operator.add,
@@ -253,6 +278,7 @@ class Math:
     functions = {
         'plot': _plot,
         'plots': _plots,
+        'help': Helper(),
 
         'ceil': math.ceil,
         'comb': math.copysign,
@@ -295,7 +321,10 @@ class Math:
         'erf': math.erf,
         'erfc': math.erfc,
         'gamma': math.gamma,
-        'lgamma': math.lgamma
+        'lgamma': math.lgamma,
+
+        'int': int,
+        'float': float
     }
     default_locals = {
         'pi': math.pi,
@@ -329,6 +358,33 @@ class Math:
             return str(node)
 
     @staticmethod
+    def check_safe(node, opargs) -> typing.Tuple[bool, str]:
+        if isinstance(node, ast.BinOp):
+            if isinstance(opargs[0], str) or isinstance(opargs[1], str):  # don't allow for creating huge strings
+                return False, 'refusing to operate on strings'
+
+            if isinstance(node.op, ast.Mult):
+                bigger = max(opargs)
+                if bigger > Math.MAX_MULT:
+                    return False, RESULT_TOO_BIG
+            elif isinstance(node.op, ast.Pow):
+                _, right = opargs
+                if right > Math.MAX_POW:
+                    return False, RESULT_TOO_BIG
+            elif isinstance(node.op, ast.LShift):
+                left, right = opargs
+
+                if right >= Math.MAX_SHIFT or left >= Math.MAX_MULT:
+                    return False, RESULT_TOO_BIG
+            elif isinstance(node.op, ast.Div):
+                smaller = max(opargs)
+                if smaller < 1:
+                    if (1 / smaller) >= Math.MAX_MULT:
+                        return False, RESULT_TOO_BIG
+
+        return True, 'ok'
+
+    @staticmethod
     def eval_(node, locals_, ctx):
         if locals_ is None:
             locals_ = {}
@@ -345,7 +401,10 @@ class Math:
             return list(
                 (Math.eval_(i, locals_, ctx) for i in node.elts)
             )
-
+        elif isinstance(node, ast.Set):
+            return set(
+                (Math.eval_(i, locals_, ctx) for i in node.elts)
+            )
         elif isinstance(node, ast.Name):
             if node.id in Math.default_locals:
                 return Math.default_locals[node.id]
@@ -356,10 +415,15 @@ class Math:
             else:
                 _raise_from_eval(UnboundLocalError(f'Unknown variable: {node.id!r}'))
         elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
-            return Math.operators[type(node.op)](
+            opargs = (
                 Math.eval_(node.left, locals_, ctx),
                 Math.eval_(node.right, locals_, ctx)
             )
+            safe, info = Math.check_safe(node, opargs)
+            if safe:
+                return Math.operators[type(node.op)](*opargs)
+            else:
+                _raise_from_eval(UnsafeError(info))
         elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
             return Math.operators[type(node.op)](Math.eval_(node.operand, locals_, ctx))
         elif isinstance(node, ast.Lambda):  # lambda <args>: <body>
@@ -448,19 +512,14 @@ class Plugin(util_bot.Plugin):
         ctx.source = source
         try:
             result = await asyncio.get_event_loop().run_in_executor(None, Math.eval_expr, source, ctx)
-        except (NotImplementedError, UnboundLocalError, KeyError, TypeError) as e:
+        except Exception as e:
             if hasattr(e, 'from_eval') and e.from_eval:
-                return f'@{msg.user}, {e}'
+                if msg.platform == Platform.DISCORD:
+                    return f'{msg.user}, `{e}`'
+                else:
+                    return f'@{msg.user}, {e}'
             else:
                 raise
-        except SyntaxError as e:
-            if msg.platform == Platform.DISCORD:
-                exc_text = traceback.format_exc(0)
-                return (f'{msg.user}, ```\n'
-                        f'{exc_text}\n'
-                        f'```')
-            else:
-                return f'@{msg.user}, Syntax error.'
 
         if isinstance(result, Plot):
             if msg.platform == Platform.DISCORD:
@@ -494,7 +553,15 @@ class Plugin(util_bot.Plugin):
                     print(r, text)
                     return f'@{msg.user}, Taken {result.steps_taken} steps to render. {text} '
         else:
-            return f'@{msg.user}, {result}'
+            if msg.platform == Platform.DISCORD:
+                if '\n' in result:
+                    return (f'{msg.user}, ```\n'
+                            f'{result}\n'
+                            f'```')
+                else:
+                    return f'{msg.user}, `{result}`'
+            else:
+                return f'@{msg.user}, {result}'
 
     async def command_math(self, msg: StandardizedMessage):
         argv = msg.text.split(' ', 1)
@@ -521,13 +588,7 @@ class Plugin(util_bot.Plugin):
                     code += elem + ' '
                 code = '\n'.join(code.split('\n')).strip(' ')
             elif argv[1].startswith('`'):
-                for i, elem in enumerate(argv[1].split(' ')):
-                    if i < 1:
-                        continue  # don't try to use the command and start of codeblock as code
-                    if elem.endswith('`'):
-                        break
-                    code += elem + ' '
-                code = code.rstrip(' ')
+                code = ' '.join(argv[1:]).strip('`')
             else:
                 code = ' '.join(argv[1:])
         else:
