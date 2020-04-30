@@ -106,8 +106,6 @@ class Bot(twitchirc.Bot):
         return decorator
 
     def call_middleware(self, action, arguments, cancelable) -> typing.Union[bool, typing.Tuple[bool, typing.Any]]:
-        # traceback.print_stack()
-        warnings.warn('Use acall_middleware instead of call_middleware()')
         if cancelable:
             event = twitchirc.Event(action, arguments, source=self, cancelable=cancelable)
             canceler: typing.Optional[twitchirc.AbstractMiddleware] = None
@@ -138,7 +136,6 @@ class Bot(twitchirc.Bot):
         :param cancelable: Can the event be canceled?
         :return: False if the event was canceled, True otherwise.
         """
-        print('acall middleware', action, arguments, cancelable)
         event = twitchirc.Event(action, arguments, source=self, cancelable=cancelable)
         canceler: typing.Optional[twitchirc.AbstractMiddleware] = None
         for m in self.middleware:
@@ -379,10 +376,7 @@ class Bot(twitchirc.Bot):
             if run_result is False:
                 twitchirc.log('debug', 'break')
                 break
-            if run_result == RECONNECT:
-                self.call_middleware('reconnect', (), False)
-                await self.disconnect()
-                self.connect(self.username, self._password)
+
             self.scheduler.run(blocking=False)
             await self._a_wait_for_tasks()
             await asyncio.sleep(0)
@@ -436,7 +430,7 @@ class Bot(twitchirc.Bot):
         :param channel: Channel you want to join.
         :return: nothing.
         """
-        o = self.call_middleware('join', dict(channel=channel), True)
+        o = await self.acall_middleware('join', dict(channel=channel), True)
         if o is False:
             return
         await self.clients[platform].join(channel)
@@ -451,7 +445,7 @@ class Bot(twitchirc.Bot):
         :param channel: Channel you want to leave.
         :return: nothing.
         """
-        o = self.call_middleware('part', dict(channel=channel), cancelable=True)
+        o = await self.acall_middleware('part', dict(channel=channel), cancelable=True)
         if o is False:
             return
         await self.clients[platform].part(channel)
@@ -535,7 +529,7 @@ class Bot(twitchirc.Bot):
         reconnect.
         """
         twitchirc.log('debug', 'Receiving.')
-        o = await self.receive()
+        await self.receive()
         twitchirc.log('debug', 'Processing.')
         self.receive_queue = self.process_messages(100)  # process all the messages.
         twitchirc.log('debug', 'Calling handlers.')
@@ -584,8 +578,7 @@ class Bot(twitchirc.Bot):
         self._username = value
 
     async def reconnect_client(self, platform):
-        await self.clients[platform].disconnect()
-        await self.clients[platform].connect()
+        await self.clients[platform].reconnect()
 
     def _deserialize_prefixes(self, data) -> typing.Dict[typing.Tuple[str, Platform], str]:
         output = {}

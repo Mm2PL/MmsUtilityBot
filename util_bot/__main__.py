@@ -32,6 +32,7 @@ from apis.pubsub import PubsubClient
 from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, user_model, Platform, do_cooldown,
                       UserStateCapturingMiddleware, show_counter_status, init_twitch_auth)
 import util_bot
+from util_bot.msg import StandardizedMessage
 from util_bot.pubsub import init_pubsub, PubsubMiddleware
 from util_bot.utils import counter_difference
 
@@ -214,9 +215,15 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
     return command
 
 
-def chat_msg_handler(event: str, msg: twitchirc.ChannelMessage, *args):
-    user = User.get_by_message(msg, no_create=False)
-    user.schedule_update(msg)
+def chat_msg_handler(event: str, msg: StandardizedMessage, *args):
+    if msg.platform == Platform.TWITCH:
+        user = User.get_by_message(msg, no_create=True)
+        # don't store data there is no need for
+        if user:  # user exists, make sure data is up to date
+            user.schedule_update(msg)
+            # needed in case someone gets/loses moderator status
+
+    # ignore other platforms
 
 
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
