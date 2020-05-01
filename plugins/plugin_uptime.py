@@ -47,13 +47,29 @@ async def command_title(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('title', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
         return
-    async with aiohttp.request('get', 'https://api.twitch.tv/helix/streams', params={'user_login': msg.channel},
-                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as request:
-        json_data = await request.json()
-        if request.status == 200 and 'data' in json_data and len(json_data['data']) > 0:
-            return f'@{msg.user}, {json_data["data"][0]["title"]}'
-        else:
-            return f'@{msg.user}, eShrug Stream not found.'
+    data = await _fetch_stream_data(msg.channel)
+    if 'data' in data and len(data['data']):
+        return f'@{msg.user}, {data["data"][0]["title"]}'
+    else:
+        return f'@{msg.user}, Stream not found'
+
+
+async def _fetch_stream_data(channel, no_refresh=False) -> dict:
+    async with aiohttp.request('get', 'https://api.twitch.tv/helix/streams', params={'user_login': channel},
+                               headers={
+                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}'
+                               }) as c_uptime_r:
+        if c_uptime_r.status == 401 and not no_refresh:
+            # get a new oauth token and pray.
+            twitch_auth.refresh()
+            twitch_auth.save()
+            return await _fetch_stream_data(channel, no_refresh=True)
+        c_uptime_r.raise_for_status()
+
+        json_data = await c_uptime_r.json()
+    print(json_data)
+    data = json_data['data']
+    return data
 
 
 @main.bot.add_command('uptime', available_in_whispers=False)
@@ -61,19 +77,39 @@ async def command_uptime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('uptime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
         return
-    async with aiohttp.request('get', 'https://api.twitch.tv/helix/streams', params={'user_login': msg.channel},
-                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as c_uptime_r:
-        json_data = await c_uptime_r.json()
-        print(json_data)
-        data = json_data['data']
-        if data:
-            data = data[0]
-            start_time = datetime.datetime(*(time.strptime(data['started_at'],
-                                                           "%Y-%m-%dT%H:%M:%SZ")[0:6]))
-            uptime = round_time_delta(datetime.datetime.utcnow() - start_time)
-            return f'@{msg.user}, {msg.channel} has been live for {uptime!s}'
-        else:
-            return f'@{msg.user}, {msg.channel} is not live.'
+    data = await _fetch_stream_data(msg.channel)
+    if data:
+        data = data[0]
+        start_time = datetime.datetime(*(time.strptime(data['started_at'],
+                                                       "%Y-%m-%dT%H:%M:%SZ")[0:6]))
+        uptime = round_time_delta(datetime.datetime.utcnow() - start_time)
+        return f'@{msg.user}, {msg.channel} has been live for {uptime!s}'
+    else:
+        return f'@{msg.user}, {msg.channel} is not live.'
+
+
+async def _fetch_last_vod_data(channel_id, no_refresh=False):
+    async with aiohttp.request('get', 'https://api.twitch.tv/helix/videos',
+                               params={
+                                   'user_id': channel_id,
+                                   'sort': 'time',
+                                   'type': 'archive',
+                                   'first': '1'
+                               },
+                               headers={
+                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}'
+                               }) as video_r:
+        if video_r.status == 401 and not no_refresh:
+            # get a new oauth token and pray.
+            twitch_auth.refresh()
+            twitch_auth.save()
+            return await _fetch_last_vod_data(channel_id, no_refresh=True)
+        video_r.raise_for_status()
+
+        json_data = await video_r.json()
+    print(json_data)
+    data = json_data['data']
+    return data
 
 
 @main.bot.add_command('downtime', available_in_whispers=False)
@@ -81,51 +117,34 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('downtime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
         return
-    async with aiohttp.request('get', 'https://api.twitch.tv/helix/streams', params={'user_login': msg.channel},
-                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as uptime_req:
-        json_data = await uptime_req.json()
-        data = json_data['data']
-        if data:
-            return f'@{msg.user}, {msg.channel} is live.'
-    async with aiohttp.request('get', 'https://api.twitch.tv/helix/users', params={'login': msg.channel},
-                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as user_req:
-        # channel is not live
-        json_data = await user_req.json()
-        data = json_data['data']
-        user_id = data[0]['id']
-    async with aiohttp.request('get', 'https://api.twitch.tv/helix/videos',
-                               params={
-                                   'user_id': user_id,
-                                   'sort': 'time',
-                                   'type': 'archive',
-                                   'first': '1'
-                               },
-                               headers={'Client-ID': twitch_auth.json_data['client_id']}) as video_r:
+    data = await _fetch_stream_data(msg.channel)
+    if data:
+        return f'@{msg.user}, {msg.channel} is live.'
 
-        json_data = await video_r.json()
-        print(json_data)
-        if not json_data['data']:
-            return
-        data = json_data['data'][0]
-        duration = _parse_duration(data['duration'])
-        print(duration)
+    vod_data = await _fetch_last_vod_data(msg.flags['room-id'])
+    if not vod_data:
+        return f'@{msg.user}, no vods found'
 
-        struct_time = time.strptime(data['created_at'],
-                                    "%Y-%m-%dT%H:%M:%SZ")
-        print(struct_time)
-        created_at = datetime.datetime(year=struct_time[0],
-                                       month=struct_time[1],
-                                       day=struct_time[2],
-                                       hour=struct_time[3],
-                                       minute=struct_time[4],
-                                       second=struct_time[5])
+    data = vod_data[0]
+    duration = _parse_duration(data['duration'])
+    print(duration)
 
-        now = datetime.datetime.utcnow()
-        time_start_difference = now - created_at
-        offline_for = round_time_delta(time_start_difference - duration)
+    struct_time = time.strptime(data['created_at'],
+                                "%Y-%m-%dT%H:%M:%SZ")
+    print(struct_time)
+    created_at = datetime.datetime(year=struct_time[0],
+                                   month=struct_time[1],
+                                   day=struct_time[2],
+                                   hour=struct_time[3],
+                                   minute=struct_time[4],
+                                   second=struct_time[5])
 
-        print(duration, created_at, offline_for)
-        return f'@{msg.user}, {msg.channel} has been offline for {offline_for}'
+    now = datetime.datetime.utcnow()
+    time_start_difference = now - created_at
+    offline_for = round_time_delta(time_start_difference - duration)
+
+    print(duration, created_at, offline_for)
+    return f'@{msg.user}, {msg.channel} has been offline for {offline_for}'
 
 
 def round_time_delta(td):
