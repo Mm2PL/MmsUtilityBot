@@ -14,7 +14,6 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
-import queue
 import shlex
 import time
 import typing
@@ -54,6 +53,7 @@ whois_parser = twitchirc.ArgumentParser(prog='whois')
 g = whois_parser.add_mutually_exclusive_group(required=True)
 g.add_argument('-i', '--id', help='Use the ID instead of using a username', dest='id', type=int)
 g.add_argument('-n', '--name', help='Use the username', dest='name', type=str)
+whois_parser.add_argument('-c', '--channels', help='Run in the context of CHANNELS', dest='channels', type=str)
 
 
 @plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
@@ -110,7 +110,15 @@ async def command_whois(msg: twitchirc.ChannelMessage):
             login = f'({data["login"]})'
         else:
             login = ''
-        created_on = datetime.datetime.strptime(data['createdAt'][:-8], '%Y-%m-%dT%H:%M:%S')
+        print(data)
+
+        created_at_str = ''
+        for i in data['createdAt']:
+            if i == '.':
+                break
+            created_at_str += i
+
+        created_on = datetime.datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%S')
         bot_notes = ''
         bot = _find_bot(data['login'])
         if bot is not None:
@@ -120,6 +128,46 @@ async def command_whois(msg: twitchirc.ChannelMessage):
                          f'Language: {bot["language"] if bot["language"] is not None else "<unknown>"}'
                          f'{last_active}')
 
+        banned_in = []
+
+        if args.channels:
+            if args.channels == 'no':
+                banned_check_channels = []
+            else:
+                banned_check_channels = args.channels.split(',')
+        else:
+            banned_check_channels = main.bot.channels_connected.copy()
+
+        for ch in banned_check_channels.copy():
+            if ch == 'joined':
+                banned_check_channels.extend(main.bot.channels_connected)
+                break
+
+        for ch in banned_check_channels:
+            ch = ch.strip('# ')
+
+            async with aiohttp.request('get', f'https://api.ivr.fi/twitch/banlookup/{data["login"]}/{ch}',
+                                       headers={
+                                           'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
+                                       }) as req:
+                banned_data = await req.json()
+                print(banned_data)
+            if 'banned' in banned_data and banned_data['banned']:
+                if banned_data['isPermanent']:
+                    expiration_note = 'perma-ban'
+                else:
+                    expiration_note = f'lasts until {banned_data["expiresAt"].replace("T", " ").replace("Z", " UTC")}'
+                banned_in.append(ch + f'(since {banned_data["createdAt"].replace("T", " ").replace("Z", " UTC")},'
+                                      f'{expiration_note})')
+        print(banned_in)
+        if banned_in:
+            banned_str = 'They are banned in ' + ('#' + ', #'.join(banned_in))
+        else:
+            if banned_check_channels:
+                banned_str = 'They are banned in no known channels'
+            else:
+                banned_str = 'Didn\'t check for bans'
+
         return (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
                 f'user {data["displayName"]}{login}, '
                 f'chat color: {data["chatColor"]}, '
@@ -128,7 +176,7 @@ async def command_whois(msg: twitchirc.ChannelMessage):
                 f'id: {data["id"]}, '
                 f'bio: '
                 f'{data["bio"] if data["bio"] is not None else "<blank>"}'
-                f'{bot_notes}')
+                f'{bot_notes.rstrip(" ,.")}. {banned_str}.')
 
 
 bots: typing.List[dict] = []
