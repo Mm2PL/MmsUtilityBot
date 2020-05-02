@@ -215,9 +215,9 @@ def get(Base, session_scope, log):
                 return User._get_by_name(name, s)
 
         def _update(self, update, session):
+            session.add(self)
             msg = update['msg']
             if hasattr(msg, 'platform') and msg.platform.name != 'TWITCH':  # don't update names outside of Twitch.
-                session.add(self)
                 return
 
             if msg.user != self.last_known_username:
@@ -226,7 +226,6 @@ def get(Base, session_scope, log):
                     user: User
                     user.last_known_username = '<UNKNOWN_USERNAME>'
                     session.add(user)
-            session.add(self)
 
         def update(self, update, s=None):
             if s is None:
