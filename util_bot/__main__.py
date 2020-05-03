@@ -163,6 +163,8 @@ class UserLoadingMiddleware(twitchirc.AbstractMiddleware):
         missing_perms = self._perm_check(message, permissions, bot.permissions, enable_local_bypass)
         if missing_perms:
             user = User.get_by_message(message, True)
+            if not user:
+                return
             perm_state = bot.permissions.get_permission_state(message)
             perm_state += user.permissions
 
