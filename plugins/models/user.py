@@ -149,7 +149,7 @@ def get(Base, session_scope, log):
                     raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
                 session.add(user)
                 session.commit()
-            session.expunge(user)
+                session.expunge(user)
             return user
 
         @staticmethod
