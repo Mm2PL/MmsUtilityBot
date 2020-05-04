@@ -57,7 +57,8 @@ async def command_title(msg: twitchirc.ChannelMessage):
 async def _fetch_stream_data(channel, no_refresh=False) -> dict:
     async with aiohttp.request('get', 'https://api.twitch.tv/helix/streams', params={'user_login': channel},
                                headers={
-                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}'
+                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}',
+                                   'Client-ID': twitch_auth.json_data['client_id']
                                }) as c_uptime_r:
         if c_uptime_r.status == 401 and not no_refresh:
             # get a new oauth token and pray.
@@ -97,7 +98,8 @@ async def _fetch_last_vod_data(channel_id, no_refresh=False):
                                    'first': '1'
                                },
                                headers={
-                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}'
+                                   'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}',
+                                   'Client-ID': twitch_auth.json_data['client_id']
                                }) as video_r:
         if video_r.status == 401 and not no_refresh:
             # get a new oauth token and pray.
