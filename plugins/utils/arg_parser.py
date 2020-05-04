@@ -35,6 +35,7 @@ POSITIONAL = -1
 
 def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False, no_arg_fill=False,
                ignore_arg_zero=True, defaults=None):
+    text = text.rstrip(' \U000E0000')
     args = {}
     current_positional = 0
     argv = _split_args(text, strict_escapes=strict_escapes, strict_quotes=strict_quotes)
