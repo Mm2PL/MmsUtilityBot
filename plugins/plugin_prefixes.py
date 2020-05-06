@@ -14,7 +14,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import shlex
-from typing import Dict, Any
+from typing import Any
+
+from util_bot import Platform
+from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 
 try:
     # noinspection PyPackageRequirements
@@ -40,47 +43,19 @@ __meta_data__ = {
 }
 log = main.make_log_function('prefixes')
 
-channel_prefixes: Dict[str, str] = {
-    # 'channel': 'prefix'
-}
-# noinspection PyProtectedMember
-old_handler = plugin_manager._acall_command_handlers
-
 
 # noinspection PyProtectedMember
-async def new_handler(message: twitchirc.ChannelMessage):
-    if message.channel in channel_prefixes:
-        chan_prefix = channel_prefixes[message.channel]
-        if message.text.startswith(chan_prefix):
-            was_handled = False
-            if ' ' not in message.text:
-                message.text += ' '
-            for handler in main.bot.commands:
-                if message.text.startswith(chan_prefix + handler.ef_command):
-                    await plugin_manager._acall_handler(handler, message)
-                    was_handled = True
 
-            if not was_handled:
-                main.bot._do_unknown_command(message)
-        else:
-            for handler in main.bot.commands:
-                if callable(handler.matcher_function) and handler.matcher_function(message, handler):
-                    await plugin_manager._acall_handler(handler, message)
-    else:
-        await old_handler(message)
-
-
-main.bot._acall_command_handlers = new_handler
-
-
-def condition_prefix_exists(command: twitchirc.Command, msg: twitchirc.ChannelMessage):
+def condition_prefix_exists(command: twitchirc.Command, msg: StandardizedMessage):
     if command.forced_prefix:
         return False
-    if msg.channel in channel_prefixes:
+    if (msg.channel, msg.platform) in main.bot.prefixes:
+        return True
+    if msg.platform in main.bot.prefixes and isinstance(msg, StandardizedWhisperMessage):
         return True
 
 
-def _command_prefix_get_channel(msg: twitchirc.ChannelMessage, args: Any):
+def _command_prefix_get_channel(msg: StandardizedMessage, args: Any):
     if main.bot.check_permissions(msg, ['util.prefix.set_other'], enable_local_bypass=False):
         # user doesn't have the permissions needed to the a prefix for another channel, ignore --channel
         return msg.channel
@@ -101,18 +76,20 @@ g.add_argument('--set', metavar='NEW_PREFIX', nargs=1, help='Set the prefix on t
                                                             'NEW_PREFIX. This action cannot be undone '
                                                             'using the old prefix, be careful',
                dest='set')
+g.add_argument('--set-platform',
+               metavar=('NEW_PREFIX', 'PLATFORM'),
+               nargs=2,
+               help='Set the prefix on the current platform '
+                    'to NEW_PREFIX. This action cannot be undone '
+                    'using the old prefix, be careful',
+               dest='set_platform')
 
 prefix_parser.add_argument('--channel', metavar='CHANNEL', nargs=1, dest='channel')
 
 
-def _save_prefixes():
-    main.bot.storage['plugin_prefixes']['prefixes'] = channel_prefixes
-    # this will be saved automatically
-
-
 @plugin_manager.add_conditional_alias('prefix', condition_prefix_exists)
 @main.bot.add_command('mb.prefix', required_permissions=['util.prefix'], enable_local_bypass=True)
-def command_prefix(msg: twitchirc.ChannelMessage):
+async def command_prefix(msg: StandardizedMessage):
     argv = shlex.split(msg.text.replace('\U000e0000', ''))
     args = prefix_parser.parse_args(argv[1:] if len(argv) > 1 else [])
     if args is None:
@@ -120,8 +97,9 @@ def command_prefix(msg: twitchirc.ChannelMessage):
     print(args)
     if args.query:
         args.query = ''.join(args.query)
-        if args.query in channel_prefixes:
-            return f'@{msg.user} Channel {args.query!r} uses prefix {channel_prefixes[args.query]}'
+        ident = (args.query, msg.platform)
+        if ident in main.bot.prefixes:
+            return f'@{msg.user} Channel {args.query!r} uses prefix {main.bot.prefixes[ident]}'
         elif args.query in main.bot.channels_connected:
             return f'@{msg.user} Channel {args.query!r} uses default prefix ({main.bot.prefix})'
         else:
@@ -130,36 +108,35 @@ def command_prefix(msg: twitchirc.ChannelMessage):
         args.set = ''.join(args.set)
         temp = [i.isprintable() for i in args.set]
         rules = [len(args.set) < 4,
-                 len(temp) == sum(temp)]
+                 all(temp)]
         del temp
-        if len(rules) == sum(rules):  # prefix is valid.
-            # A True value is 1, but a False is 0
-            # Running sum() on the rules we can know how many rules returned True,
-            # if one returned False the sum will not be equal to len() of rules.
+        if all(rules):  # prefix is valid.
             chan = _command_prefix_get_channel(msg, args)
-            channel_prefixes[chan] = args.set
-            _save_prefixes()
-            return f'@{msg.user} Set prefix to {args.set!r} for channel {chan}.'
+            main.bot.prefixes[(chan, msg.platform)] = args.set
+
+            return (f'@{msg.user} Set prefix to {args.set!r} for channel {chan} on platform'
+                    f' {msg.platform.name.capitalize()!r}.')
         else:
             return f'@{msg.user} Invalid prefix {args.set!r}.'
+    elif args.set_platform:
+        args.set_platform, plat = args.set_platform
 
+        try:
+            plat = Platform[plat.upper()]
+        except IndexError:
+            return f'@{msg.user}, invalid platform: {plat.upper()!r}'
 
-def get_prefix(channel: str):
-    if channel in channel_prefixes:
-        return channel_prefixes[channel]
-    else:
-        return main.bot.prefix
-
-
-if 'plugin_prefixes' in main.bot.storage.data:
-    if 'prefixes' in main.bot.storage['plugin_prefixes'] \
-            and isinstance(main.bot.storage['plugin_prefixes']['prefixes'], dict):
-        channel_prefixes = main.bot.storage['plugin_prefixes']['prefixes']
-    else:
-        main.bot.storage['plugin_prefixes']['prefixes'] = {}
-        # this will be saved automatically
-else:
-    main.bot.storage.data['plugin_prefixes'] = {
-        'prefixes': {}
-    }
-    main.bot.storage.save()
+        temp = [i.isprintable() for i in args.set_platform]
+        rules = [len(args.set_platform) < 4,
+                 all(temp)]
+        del temp
+        if all(rules):
+            missing_perms = main.bot.check_permissions(msg, ['util.prefix.set_platform'], enable_local_bypass=False)
+            if missing_perms:
+                return (f'@{msg.user}, You are missing permissions to change the bot prefix for the whole platform '
+                        f'({msg.platform.name.capitalize()})')
+            main.bot.prefixes[plat] = args.set_platform
+            return (f'@{msg.user} Set prefix to {args.set_platform!r} for platform'
+                    f' {plat.name.capitalize()}.')
+        else:
+            return f'@{msg.user} Invalid prefix {args.set_platform!r}.'
