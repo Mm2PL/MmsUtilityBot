@@ -35,8 +35,8 @@ def get(Base):
         creation_date = Column(sqlalchemy.DateTime, default=datetime.datetime.now)
         settings_raw = Column(sqlalchemy.Text)
 
-        winners_raw = Column(sqlalchemy.String)
-        guesses_raw = Column(sqlalchemy.String)
+        winners_raw = Column(sqlalchemy.Text)
+        guesses_raw = Column(sqlalchemy.Text)
 
         # region winners property
         @property
