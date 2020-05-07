@@ -478,5 +478,7 @@ User, flush_users = user_model.get(Base, session_scope, print)
 this_module = sys.modules[__name__]
 for i in [suggestions, channel_settings]:
     i.init(register_endpoint, ipc_conn, this_module, session_scope)
+
 if __name__ == '__main__':
+    app.config['DEBUG'] = True
     app.run(debug=True, port=8000)
