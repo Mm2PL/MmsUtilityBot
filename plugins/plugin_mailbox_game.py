@@ -17,7 +17,10 @@ import datetime
 import re
 import sys
 import time
+import traceback
 import typing
+
+from plugins.models import mailbox_game
 
 try:
     # noinspection PyPackageRequirements
@@ -76,18 +79,25 @@ class Plugin(main.Plugin):
 
     def __init__(self, module, source):
         super().__init__(module, source)
+        self.MailboxGame = mailbox_game.get(main.Base)
         self.game_enabled_setting = plugin_manager.Setting(
             self,
             'mailbox_game.enabled',
             default_value=False,
             scope=plugin_manager.SettingScope.PER_CHANNEL,
             write_defaults=True,
-            on_load=self._load_from_settings
+            on_load=self._load_from_settings,
+            help_='Toggles whether or not the mailbox guessing game is enabled in the channel.'
         )
         self.mailbox_games = {}
         self.command_mailbox = main.bot.add_command('mailbox', limit_to_channels=[], available_in_whispers=False,
                                                     required_permissions=['mailbox.manage'],
                                                     enable_local_bypass=True)(self.command_mailbox)
+
+        self.command_mailbox_alias = main.bot.add_command('mailgame', limit_to_channels=[], available_in_whispers=False,
+                                                          required_permissions=['mailbox.manage'],
+                                                          enable_local_bypass=True)(self.command_mailbox.function)
+
         main.reloadables['mailbox_channels'] = self._reload_channels
         main.reloadables['plugin.mailbox'] = self._reload_self
         main.bot.schedule_event(0.1, 10, self._reload_channels, (), {})  # load channels
@@ -159,9 +169,11 @@ class Plugin(main.Plugin):
         if is_enabled:
             if username not in self.command_mailbox.limit_to_channels:
                 self.command_mailbox.limit_to_channels.append(username)
+                self.command_mailbox_alias.limit_to_channels.append(username)
         else:
             if username in self.command_mailbox.limit_to_channels:
                 self.command_mailbox.limit_to_channels.remove(username)
+                self.command_mailbox_alias.limit_to_channels.remove(username)
 
     def _reload_self(self):
         del main.plugins['mailbox_game']
@@ -223,9 +235,14 @@ class Plugin(main.Plugin):
             }, strict_escapes=False, strict_quotes=True, ignore_arg_zero=False)
         except arg_parser.ParserError as e:
             return f'@{msg.user}, Unexpected error when processing arguments: {e.message}'
-
+        if msg.channel in self.mailbox_games:
+            return (f'@{msg.user}, Game is already running in this channel. '
+                    f'If you want to override the game use "{argv[0]} stop", then "{msg.text}"')
         if action_args['guesses'] is ...:
             action_args['guesses'] = 1
+
+        if action_args['punish_more'] is ...:
+            action_args['punish_more'] = True
 
         if action_args['guesses'] < 1:
             return f'@{msg.user}, Number of guesses cannot be less than one.'
@@ -272,19 +289,38 @@ class Plugin(main.Plugin):
 
         possible_guesses = list(self._filter_messages(msgs, settings))
 
-        # guesses = self._count_guesses(possible_guesses, settings)
         print('possible', possible_guesses)
         good_guesses = self._find_good_guesses(possible_guesses, good_value, settings)
         print('good', good_guesses)
         best = self._best_guess(settings, good_guesses)
         print('best', best)
+        print(settings)
+        save_start_time = time.monotonic()
+        failed_save = False
+
+        # noinspection PyBroadException
+        try:
+            with main.session_scope() as session:
+                game_obj = self.MailboxGame(main.User.get_by_twitch_id(int(msg.flags['room-id']), session),
+                                            settings, best.copy(), good_value, possible_guesses)
+                session.add(game_obj)
+        except Exception:
+            failed_save = True
+            traceback.print_exc()
+        save_end_time = time.monotonic()
+
         del self.mailbox_games[msg.channel]
+        db_notif = (
+            f'{"Failed to save to database." if failed_save else "Saved winners to database."} '
+            f'Time taken: {save_end_time - save_start_time:.2f}s. ID: {game_obj.id if not failed_save else "n/a"}'
+        )
         if len(best) == 0:
             return (f'{"(automatically closed the game)" if show_closed else ""}'
-                    f'No one guessed {"even remotely " if settings["find_best"] else ""}right')
+                    f'No one guessed {"even remotely " if settings["find_best"] else ""}right. {db_notif}')
+
         else:
             return (f'{"(automatically closed the game)" if show_closed else ""}'
-                    f'Best guesses are {self._nice_best_guesses(best)}')
+                    f'Best guesses are {self._nice_best_guesses(best)}. {db_notif}')
 
     def _filter_messages(self, msgs, settings):
         def _(m: twitchirc.ChannelMessage):
@@ -314,7 +350,7 @@ class Plugin(main.Plugin):
                     good_guesses: typing.Dict[str, typing.Dict[str, typing.Union[int, twitchirc.ChannelMessage]]]):
         best = []
         for num, guess in enumerate(sorted(good_guesses.values(), key=lambda o: o['quality'], reverse=True)):
-            if num > settings['winners']:
+            if num > settings['winners'] and guess['quality'] != 3:  # always display all winners
                 break
 
             if not settings['find_best'] and guess['quality'] < 3:  # not trying to find best, just the exact
