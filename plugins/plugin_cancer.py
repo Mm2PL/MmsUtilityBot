@@ -477,7 +477,7 @@ class Plugin(main.Plugin):
                 session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
             return f'@{msg.user} You have been added to the cookie opt-in list.'
 
-    def c_pyramid(self, msg: twitchirc.ChannelMessage):
+    async def c_pyramid(self, msg: twitchirc.ChannelMessage):
         if not self._get_pyramid_enabled(msg.channel):
             return f'@{msg.user}, This command is disabled here.'
         cd_state = main.do_cooldown('pyramid', msg, global_cooldown=60, local_cooldown=60)
@@ -498,10 +498,12 @@ class Plugin(main.Plugin):
             size = int(size)
             if not args.strip(' '):
                 return f'@{msg.user}, Nothing to send. NaM'
+            output = []
             for i in range(1, size):
-                main.bot.send(msg.reply(args * i))
+                output.append(args * i)
             for i in range(size, 0, -1):
-                main.bot.send(msg.reply(args * i))
+                output.append(args * i)
+            return output
 
     def c_asd(self, msg):
         return 'NaM !!!'
@@ -666,10 +668,10 @@ class Plugin(main.Plugin):
                                      f'{time_taken} seconds, speed: {speed} fps, '
                                      f'eta: {(img.n_frames - frame) * speed} seconds.')
                         if main.check_spamming_allowed(msg.channel):
-                            main.bot.send(msg.reply(speed_msg))
+                            await main.bot.send(msg.reply(speed_msg))
                         else:
                             if frame % (self.status_every_frames * 2) == 0:
-                                main.bot.send(msg.reply_directly(speed_msg))
+                                await main.bot.send(msg.reply_directly(speed_msg))
                         await asyncio.sleep(0)
 
         sendable = ' '.join(o.split('\n')[1:])
