@@ -13,12 +13,13 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import argparse
 import asyncio
 import typing
 import math
 import io
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 import requests
 
 C_SIZE = 2048
@@ -157,3 +158,82 @@ async def crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size
         output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
                    f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size.\n')
     return img, output
+
+
+class _Args:
+    source_url: str
+    source_file_path: str
+
+    reverse: bool
+    size_percent: float
+    max_x: int
+    max_y: int
+
+    sensitivity_r: float
+    sensitivity_g: float
+    sensitivity_b: float
+    sensitivity_a: float
+
+    enable_padding: bool
+    pad_size_x: int
+    pad_size_y: int
+
+    enable_processing: bool
+
+    pre_process_sobel: bool
+
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    source_parser = p.add_mutually_exclusive_group(required=True)
+    source_parser.add_argument('--url', dest='source_url', help='Url to get the image', metavar='URL')
+    source_parser.add_argument('--file', dest='source_file_path', help='Path to image', metavar='PATH/TO/FILE')
+
+    p.add_argument('--reverse', action='store_true', dest='reverse', help='Reverse the result')
+
+    size_group = p.add_mutually_exclusive_group(required=True)
+    size_group.add_argument('--size_percent', dest='size_percent', type=float,
+                            help='Resize image to SIZE_PERCENT width and height.')
+    size_group.add_argument('--max_x', dest='max_x', type=int, metavar='SIZE')
+    size_group.add_argument('--max_y', dest='max_y', type=int, metavar='SIZE')
+
+    p.add_argument('--sensitivity_r', '-Sr', dest='sensitivity_r', type=float, default=2, metavar='RED',
+                   help='Sensitivity for red channel')
+    p.add_argument('--sensitivity_g', '-Sg', dest='sensitivity_g', type=float, default=2, metavar='GREEN',
+                   help='Sensitivity for green channel')
+    p.add_argument('--sensitivity_b', '-Sb', dest='sensitivity_b', type=float, default=2, metavar='BLUE',
+                   help='Sensitivity for blue channel')
+    p.add_argument('--sensitivity_a', '-Sa', dest='sensitivity_a', type=float, default=1, metavar='ALPHA',
+                   help='Sensitivity for alpha channel')
+
+    p.add_argument('--disable_padding', dest='enable_padding', action='store_false',
+                   help='Disable padding the image during the process of converting it to braille.')
+
+    p.add_argument('--pad_size_x', '-Px', dest='pad_size_x', type=int, default=60, metavar='SIZE')
+    p.add_argument('--pad_size_y', '-Py', dest='pad_size_y', type=int, default=60, metavar='SIZE')
+
+    p.add_argument('--disable_processing', '-p', dest='enable_processing', action='store_false',
+                   help='Disable all processing of the image')
+
+    p.add_argument('--sobel', '-s', dest='pre_process_sobel', action='store_true',
+                   help='Apply an edge detection filter before converting the image.')
+
+    args = p.parse_args(namespace=_Args())
+    if args.source_url:
+        _img = asyncio.get_event_loop().run_until_complete(download_image(args.source_url))
+    else:
+        _img = Image.open(args.source_file_path)
+
+    if args.pre_process_sobel:
+        _img = _img.filter(ImageFilter.FIND_EDGES)
+    print(asyncio.get_event_loop().run_until_complete(to_braille_from_image(
+        _img,
+        reverse=args.reverse,
+        size_percent=args.size_percent,
+        max_x=args.max_x,
+        max_y=args.max_y,
+        sensitivity=(args.sensitivity_r, args.sensitivity_g, args.sensitivity_b, args.sensitivity_a),
+        enable_padding=args.enable_padding,
+        pad_size=(args.pad_size_x, args.pad_size_y),
+        enable_processing=args.enable_processing
+    )))
