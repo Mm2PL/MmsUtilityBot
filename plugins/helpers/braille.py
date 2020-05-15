@@ -148,7 +148,6 @@ async def crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size
             expand_size = (0, expand_size[1])
         if expand_size[1] < 0:
             expand_size = (expand_size[0], 0)
-        print(expand_size)
         img = ImageOps.expand(img, expand_size)
         output += (f'Converted image to {img.width}X{img.height} or {percent_area:.2f}% area, '
                    f'{percent_x:.2f}% of X, {percent_y:.2f}% of Y of the original size. Added padding of '
