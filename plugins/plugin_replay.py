@@ -112,15 +112,7 @@ class Plugin(main.Plugin):
         cd_state = main.do_cooldown(cmd='quick_clip', msg=msg)
         if cd_state:
             return
-        # bot.send(msg.reply(f'@{msg.flags["display-name"]}: Clip is on the way!'))
-        async with aiohttp.request('get', 'https://api.twitch.tv/helix/users', params={'login': msg.channel},
-                                   headers={'Client-ID': main.twitch_auth.json_data['client_id']}) as r:
-            data = await r.json()
-            if not ('data' in data and data['data'] and 'id' in data['data'][0]):
-                print(data)
-                return f'@{msg.user}, api error :('
-        user_id = data['data'][0]['id']
-        clip_url = await self.create_clip(user_id)
+        clip_url = await self.create_clip(msg.flags['room-id'])
         if clip_url == 'OFFLINE':
             return f'@{msg.user}, Cannot create a clip of an offline channel'
         else:
@@ -146,7 +138,7 @@ class Plugin(main.Plugin):
                     and json['message'] == 'Clipping is not possible for an offline channel.'):
                 return 'OFFLINE'
         clip_id = json['data'][0]['id']
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(1)
         while 1:
             async with aiohttp.request('get', 'https://api.twitch.tv/helix/clips', params={
                 'id': clip_id
@@ -156,7 +148,7 @@ class Plugin(main.Plugin):
                 retrieved_clip_data = await r.json()
                 if retrieved_clip_data['data']:
                     return retrieved_clip_data['data'][0]['url']
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
 
     def __init__(self, module, source):
         super().__init__(module, source)
