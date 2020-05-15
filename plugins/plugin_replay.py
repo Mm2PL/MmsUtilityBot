@@ -118,22 +118,26 @@ class Plugin(main.Plugin):
         else:
             rand = random.randint(0, 100)
             if rand == 69:
-                return f'@{msg.user}, Cliped it LUL {clip_url} (btw this message has a 1/100 chance of appearing)'
+                return f'@{msg.user}, Cliped it LUL {clip_url}'
             else:
                 return f'@{msg.user}, Created clip FeelsDankMan {chr(0x1f449)} {clip_url}'
 
-    async def create_clip(self, user_id: int):
+    async def create_clip(self, user_id: int, allow_refresh_token=True):
         # attempt to create the clip
         async with aiohttp.request('post', 'https://api.twitch.tv/helix/clips', params={
             'broadcaster_id': str(user_id)
         }, headers={
-            'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}'
+            'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
+            'Client-ID': main.twitch_auth.json_data['client_id']
         }) as r:
             json = await r.json()
             if 'status' in json and json['status'] == 401:
-                main.twitch_auth.refresh()
-                main.twitch_auth.save()
-                return await self.create_clip(user_id)
+                if allow_refresh_token:
+                    main.twitch_auth.refresh()
+                    main.twitch_auth.save()
+                    return await self.create_clip(user_id, allow_refresh_token=False)
+                else:
+                    r.raise_for_status()
             if ('status' in json and json['status'] == 404
                     and json['message'] == 'Clipping is not possible for an offline channel.'):
                 return 'OFFLINE'
@@ -143,7 +147,8 @@ class Plugin(main.Plugin):
             async with aiohttp.request('get', 'https://api.twitch.tv/helix/clips', params={
                 'id': clip_id
             }, headers={
-                'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}'
+                'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
+                'Client-ID': main.twitch_auth.json_data['client_id']
             }) as r:
                 retrieved_clip_data = await r.json()
                 if retrieved_clip_data['data']:
