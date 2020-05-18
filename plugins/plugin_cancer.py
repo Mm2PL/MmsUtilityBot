@@ -274,7 +274,10 @@ class Plugin(main.Plugin):
         self._honeydetected.matcher_function = (
             lambda msg, cmd: (
                     msg.user in ['supibot', 'mm2pl']
-                    and msg.text.startswith('HONEYDETECTED RECONNECTED')
+                    and (
+                            msg.text.startswith('HONEYDETECTED RECONNECTED')
+                            or msg.text.startswith(f'pepeL {unicodedata.lookup("MICROSCOPE")}')
+                    )
                     and msg.channel in ['supinic', 'mm2pl']
             )
         )
@@ -454,6 +457,8 @@ class Plugin(main.Plugin):
             log('warn', f'matching against regex failed: {msg.text!r}')
 
     async def _honeydetected(self, msg: twitchirc.ChannelMessage):
+        if msg.text.startswith('pepeL'):  # new reconnection message
+            return f'ppL {unicodedata.lookup("KEYBOARD")}'
         random_msg = random.choice(RECONNECTION_MESSAGES)
         random_msg = random_msg.replace('{executor}', msg.user)
         while '{ping}' in random_msg:
