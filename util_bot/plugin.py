@@ -17,6 +17,8 @@ import typing
 
 import twitchirc
 
+import util_bot
+
 
 class Plugin:
     @property
@@ -45,6 +47,14 @@ class Plugin:
 
     def __repr__(self):
         return f'<Plugin {self.name} from {self.source}>'
+
+    def referrers(self) -> typing.List[typing.Tuple['Plugin', str]]:
+        """
+        Find which plugins refer to this one
+
+        :return: List of tuples of (Plugin or Module, key)
+        """
+        return util_bot.search_for_refs(self)
 
 
 class PluginStorage:

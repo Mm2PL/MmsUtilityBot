@@ -14,7 +14,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import gc
 import inspect
+import os
+import sys
 import urllib.parse
 import time
 import typing
@@ -243,34 +246,92 @@ reloadables['users'] = reload_users
 
 @bot.add_command('mb.reload', required_permissions=['util.reload'], enable_local_bypass=False)
 async def command_reload(msg: twitchirc.ChannelMessage):
-    argv = util_bot.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
+    argv = util_bot.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 2)
     if len(argv) == 1:
-        return (f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: '
+        return (f'Usage: {command_reload.chat_command} <target>, list of possible reloadable targets: plugin <plugin>'
                 f'{", ".join(reloadables.keys())}')
     else:
-        for name, func in reloadables.items():
-            if name.lower() == argv[1].lower():
-                reload_start = time.time()
-                if inspect.iscoroutinefunction(func):
-                    bot.send(msg.reply(f'@{msg.user}, reloading {name} (async)...'))
-                    try:
-                        o = await func()
-                    except Exception as e:
-                        message = f'@{msg.user}, failed. Error: {e} (Time taken: {time.time() - reload_start}s)'
-                    else:
-                        message = f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'
-                else:
-                    bot.send(msg.reply(f'@{msg.user}, reloading {name} (sync)...'))
+        if argv[1].lower() == 'plugin':
+            if len(argv) < 3:
+                return f'Usage: {command_reload.chat_command} plugin <plugin>.'
+            plugin_name = argv[2]
+            if plugin_name not in util_bot.plugins:
+                return f'Plugin not found: {plugin_name}'
 
-                    try:
-                        o = reloadables[name]()
-                    except Exception as e:
-                        message = f'@{msg.user}, failed. Error: {e} (Time taken: {time.time() - reload_start}s)'
-                    else:
-                        message = f'@{msg.user}, done. Output: {o} (Time taken: {time.time() - reload_start}s)'
-                return message
+            plugin = util_bot.plugins[plugin_name]
+            if plugin.no_reload:
+                return f'Plugin cannot be reloaded.'
 
-        return f'@{msg.user} Couldn\'t reload {argv[1]}: no such target.'
+            module_name = os.path.split(plugin.source)[1].replace('.py', '')
+            plugin_source = plugin.source  # copy it so it is possible to reload the plugin
+            refs: typing.List[typing.Tuple[Plugin, str]] = plugin.referrers()
+
+            # replace references with None
+            for obj, ref_name in refs:
+                setattr(obj, ref_name, None)
+
+            # unload reloadables from the plugin
+            for rel_name, rel in reloadables.copy().items():
+                print(rel_name, rel)
+                if rel.__module__ == module_name:
+                    del reloadables[rel_name]
+
+            # unload commands and settings from the plugin
+            plugin_manager = util_bot.plugins['plugin_manager'].module
+
+            for target_obj in (plugin, plugin.module):
+                for key in dir(target_obj):
+                    value = getattr(target_obj, key)
+                    if isinstance(value, plugin_manager.Setting):
+                        value.unregister()
+                    if isinstance(value, twitchirc.Command):
+                        util_bot.bot.commands.remove(value)
+
+            # capture ids
+            id_of_plugin = id(plugin)
+            id_of_plugin_module = id(plugin.module)
+
+            # delete the plugin's module
+            del util_bot.plugins[plugin.name]
+            del sys.modules[module_name]
+            del plugin
+
+            gc.collect()  # make sure the plugin is truly gone.
+
+            new_plugin = load_file(plugin_source)
+
+            # insert new plugin into old refs
+            for obj, ref_name in refs:
+                setattr(obj, ref_name, new_plugin)
+
+            if id(new_plugin) == id_of_plugin or id(new_plugin.module) == id_of_plugin_module:
+                return f'@{msg.user}, done with warning: ID of plugin is the same. Reloaded plugin {plugin_name}.'
+            return f'@{msg.user}, done. Reloaded plugin {plugin_name}.'
+        else:
+            for name, func in reloadables.items():
+                if name.lower() == argv[1].lower():
+                    reload_start = time.time()
+                    if inspect.iscoroutinefunction(func):
+                        try:
+                            o = await func()
+                        except Exception as e:
+                            message = (f'@{msg.user}, async reload failed. Error: {e} '
+                                       f'(Time taken: {time.time() - reload_start}s)')
+                        else:
+                            message = (f'@{msg.user}, async reload done. Output: {o} '
+                                       f'(Time taken: {time.time() - reload_start}s)')
+                    else:
+                        try:
+                            o = func()
+                        except Exception as e:
+                            message = (f'@{msg.user}, sync reload failed. Error: {e} '
+                                       f'(Time taken: {time.time() - reload_start}s)')
+                        else:
+                            message = (f'@{msg.user}, sync reload done. Output: {o} '
+                                       f'(Time taken: {time.time() - reload_start}s)')
+                    return message
+
+        return f"@{msg.user} Couldn't reload {argv[1]}: no such target."
 
 
 def new_command_from_command_entry(entry: typing.Dict[str, str]):

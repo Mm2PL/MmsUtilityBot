@@ -142,6 +142,21 @@ def custom_import(name, globals_=None, locals_=None, fromlist=None, level=None):
 reloadables: _t.Dict[str, _types.FunctionType] = {}
 
 
+def search_for_refs(obj) -> _t.List[_t.Tuple['Plugin', str]]:
+    refs = []
+    for pl in plugins.values():
+        for key in dir(pl):
+            value = getattr(pl, key)
+            if value is obj:
+                refs.append((pl, key))
+
+        for key in dir(pl.module):
+            value = getattr(pl.module, key)
+            if value is obj:
+                refs.append((pl.module, key))
+    return refs
+
+
 class PluginNotLoadedException(Exception):
     def __init__(self, message):
         super().__init__(message)
