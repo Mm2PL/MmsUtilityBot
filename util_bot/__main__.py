@@ -33,7 +33,7 @@ from twitchirc import Command, Event
 
 from apis.pubsub import PubsubClient
 from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, user_model, Platform, do_cooldown,
-                      UserStateCapturingMiddleware, show_counter_status, init_twitch_auth)
+                      show_counter_status, init_twitch_auth, UserStateCapturingMiddleware)
 import util_bot
 from util_bot.msg import StandardizedMessage
 from util_bot.pubsub import init_pubsub, PubsubMiddleware
@@ -233,8 +233,6 @@ def chat_msg_handler(event: str, msg: StandardizedMessage, *args):
 
 bot.schedule_repeated_event(0.1, 100, flush_users, args=(), kwargs={})
 
-bot.middleware.append(UserStateCapturingMiddleware())
-
 
 def reload_users():
     User.empty_cache()
@@ -430,14 +428,19 @@ async def main():
             time.sleep(1)
         auth[Platform.DISCORD] = discord_auth['access_token']
     await bot.init_clients(auth)
+    bot.clients[Platform.TWITCH].connection.middleware.append(UserStateCapturingMiddleware())
     bot.username = name
 
-    try:
-        uid = util_bot.twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
-    except KeyError:
-        util_bot.twitch_auth.refresh()
-        util_bot.twitch_auth.save()
-        uid = util_bot.twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
+    if 'self_id' in bot.storage.data:
+        uid = bot.storage['self_id']
+    else:
+        try:
+            uid = util_bot.twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
+        except KeyError:
+            util_bot.twitch_auth.refresh()
+            util_bot.twitch_auth.save()
+            uid = util_bot.twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
+        bot.storage['self_id'] = uid
 
     await bot.aconnect()
     bot.cap_reqs(False)
