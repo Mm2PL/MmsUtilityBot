@@ -172,8 +172,11 @@ def _format_time(time_):
             f'{int(seconds)} second{"s" if seconds > 1 or seconds == 0 else ""}')
 
 
-@main.bot.add_command('worldrecord')
+@main.bot.add_command('worldrecord', available_in_whispers=False)
 def command_worldrecord(msg: twitchirc.ChannelMessage):
+    if main.do_cooldown('worldrecord', msg):
+        return
+
     if msg.channel in current_categories:
         category = current_categories[msg.channel]
         time_ = category.runs[0]["run"].times['primary_t']
@@ -191,7 +194,7 @@ def command_worldrecord(msg: twitchirc.ChannelMessage):
 
 
 @main.bot.add_command('update_game', forced_prefix=None, enable_local_bypass=True,
-                      required_permissions=['wr.update_game'])
+                      required_permissions=['wr.update_game'], available_in_whispers=False)
 def command_update_game(msg: twitchirc.ChannelMessage):
     picked = (msg.text + ' ').split(' ', 1)[1].rstrip(' ')
 
@@ -213,7 +216,7 @@ def command_update_game(msg: twitchirc.ChannelMessage):
 
 
 @main.bot.add_command('update_cat', forced_prefix=None, enable_local_bypass=True,
-                      required_permissions=['wr.update_cat'])
+                      required_permissions=['wr.update_cat'], available_in_whispers=False)
 def command_update_cat(msg: twitchirc.ChannelMessage):
     if msg.channel not in current_games:
         return f'@{msg.user} Cannot update category, there\'s no game set.'
