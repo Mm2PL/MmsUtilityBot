@@ -57,7 +57,7 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
-    async def get_user(self, name):
+    async def get_user(self, name, allow_refresh_token=True):
         async with aiohttp.request('get', 'https://api.twitch.tv/helix/users',
                                    params={'login': name},
                                    headers={
@@ -65,6 +65,13 @@ class Plugin(main.Plugin):
                                        'Client-ID': main.twitch_auth.json_data["client_id"]
                                    }) as request:
             j_data = await request.json()
+            if 'status' in j_data and j_data['status'] == 401:
+                if allow_refresh_token:
+                    main.twitch_auth.refresh()
+                    main.twitch_auth.save()
+                    return await self.get_user(name, allow_refresh_token=False)
+                else:
+                    request.raise_for_status()
             return j_data
 
     async def c_replay(self, msg: twitchirc.ChannelMessage):
@@ -99,6 +106,7 @@ class Plugin(main.Plugin):
                                        'first': 1
                                    },
                                    headers={
+                                       'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
                                        'Client-ID': main.twitch_auth.json_data["client_id"]
                                    }) as request:
             j_data = await request.json()
