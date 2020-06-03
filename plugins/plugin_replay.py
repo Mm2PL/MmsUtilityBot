@@ -57,6 +57,16 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
+    async def get_user(self, name):
+        async with aiohttp.request('get', 'https://api.twitch.tv/helix/users',
+                                   params={'login': name},
+                                   headers={
+                                       'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
+                                       'Client-ID': main.twitch_auth.json_data["client_id"]
+                                   }) as request:
+            j_data = await request.json()
+            return j_data
+
     async def c_replay(self, msg: twitchirc.ChannelMessage):
         try:
             args = arg_parser.parse_args(main.delete_spammer_chrs(msg.text),
@@ -71,22 +81,20 @@ class Plugin(main.Plugin):
             args['time'] = datetime.timedelta(seconds=30)
         if args['channel'] is ...:
             args['channel'] = msg.channel
-
-        async with aiohttp.request('get', 'https://api.twitch.tv/helix/users',
-                                   params={'login': args['channel']},
-                                   headers={
-                                       'Client-ID': main.twitch_auth.json_data["client_id"]
-                                   }) as request:
-            j_data = await request.json()
+        if args['channel'] != msg.channel:
+            j_data = await self.get_user(args['channel'])
             if 'data' not in j_data:
                 return f'@{msg.user}, API error (in get-users).'
 
             if len(j_data['data']) == 0:
                 return f'@{msg.user}, failed to find user.'
-        user = j_data['data'][0]
+            user = j_data['data'][0]
+        else:
+            user = msg.flags['room-id']
+
         async with aiohttp.request('get', 'https://api.twitch.tv/helix/videos',
                                    params={
-                                       'user_id': user['id'],
+                                       'user_id': user,
                                        'sort': 'time',
                                        'first': 1
                                    },
