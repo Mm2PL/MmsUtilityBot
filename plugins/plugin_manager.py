@@ -242,12 +242,11 @@ class ExceptionDetectionMiddleware(twitchirc.AbstractMiddleware):
         self.fire_triggered = False
         print('fire detection loaded')
 
-    def on_action(self, event: Event):
-        super().on_action(event)
+    async def aon_action(self, event: Event):
         if event.name == 'fire':
-            self.fire(event)
+            await self.afire(event)
 
-    def fire(self, event: Event) -> None:
+    async def afire(self, event: Event) -> None:
         print('FIRE!!!!! WAYTOODANK')
         if self.fire_triggered:
             return
@@ -262,38 +261,18 @@ class ExceptionDetectionMiddleware(twitchirc.AbstractMiddleware):
                         and 'util.fire_ping_disable' not in perms):
                     pinged += f' @{user}'
         e = event.data['exception']
-        m = twitchirc.ChannelMessage(text=f'The bot\'s breaking!!! {pinged} WAYTOODANK {e!r}',
-                                     user='OUTGOING', channel=error_notification_channel,
-                                     outgoing=True, parent=None)
-        event.source.send(m)
-        event.source.flush_queue()
-
-    def send(self, event: Event) -> None:
-        pass
-
-    def receive(self, event: Event) -> None:
-        pass
-
-    def command(self, event: Event) -> None:
-        pass
-
-    def permission_check(self, event: Event) -> None:
-        pass
-
-    def join(self, event: Event) -> None:
-        pass
-
-    def part(self, event: Event) -> None:
-        pass
-
-    def disconnect(self, event: Event) -> None:
-        pass
-
-    def connect(self, event: Event) -> None:
-        pass
-
-    def add_command(self, event: Event) -> None:
-        pass
+        m = main.msg.StandardizedMessage(
+            text=f'The bot\'s breaking!!! {pinged} WAYTOODANK {e!r}',
+            user='OUTGOING',
+            channel=(error_notification_channel[0] if error_notification_channel[0] is not None
+                     else main.bot.clients[Platform.TWITCH].connection.username),
+            platform=error_notification_channel[1],
+            outgoing=True,
+            parent=event.source,
+            source_message=None
+        )
+        await main.bot.send(m)
+        await main.bot.flush_queue()
 
 
 main.bot.middleware.append(ExceptionDetectionMiddleware())
