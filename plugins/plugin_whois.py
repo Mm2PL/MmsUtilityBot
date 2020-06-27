@@ -54,6 +54,8 @@ g = whois_parser.add_mutually_exclusive_group(required=True)
 g.add_argument('-i', '--id', help='Use the ID instead of using a username', dest='id', type=int)
 g.add_argument('-n', '--name', help='Use the username', dest='name', type=str)
 whois_parser.add_argument('-c', '--channels', help='Run in the context of CHANNELS', dest='channels', type=str)
+whois_parser.add_argument('-v', '--verbose', help='Load more information, runs ban check', dest='verbose',
+                          action='store_true')
 
 
 @plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
@@ -136,7 +138,10 @@ async def command_whois(msg: twitchirc.ChannelMessage):
             else:
                 banned_check_channels = args.channels.split(',')
         else:
-            banned_check_channels = main.bot.channels_connected.copy()
+            if args.verbose:
+                banned_check_channels = main.bot.channels_connected.copy()
+            else:
+                banned_check_channels = []
 
         for ch in banned_check_channels.copy():
             if ch == 'joined':
