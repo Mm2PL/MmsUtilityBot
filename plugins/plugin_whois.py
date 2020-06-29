@@ -33,6 +33,14 @@ try:
 except ImportError:
     import plugins.plugin_prefixes as plugin_prefixes
 
+try:
+    import plugin_hastebin as plugin_hastebin
+except ImportError:
+    from plugins.plugin_hastebin import Plugin as _PluginHastebin
+
+    plugin_hastebin: _PluginHastebin
+    raise
+
 import plugins.utils.arg_parser as arg_parser
 
 __meta_data__ = {
@@ -185,23 +193,40 @@ async def command_whois(msg: util_bot.StandardizedMessage):
 
         print(banned_in)
         if banned_in:
-            banned_str = '. They are banned in ' + ('#' + ', #'.join(banned_in))
+            banned_str = 'They are banned in ' + ('#' + ', #'.join(banned_in))
         elif banned_check_channels:
-            banned_str = '. They are banned in no known channels'
+            banned_str = 'They are banned in no known channels'
         elif args['verbose']:
-            banned_str = '. Didn\'t check for bans'
+            banned_str = 'Didn\'t check for bans'
         else:
             banned_str = ''
+        info = (
+            f'user {data["displayName"]}{login}',
+            logo_warning,
+            f'chat color: {data["chatColor"] if data["chatColor"] else "GRAY-NAME"}',
+            f'account created at {created_on}',
+            f'roles: {roles}',
+            f'id: {data["id"]}',
+            f'bio: {data["bio"].rstrip(" ,.") if data["bio"] is not None else "<blank>"}',
+            banned_str,
+            bot_notes
+        )
 
-        return (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
-                f'user {data["displayName"]}{login}, {logo_warning}'
-                f'chat color: {data["chatColor"] if data["chatColor"] else "GRAY-NAME"}, '
-                f'account created at {created_on}, '
-                f'roles: {roles}, '
-                f'id: {data["id"]}, '
-                f'bio: '
-                f'{data["bio"].rstrip(" ,.") if data["bio"] is not None else "<blank>"}. '
-                f'{bot_notes.rstrip(" ,.")}{banned_str}.')
+        info_text = ''
+        long_text = ''
+        for elem in info:
+            info_text += f'{elem.strip(",. ")}, ' if elem else ''
+            long_text += f' - {elem.strip(",. ")}\n' if elem else ''
+
+        ret_val = (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
+                   + info_text.rstrip('., '))
+        if len(ret_val) > 500:
+            url = plugin_hastebin.hastebin_addr + await plugin_hastebin.upload(
+                long_text
+            )
+            return f'@{msg.user}, Command output was too long, here\'s a hastebin: {url}'
+        else:
+            return ret_val
 
 
 bots: typing.List[dict] = []
