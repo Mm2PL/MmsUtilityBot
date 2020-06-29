@@ -44,6 +44,7 @@ from util_bot.plugin import Plugin, PluginStorage
 from util_bot.uptime import uptime
 from util_bot.userstate import UserStateCapturingMiddleware, bot_user_state, check_moderation
 from util_bot.pubsub import channel_live_state, init_pubsub
+from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 import plugins.models.user as user_model
 # noinspection PyUnresolvedReferences
 from apis.supibot import ApiError, SupibotApi, SupibotAuth, SupibotEndpoint
