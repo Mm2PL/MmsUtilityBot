@@ -67,10 +67,10 @@ def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=F
         else:
             if current_positional in args_types or POSITIONAL in args_types:
                 args[current_positional] = token
-                current_positional += 1
             else:
                 if num != 0 or not ignore_arg_zero:
                     raise ParserError(f'Unexpected positional argument {current_positional}: {token!r}')
+            current_positional += 1
 
     _parse_non_string_args(args, args_types)  # args is modified
     if defaults is not None:
