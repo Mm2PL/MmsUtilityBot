@@ -197,7 +197,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         elif banned_check_channels:
             banned_str = 'They are banned in no known channels'
         elif args['verbose']:
-            banned_str = 'Didn\'t check for bans'
+            banned_str = 'Didn\'t check for channel bans'
         else:
             banned_str = ''
         info = (
