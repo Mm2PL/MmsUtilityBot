@@ -312,19 +312,23 @@ class Bot(twitchirc.Bot):
             if ' ' not in message.text:
                 message.text += ' '
             for handler in self.commands:
-                if callable(handler.matcher_function) and handler.matcher_function(message, handler):
-                    await self._call_command(handler, message)
-                    was_handled = True
                 if message.text.startswith(prefix + handler.ef_command):
                     await self._call_command(handler, message)
                     was_handled = True
             if not was_handled:
                 self._do_unknown_command(message)
         else:
-            await self._acall_forced_prefix_commands(message)
+            was_handled = await self._acall_forced_prefix_commands(message)
+            if not was_handled:
+                await self._acall_custom_handler_commands(message)
 
     def _call_forced_prefix_commands(self, message):
         raise NotImplementedError('sync function')
+
+    async def _acall_custom_handler_commands(self, message):
+        for handler in self.commands:
+            if callable(handler.matcher_function) and handler.matcher_function(message, handler):
+                await self._call_command(handler, message)
 
     async def _acall_forced_prefix_commands(self, message):
         for handler in self.commands:
@@ -332,6 +336,8 @@ class Bot(twitchirc.Bot):
                 continue
             elif message.text.startswith(handler.ef_command):
                 await self._call_command(handler, message)
+                return True
+        return False
 
     def _do_unknown_command(self, message):
         """Handle unknown commands."""
