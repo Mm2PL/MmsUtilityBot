@@ -204,6 +204,8 @@ class Bot(twitchirc.Bot):
                     missing_permissions.append(p)
         if missing_permissions:
             self.call_handlers('permission_error', message, None, missing_permissions)
+            self.call_middleware('permission_error', {'message': message, 'missing_permissions': missing_permissions},
+                                 False)
         return missing_permissions
 
     def check_permissions_from_command(self, message: twitchirc.ChannelMessage, command: twitchirc.Command):
@@ -240,6 +242,8 @@ class Bot(twitchirc.Bot):
                     missing_permissions.append(p)
         if missing_permissions:
             self.call_handlers('permission_error', message, command, missing_permissions)
+            self.call_middleware('permission_error', {'message': message, 'missing_permissions': missing_permissions},
+                                 False)
         return missing_permissions
 
     async def _send_if_possible(self, message, source_message):
