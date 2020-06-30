@@ -275,7 +275,7 @@ class Bot(twitchirc.Bot):
     async def _a_wait_for_tasks(self):
         if not self._tasks:
             return
-        done, _ = await asyncio.wait({i['task'] for i in self._tasks}, timeout=0.1)
+        done, _ = await asyncio.wait({i['task'] for i in self._tasks}, timeout=0.05)
         # don't pause the bot for long unnecessarily.
         for task in done:
             t = None
