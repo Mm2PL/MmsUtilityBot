@@ -405,7 +405,8 @@ class Plugin(main.Plugin):
     def _nice_best_guesses(self, best):
         output = []
         for i in best:
-            output.append(f'{i["msg"].user} ({i["quality"]}/3)')
+            is_sub = any([i.startswith('subscriber') for i in i['msg'].flags['badges']])
+            output.append(f'{i["msg"].user}{"(S)" if is_sub else ""} ({i["quality"]}/3)')
         return ', '.join(output)
 
     def _mailbox_stop(self, msg):
