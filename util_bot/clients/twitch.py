@@ -51,7 +51,12 @@ class TwitchClient(AbstractClient):
 
     async def receive(self):
         await watch(self.connection.socket.fileno())
-        should_reconnect = self.connection.receive() == 'RECONNECT'
+
+        try:
+            should_reconnect = self.connection.receive() == 'RECONNECT'
+        except (ConnectionResetError, BrokenPipeError) as e:
+            raise Reconnect(self.platform) from e
+
         if should_reconnect:
             raise Reconnect(self.platform)
         return convert_twitchirc_to_standarized(self.connection.process_messages(1000, mode=-1), self.connection)
