@@ -112,7 +112,7 @@ async def to_braille_from_image(img: Image, reverse: bool = False, size_percent:
                 color_binary = []
                 for color_num, color in enumerate(pixel):
                     color_binary.append(color > (255 / sensitivity[color_num]))
-                binary = bool(sum(color_binary))  # False will result in a 0, True in a 1, numbers > 0 are truthy.
+                binary = all(color_binary)
                 del color_binary
 
                 if reverse and not binary or (not reverse and binary):
