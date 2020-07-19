@@ -374,8 +374,7 @@ class Plugin(main.Plugin):
         plugin_help.add_manual_help_using_command('Convert an image into braille. '
                                                   'Usage: braillefy (url:URL|emote:EMOTE) [+reverse] '
                                                   '[sensitivity_(r|g|b|a):float] [size_percent:float] '
-                                                  '[max_x:int] [pad_y:int]. See braillefy defaults for default values '
-                                                  'of the arguments',
+                                                  '[max_x:int] [pad_y:int]',
                                                   None)(self.command_braillefy)
         # endregion
 
