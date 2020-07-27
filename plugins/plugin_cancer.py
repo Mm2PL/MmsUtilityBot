@@ -25,8 +25,6 @@ import aiohttp
 import regex
 from PIL import Image, ImageFilter
 
-NEEDED_FOR_ED = 75
-
 try:
     from utils import arg_parser
 
@@ -118,14 +116,6 @@ COOKIE_PATTERN = regex.compile(
     r'(?P<name>[a-z0-9_]+) '
     r'(?!you have already claimed)'
 )
-RAID_PATTERN = regex.compile(
-    r'A Raid Event at Level \[[0-9]+\] has appeared\. Type \+join to join the raid! The raid '
-    r'will begin in [0-9]+ seconds!'
-)
-ED_FAIL_PATTERN = regex.compile(
-    r', you have already entered the dungeon recently, [0-9]:(?P<time>[0-9]{2}:[0-9]{2}) left until you can enter '
-    r'again! ⌛'
-)
 COOLDOWN_TIMEOUT = 1.5
 
 PRESTIGE_PATTERN = regex.compile('P([1-4]):')
@@ -161,7 +151,6 @@ class Plugin(main.Plugin):
         if self._sneeze[0] <= time.time() and self._sneeze[1] is not None:
             main.bot.send(self._sneeze[1].reply('WAYTOODANK'))
             self._sneeze = (-1, None)
-        self._enter_dungeon()
 
     @property
     def cooldown_timeout(self):
@@ -185,11 +174,6 @@ class Plugin(main.Plugin):
         return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
                 .get(self.time_before_status_setting))
 
-    @property
-    def ed_channel(self):
-        return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
-                .get(self.ed_channel_setting))
-
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
@@ -197,7 +181,6 @@ class Plugin(main.Plugin):
         super().__init__(module, source)
         warnings.simplefilter('error', Image.DecompressionBombWarning)
 
-        self.next_ed_time = 0
         self._sneeze = (-1, None)
         self.storage = main.PluginStorage(self, main.bot.storage)
 
@@ -247,17 +230,9 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
-        self.ed_channel_setting = plugin_manager.Setting(
-            self,
-            'cancer.ed_channel',
-            default_value=None,
-            scope=plugin_manager.SettingScope.GLOBAL,
-            write_defaults=True
-        )
         # endregion
 
         # region Schedule events
-        main.bot.schedule_event(0.1, 1, self._enter_dungeon, (), {})
         main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
         # endregion
 
@@ -287,12 +262,6 @@ class Plugin(main.Plugin):
             lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
                               and msg.user in ['thepositivebot', 'mm2pl']
                               and msg.text.startswith('\x01ACTION [Cookies]'))
-        )
-        self._huwobot_integration = main.bot.add_command('huwobot integration')(self._huwobot_integration)
-        self._huwobot_integration.matcher_function = (
-            lambda msg, cmd: (
-                    msg.channel == self.ed_channel
-            )
         )
         self._ps_sneeze_cancel = main.bot.add_command('ps sneeze cancel')(self._ps_sneeze_cancel)
         self._ps_sneeze_cancel.matcher_function = (
@@ -356,16 +325,6 @@ class Plugin(main.Plugin):
                                      'plugin_cancer.py',
                                      'cancer'
                                  ])
-
-        plugin_help.create_topic('+ed',
-                                 'The `cancer` plugin has a chance to send a message containing +ed every thirty '
-                                 'minutes to activate HuwoBot.',
-                                 section=plugin_help.SECTION_MISC,
-                                 links=[
-                                     'ed',
-                                     'enterdungeon',
-                                     '+enterdungeon'
-                                 ])
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
                                                   'cookies', None)(self.c_cookie_optin)
         plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
@@ -378,48 +337,12 @@ class Plugin(main.Plugin):
                                                   None)(self.command_braillefy)
         # endregion
 
-    def _enter_dungeon(self):
-        if self.ed_channel is None:
-            return
-        if time.time() < self.next_ed_time:
-            return
-        self.next_ed_time = time.time() + 30 * 60 + 1
-        rand = random.randint(1, 100)
-        if rand < NEEDED_FOR_ED:
-            msg = twitchirc.ChannelMessage(f'info: skipping entering dungeon, rolled {rand}, '
-                                           f'needed at least {NEEDED_FOR_ED}',
-                                           main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
-            main.bot.send(msg)
-            return
-
-        msg = twitchirc.ChannelMessage('+ed', main.bot.username, self.ed_channel, outgoing=True, parent=main.bot)
-        main.bot.send(msg)
-        log('info', 'Queued enter dungeon message :)')
-
     async def _ps_sneeze_init(self, msg: twitchirc.ChannelMessage):
         self._sneeze = (time.time() + self.cooldown_timeout, msg)
 
     async def _ps_sneeze_cancel(self, msg: twitchirc.ChannelMessage):
         # don't respond if the playsound didn't play
         self._sneeze = (-1, None)
-
-    async def _huwobot_integration(self, msg: twitchirc.ChannelMessage):
-        m = RAID_PATTERN.match(msg.text)
-        if m:
-            return '+join'
-
-        if msg.text.casefold().startswith(main.bot.username.casefold()):
-            text = regex.sub(main.bot.username, '', msg.text, flags=regex.I)
-            print(repr(text))
-            m2 = ED_FAIL_PATTERN.match(text)
-            if m2:
-                new_time = m2.group('time')
-                minutes, seconds = new_time.split(':')
-                try:
-                    self.next_ed_time = time.time() + (int(minutes) * 60) + int(seconds)
-                    print('updated timer!!')
-                except Exception as e:
-                    log('err', f'Pepega: {e}')
 
     async def _cookie(self, msg: twitchirc.ChannelMessage):
         m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
