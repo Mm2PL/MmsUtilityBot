@@ -52,14 +52,13 @@ __meta_data__ = {
 log = util_bot.make_log_function('whois')
 
 
-@plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists)
 @util_bot.bot.add_command('mb.whois')
 async def command_whois(msg: util_bot.StandardizedMessage):
     if not bots or bots_invalidates <= time.time():
         await _load_bots()
 
-    cd_state = util_bot.do_cooldown('whois', msg, global_cooldown=30,
-                                    local_cooldown=60)
+    cd_state = util_bot.do_cooldown('whois', msg, global_cooldown=10,
+                                    local_cooldown=15)
     if cd_state:
         return
     try:
@@ -228,7 +227,8 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         else:
             return ret_val
 
-
+command_whois_alias = plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists,
+                                                           return_command=True)(command_whois)
 bots: typing.List[dict] = []
 bots_invalidates = time.time()
 
