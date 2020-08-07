@@ -80,7 +80,7 @@ class Plugin(util_bot.Plugin):
         if len(argv) < 2:
             if argv:
                 return f'@{msg.user}, {plugin_help.find_topic("clipinfo", plugin_help.SECTION_COMMANDS)}'
-        match = self.CLIP_PATTERN.findall(' '.join(argv))
+        match = list(self.CLIP_PATTERN.finditer(' '.join(argv)))
         if not match:
             return f'@{msg.user}, no clip links found :('
 
