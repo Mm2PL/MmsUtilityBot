@@ -61,10 +61,10 @@ class Plugin(util_bot.Plugin):
         return super().on_reload
 
     def _extract(self, url: str):
-        extractor = youtube_dl.extractor.TwitchClipsIE()
+        ytdl = youtube_dl.YoutubeDL()
 
         try:
-            data = extractor.extract(url)
+            data = ytdl.extract_info(url, download=False)
         except youtube_dl.utils.ExtractorError as e:
             return 'error'
 
