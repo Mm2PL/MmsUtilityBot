@@ -13,70 +13,84 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import json
-import threading
-import time
-import atexit
+import asyncio
+import typing
 
-import requests
+import twitchirc
+from twitchirc import Event
 
-try:
-    # noinspection PyPackageRequirements
-    import main
-except ImportError:
-    import util_bot as main
-
-    exit()
-
+import util_bot as main
+NAME = 'supibot_is_alive'
 __meta_data__ = {
-    'name': 'plugin_supibot_is_alive',
+    'name': NAME,
     'commands': []
 }
 log = main.make_log_function('supibot_is_alive')
 
-with open('supibot_auth.json', 'r') as f:
-    supibot_auth = json.load(f)
 
-killer_lock = threading.Lock()
+class Plugin(main.Plugin):
+    def __init__(self, module, source):
+        super().__init__(module, source)
+        self.stop_event = asyncio.Event()
+        self.task = None
+        self.middleware = SupibotMiddleware(self)
+        main.bot.middleware.append(self.middleware)
 
+    @property
+    def no_reload(self):
+        return False
 
-def job_active(job_kill_lock: threading.Lock):
-    while 1:
-        if job_kill_lock.locked():
-            break
-        r = requests.put('https://supinic.com/api/bot/active',
-                         headers={
-                             'Authorization': f'Basic {supibot_auth["id"]}:{supibot_auth["key"]}',
-                             'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
-                         })
-        if r.status_code == 400:
-            log('err', 'Sent Supibot active call, not a bot :(, won\'t attempt again.')
-            break
+    @property
+    def name(self) -> str:
+        return NAME
 
-        elif r.status_code == 200:
-            log('info', 'Sent Supibot active call. OK')
+    @property
+    def commands(self) -> typing.List[str]:
+        return []
 
-        elif r.status_code in [401, 403]:
-            log('warn', 'Sent Supibot active call. Bad authorization.')
-        else:
-            log('err', f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
-        current_sleep_time = 0
+    def on_reload(self):
+        self.auto_kill_job()
+
+    async def set_active(self):
+        print('set active start call')
+        if self.stop_event.is_set():
+            print('set active exit, event set')
+            return
+        log('info', 'Sending Supibot active call.')
+        async with (await main.supibot_api.request('PUT /bot-program/bot/active')) as r:
+            if r.status == 400:
+                log('err', 'Sent Supibot active call, not a bot :(, won\'t attempt again.')
+                self.stop_event.set()
+
+            elif r.status == 200:
+                log('info', 'Sent Supibot active call. OK')
+
+            elif r.status in [401, 403]:
+                log('warn', 'Sent Supibot active call. Bad authorization. Won\'t attempt again.')
+                self.stop_event.set()
+            else:
+                log('err',
+                    f'Sent Supibot active call. Invalid status code: {r.status_code}, {r.content.decode("utf-8")}')
+
+    async def pinger_task(self):
         while 1:
-            current_sleep_time += 1
-            time.sleep(1)
-            if current_sleep_time >= 60 * 60 * 0.5:
-                break
-            if job_kill_lock.locked():
-                return
+            await asyncio.sleep(60 * 60 * 0.5)
+            await self.set_active()
+
+    def start_pinging(self):
+        self.task = asyncio.create_task(self.pinger_task())
+
+    async def auto_kill_job(self, *args):
+        print('Stopping Supibot heartbeat job.')
+        self.stop_event.set()
+        await self.task
+        print('Done.')
 
 
-thread = threading.Thread(target=job_active, args=(killer_lock,))
-thread.start()
+class SupibotMiddleware(twitchirc.AbstractMiddleware):
+    def __init__(self, parent: Plugin):
+        super().__init__()
+        self.parent = parent
 
-
-@atexit.register
-def auto_kill_job(*args):
-    print('Stopping Supibot heartbeat thread.')
-    killer_lock.acquire()
-    thread.join()
-    print('Done.')
+    def aconnect(self, event: Event) -> None:
+        self.parent.start_pinging()
