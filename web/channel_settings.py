@@ -387,8 +387,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 settings=settings,
                 get_setting_value=_,
                 setting=setting,
-                channel_id=channel_id,
-                return_to=request.args.get('return_to')
+                channel_id=channel_id
             )
 
     @main_module.app.route('/settings/global')

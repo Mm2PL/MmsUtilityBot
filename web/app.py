@@ -470,13 +470,19 @@ except ImportError:
     import channel_settings
 
 try:
+    from web import channels
+except ImportError:
+    # noinspection PyUnresolvedReferences,PyPackageRequirements
+    import channels
+
+try:
     import plugins.models.user as user_model
 except ImportError:
     user_model = load_model('user')
 
 User, flush_users = user_model.get(Base, session_scope, print)
 this_module = sys.modules[__name__]
-for i in [suggestions, channel_settings]:
+for i in [suggestions, channel_settings, channels]:
     i.init(register_endpoint, ipc_conn, this_module, session_scope)
 
 if __name__ == '__main__':

@@ -120,10 +120,11 @@
             {% endif %}
             const request = await fetch(`/settings/${c_id}/set/{{ setting.name }}?value=${value}`);
             window.location = (
-                `${window.location.origin}${window.location.pathname}?flash=Value(${value}) has been set`
-                + `&return_to={{ return_to }}`
+                    `${window.location.origin}${window.location.pathname}?flash=Value(${value}) has been set`
+                    + `&return_to={{ return_to }}`
             );
         }
+
         async function unset() {
             {% if channel_id == -1 %}
                 const c_id = 'global';
@@ -133,16 +134,15 @@
 
             const request = await fetch(`/settings/${c_id}/unset/{{ setting.name }}`);
             window.location = (
-                `${window.location.origin}${window.location.pathname}?flash=Value has been unset`
-                + `&return_to={{ return_to }}`
+                    `${window.location.origin}${window.location.pathname}?flash=Value has been unset`
             );
         }
 
         update_background();
     </script>
     <button onclick="submit();">Submit</button>
-    {% if return_to %}
-        <a href="{{ return_to }}">Back to list of settings.</a>
+    {% if channel_id == -1 %}
+        <a href="../global">Back to list of settings.</a>
     {% else %}
         <a href="../{{ channel_id }}">Back to list of settings.</a>
     {% endif %}

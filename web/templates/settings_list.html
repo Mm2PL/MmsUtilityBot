@@ -24,52 +24,54 @@
 {% endblock %}
 
 {% block content %}
-    <table>
-        <thead>
-        <tr>
-            <td id="th_provided_by">Plugin</td>
-            <th id="th_name">Setting name</th>
-            <th id="th_value">Value</th>
-            <th id="th_actions">Actions</th>
-            <th id="th_help">Help</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for name, setting in all_settings.items() %}
-            {% if (setting.scope.name == 'PER_CHANNEL' and channel_id != -1) or (setting.scope.name == 'GLOBAL' and channel_id == -1) %}
-                <tr>
-                    <td class="setting_provided_by">
-                        <em>{{ setting.owner }}</em>
-                    </td>
-                    <td class="setting_name">{{ setting.name }}</td>
-                    {% if setting.setting_type == 'bool' %}
-                        <td class="setting_value" style="
-                                {% if settings.get(setting) %}
-                                    background-color: #00aa00;
-                                {% else %}
-                                    background-color: #aa0000;
-                                {% endif %}
-                                ">
-                            {{ get_setting_value(setting) }}
-                        </td>
+<table>
+    <thead>
+    <tr>
+        <td id="th_provided_by">Plugin</td>
+        <th id="th_name">Setting name</th>
+        <th id="th_value">Value</th>
+        <th id="th_actions">Actions</th>
+        <th id="th_help">Help</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for name, setting in all_settings.items() %}
+    {% if (setting.scope.name == 'PER_CHANNEL' and channel_id != -1) or (setting.scope.name == 'GLOBAL' and channel_id == -1) %}
+    <tr>
+        <td class="setting_provided_by">
+            <em>{{ setting.owner }}</em>
+        </td>
+        <td class="setting_name">{{ setting.name }}</td>
+        {% if setting.setting_type == 'bool' %}
+            <td class="setting_value" style="
+                    {% if settings.get(setting) %}
+                        background-color: #00aa00;
                     {% else %}
-                        <td class="setting_value">{{ get_setting_value(setting) }}</td>
+                        background-color: #aa0000;
                     {% endif %}
-                    <td class="setting_edit">
-                        <a href="{{ request.url }}/{{ setting.name }}?return_to={{ request.url }}">Edit</a>
-                    </td>
-                    <td class="setting_help">
-                        {% if setting.help %}
-                            {% autoescape off %}
-                            {{ setting.help.replace('\n', '<br>') }}
-                            {% endautoescape %}
-                        {% else %}
-                            <em>Not available</em>
-                        {% endif %}
-                    </td>
-                </tr>
+                    ">
+                {{ get_setting_value(setting) }}
+            </td>
+        {% else %}
+            <td class="setting_value">{{ get_setting_value(setting) }}</td>
+        {% endif %}
+        <td class="setting_edit">
+            <a href="{{ request.url }}/{{ setting.name }}">Edit</a>
+        </td>
+        <td class="setting_help">
+            {% if setting.help %}
+            {% autoescape off %}
+            {{ setting.help.replace('\n', '<br>') }}
+            {% endautoescape %}
+            {% else %}
+            <em>Not available</em>
             {% endif %}
-        {% endfor %}
-        </tbody>
-    </table>
+        </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+    </tbody>
+</table>
+<!--suppress HtmlUnknownTarget -->
+<a href="/channels">Back to list of channels.</a>
 {% endblock %}
