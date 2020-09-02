@@ -168,7 +168,10 @@ class UserLoadingMiddleware(twitchirc.AbstractMiddleware):
             user = User.get_by_message(message, True)
             if not user:
                 return
-            perm_state = bot.permissions.get_permission_state(message)
+            if message.platform == Platform.TWITCH:
+                perm_state = bot.permissions.get_permission_state(message)
+            else:
+                perm_state = []
             perm_state += user.permissions
 
             # noinspection PyProtectedMember
