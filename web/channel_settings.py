@@ -126,7 +126,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 ), content_type='application/json', status=401))
                 # doesn't return
             try:
-                if setting is '*':
+                if setting == '*':
                     # noinspection PyProtectedMember
                     value = settings._settings
                 else:
@@ -138,7 +138,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                         'error': 'No content',
                         'message': 'Setting doesn\'t have a value'
                     }
-                ), content_type='application/json', status=400))
+                ), content_type='application/json', status=204))
             else:
                 return jsonify({'status': 200, 'data': value})
 
