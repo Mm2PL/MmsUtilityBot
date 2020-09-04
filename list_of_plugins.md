@@ -1,13 +1,13 @@
 1. `plugin_active_chatters.py` Commands moved from the main bot that have to do with counting active chatters
 1. `plugin_autoflush.py` Automatically flush messages,
-1. `plugin_autorefresh.py` (beta) Automatically refresh the access token before reconnect,
 1. `plugin_ban_phrase.py` (admin) Add ban phrases to your bot,
 1. `plugin_blacklist.py` (admin) Blacklist people or channels from your bot,
 1. `plugin_cancer.py` Plugin tuned for my usage, does lots of things that are not the best, responding to messages that 
 aren't commands etc.
 1. `plugin_chat_cache.py` (util) Cache the chat, utility to be used by other plugins
 1. `plugin_converter.py` Allow users to convert between units
-1. `plugin_debug.py` (admin) Debug the bot, allows to send messages via the bot or use eval, HOWEVER eval is currently hardcoded to only work with my (Mm2PL) account 
+1. `plugin_debug.py` (admin) Debug the bot, allows to send messages via the bot or use eval, HOWEVER eval is currently
+                             hardcoded to only work with my (Mm2PL) account
 1. `plugin_emote_limiter.py` (admin) Limit usage of emotes
 1. `plugin_hastebin.py` Allow users to hastebin their message, can be used by other plugins
 1. `plugin_help.py` Add interactive help to your bot
