@@ -25,8 +25,6 @@ aren't commands etc.
 1. `plugin_reminders.py` [tbd]
 1. `plugin_replay.py` Adds a command that links to the vod.
 1. `plugin_simple_command_manager.py` (beta) Manage commands in `commands.json` from chat
-1. `plugin_social.py` Adds a command that pulls the latest tweet, however it is not using the official API, and thus it 
-acts a bit stupid sometimes due to the library used.
 1. `plugin_speedrun.py` Adds a command that shows the world record for the current game
 1. `plugin_su.py` (admin) Allows you to pretend you are another user
 1. `plugin_suggestions.py` (admin) Allows you to take suggestions for your bot
