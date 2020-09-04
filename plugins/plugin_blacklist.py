@@ -233,12 +233,6 @@ class Plugin(main.Plugin):
 
 
 class BlacklistMiddleware(twitchirc.AbstractMiddleware):
-    def send(self, event: Event) -> None:
-        pass
-
-    def receive(self, event: Event) -> None:
-        pass
-
     def command(self, event: Event) -> None:
         message: twitchirc.ChannelMessage = event.data['message']
         command: twitchirc.Command = event.data['command']
@@ -248,21 +242,3 @@ class BlacklistMiddleware(twitchirc.AbstractMiddleware):
                 log('info', f'Ignored {message.user}\'s command ({command.chat_command!r}), \n'
                             f'message: {message.text}')
                 event.cancel()
-
-    def permission_check(self, event: Event) -> None:
-        pass
-
-    def join(self, event: Event) -> None:
-        pass
-
-    def part(self, event: Event) -> None:
-        pass
-
-    def disconnect(self, event: Event) -> None:
-        pass
-
-    def connect(self, event: Event) -> None:
-        pass
-
-    def add_command(self, event: Event) -> None:
-        pass
