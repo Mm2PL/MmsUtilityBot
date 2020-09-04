@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import ssl
 import typing
 
 import twitchirc
@@ -44,10 +45,16 @@ class TwitchClient(AbstractClient):
                 await self.join(i)
 
     async def disconnect(self):
-        self.connection.disconnect()
+        try:
+            self.connection.disconnect()
+        except ssl.SSLZeroReturnError as e:
+            return  # connection is dead eShrug
 
     async def send(self, msg):
-        self.connection.send(msg)
+        try:
+            self.connection.send(msg)
+        except ssl.SSLZeroReturnError as e:
+            raise Reconnect(self.platform) from e
 
     async def receive(self):
         await watch(self.connection.socket.fileno())
@@ -73,6 +80,9 @@ class TwitchClient(AbstractClient):
     async def reconnect(self):
         self.connection.call_middleware('reconnect', (), False)
         await self.disconnect()
+        util_bot.twitch_auth.refresh()
+        util_bot.twitch_auth.save()
+        self.auth = (self.auth[0], 'oauth:' + util_bot.twitch_auth.json_data['access_token'])
         await self.connect()
 
 
@@ -96,9 +106,10 @@ def convert_twitchirc_to_standarized(l: typing.List[typing.Union[twitchirc.Chann
 class EventPassingMiddleware(twitchirc.AbstractMiddleware):
     def __init__(self, target):
         self.target: util_bot.Bot = target
+        self.accepted_events = ['disconnect', 'reconnect']
 
     def on_action(self, event: Event):
-        if event.name in ['disconnect']:
+        if event not in self.accepted_events:
             return
         # noinspection PyProtectedMember
         self.target.call_middleware(event.name, event.data, event._cancelable)
