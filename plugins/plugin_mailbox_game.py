@@ -15,7 +15,6 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
 import re
-import sys
 import time
 import traceback
 import typing
@@ -75,7 +74,9 @@ GUESS_PATTERN = re.compile(r'(\d{1,2}[,-]? ?)(\d{1,2}[,-]? ?)(\d{1,2}[,-]? ?)')
 
 
 class Plugin(main.Plugin):
-    commands: typing.List[str] = ['mailbox']
+    no_reload = True
+    name = NAME
+    commands: typing.List[str] = ['mailbox', 'mailgame']
 
     def __init__(self, module, source):
         super().__init__(module, source)
@@ -99,11 +100,9 @@ class Plugin(main.Plugin):
                                                           enable_local_bypass=True)(self.command_mailbox.function)
 
         main.reloadables['mailbox_channels'] = self._reload_channels
-        main.reloadables['plugin.mailbox'] = self._reload_self
-        main.bot.schedule_event(0.1, 10, self._reload_channels, (), {})  # load channels
 
         plugin_help.create_topic('mailbox', 'Manage the mailbox game. Subcommands: mailbox start, '
-                                            'mailbox stop, mailbox draw', section=plugin_help.SECTION_COMMANDS)
+                                            'mailbox stop, mailbox draw.', section=plugin_help.SECTION_COMMANDS)
 
         plugin_help.create_topic('mailbox stop',
                                  'Stop accepting new guesses into the minigame',
@@ -133,7 +132,7 @@ class Plugin(main.Plugin):
                                  'Broadcaster can vote if this argument or the mods argument is true. Default: true',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start mods',
-                                 'Should mods be allowed to guess. Use -mods to disallow mods to guess'
+                                 'Should mods be allowed to guess. Use -mods to disallow mods to guess. '
                                  'Broadcaster can vote if this argument or the subs argument is true. Default: true',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start vips',
@@ -144,16 +143,14 @@ class Plugin(main.Plugin):
                                  'Use -find_best to disable that behaviour. Default: true',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start winners',
-                                 'Highest amount of names shown when drawing winner(s)'
+                                 'Highest amount of names shown when drawing winner(s). Full natches are always shown. '
                                  'Use winners:NUMBER to change this number. Default: 3',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start punish_more',
                                  'Punish users for guessing more than they are allowed to. '
                                  'This will make the users guesses worth zero points. '
-                                 'Use +punish_more to enable this. Default: false',
+                                 'Use -punish_more to disable this. Default: true',
                                  section=plugin_help.SECTION_ARGS)
-
-        self.dumps = []
 
     def _reload_channels(self):
         self.command_mailbox.limit_to_channels = []
@@ -161,6 +158,7 @@ class Plugin(main.Plugin):
             settings: plugin_manager.ChannelSettings
             if settings.get(self.game_enabled_setting):
                 self.command_mailbox.limit_to_channels.append(channel)
+        self.command_mailbox_alias.limit_to_channels = self.command_mailbox.limit_to_channels
         return len(self.command_mailbox.limit_to_channels)
 
     def _load_from_settings(self, channel_settings: plugin_manager.ChannelSettings):
@@ -174,27 +172,6 @@ class Plugin(main.Plugin):
             if username in self.command_mailbox.limit_to_channels:
                 self.command_mailbox.limit_to_channels.remove(username)
                 self.command_mailbox_alias.limit_to_channels.remove(username)
-
-    def _reload_self(self):
-        del main.plugins['mailbox_game']
-        del sys.modules['plugin_mailbox_game']
-        del main.reloadables['plugin.mailbox']
-        del main.reloadables['mailbox_channels']
-        print(sys.modules)
-        for c in main.bot.commands.copy():
-            if c.chat_command in self.commands:
-                main.bot.commands.remove(c)
-        self.game_enabled_setting.unregister()
-        main.load_file('plugins/plugin_mailbox_game.py')
-        return 'ᕕ Pepega ᕗ'
-
-    @property
-    def no_reload(self):
-        return True
-
-    @property
-    def name(self) -> str:
-        return NAME
 
     def _nice_minigame_settings(self, settings: typing.Dict[str, typing.Union[int, bool]]):
         can_take_part = []
@@ -220,6 +197,7 @@ class Plugin(main.Plugin):
         else:
             return f'@{msg.user}, Unknown action: {action!r}'
 
+    # region mailbox subcommands
     def _mailbox_start(self, argv, msg):
         action_argv = ' '.join(argv[2:])
         try:
@@ -322,8 +300,23 @@ class Plugin(main.Plugin):
             return (f'{"(automatically closed the game)" if show_closed else ""}'
                     f'Best guesses are {self._nice_best_guesses(best)}. {db_notif}')
 
+    def _mailbox_stop(self, msg):
+        if msg.channel not in self.mailbox_games:
+            return f'@{msg.user}, Cannot stop the mailbox minigame, there is none running. FeelsBadMan'
+        else:
+            game = self.mailbox_games[msg.channel]
+            plugin_chat_cache.max_cache_length[msg.channel] = game['old_cache_length']
+            if 'end_time' not in game:
+                game['end_time'] = time.time()
+                return 'Entries are now closed!'
+            else:
+                return (f'@{msg.user}, This game has closed '
+                        f'({datetime.timedelta(seconds=round(time.time() - game["end_time"]))} ago). ')
+    # endregion
+
+    # region mailbox draw helpers
     def _filter_messages(self, msgs, settings):
-        def _(m: twitchirc.ChannelMessage):
+        def filter_function(m: twitchirc.ChannelMessage):
             grp = twitchirc.auto_group(m)
             if grp == 'default':
                 return settings['plebs']
@@ -336,14 +329,10 @@ class Plugin(main.Plugin):
             else:
                 return False
 
-        first_parse = filter(_, msgs)  # all of the messages by users not included in the minigame should be gone now.
-        del _
+        first_parse = filter(filter_function, msgs)
+        # all of the messages by users not included in the minigame should be gone now.
 
-        def _(m: twitchirc.ChannelMessage):
-            return bool(GUESS_PATTERN.match(m.text))
-
-        possible_guesses = filter(_, first_parse)
-        del _
+        possible_guesses = filter(lambda m: bool(GUESS_PATTERN.match(m.text)), first_parse)
         return possible_guesses
 
     def _best_guess(self, settings,
@@ -408,16 +397,4 @@ class Plugin(main.Plugin):
             is_sub = any([i.startswith('subscriber') for i in i['msg'].flags['badges']])
             output.append(f'{i["msg"].user}{"(S)" if is_sub else ""} ({i["quality"]}/3)')
         return ', '.join(output)
-
-    def _mailbox_stop(self, msg):
-        if msg.channel not in self.mailbox_games:
-            return f'@{msg.user}, Cannot stop the mailbox minigame, there is none running. FeelsBadMan'
-        else:
-            game = self.mailbox_games[msg.channel]
-            plugin_chat_cache.max_cache_length[msg.channel] = game['old_cache_length']
-            if 'end_time' not in game:
-                game['end_time'] = time.time()
-                return 'Entries are now closed!'
-            else:
-                return (f'@{msg.user}, This game has closed '
-                        f'{datetime.timedelta(seconds=round(time.time() - game["end_time"]))} ago.')
+    # endregion
