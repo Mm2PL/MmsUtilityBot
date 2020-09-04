@@ -523,26 +523,7 @@ class Plugin(main.Plugin):
         img = await braille.download_image(url)
         img: Image.Image
         if img.format.lower() != 'gif':
-            img, o = await braille.crop_and_pad_image(True,
-                                                      img,
-                                                      max_x,
-                                                      max_y,
-                                                      '',
-                                                      (args['pad_x'] if args['pad_x'] is not Ellipsis else 60,
-                                                       0),
-                                                      size_percent)
-            if args['sobel'] is not ... and args['sobel']:
-                img = img.filter(ImageFilter.FIND_EDGES)
-            o += await braille.to_braille_from_image(img,
-                                                     reverse=True if args['reverse'] is not Ellipsis else False,
-                                                     size_percent=size_percent,
-                                                     max_x=max_x,
-                                                     max_y=max_y,
-                                                     sensitivity=sens,
-                                                     enable_padding=True,
-                                                     pad_size=(args['pad_x'] if args['pad_x'] is not Ellipsis else 60,
-                                                               0),
-                                                     enable_processing=False)
+            o = await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
         else:
             missing_permissions = main.bot.check_permissions(msg, ['cancer.braille.gif'],
                                                              enable_local_bypass=False)
@@ -560,30 +541,7 @@ class Plugin(main.Plugin):
                     frame += 1
                     o += f'\nFrame {frame}\n'
                     frame_start = time.time()
-                    new_img, _ = await braille.crop_and_pad_image(True,
-                                                                  img.copy(),
-                                                                  max_x,
-                                                                  max_y,
-                                                                  '',
-                                                                  (args['pad_x'] if args[
-                                                                                        'pad_x'] is not Ellipsis else
-                                                                   60,
-                                                                   0),
-                                                                  size_percent)
-                    if args['sobel'] is not ... and args['sobel']:
-                        new_img = new_img.filter(ImageFilter.FIND_EDGES)
-
-                    o += await braille.to_braille_from_image(new_img,
-                                                             reverse=True if args['reverse'] is not Ellipsis else False,
-                                                             size_percent=size_percent,
-                                                             max_x=max_x,
-                                                             max_y=max_y,
-                                                             sensitivity=sens,
-                                                             enable_padding=True,
-                                                             pad_size=((args['pad_x'] if args['pad_x'] is not Ellipsis
-                                                                        else 60),
-                                                                       0),
-                                                             enable_processing=False)
+                    o = await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
                     time_taken = round(time.time() - start_time)
                     frame_time = time.time() - frame_start
                     if frame_time > 1:
@@ -609,3 +567,28 @@ class Plugin(main.Plugin):
                     f'{await plugin_hastebin.upload(o)}')
         else:
             return sendable
+
+    async def _single_image_to_braille(self, args, img, max_x, max_y, sens, size_percent):
+        img, o = await braille.crop_and_pad_image(
+            False,
+            img,
+            max_x,
+            max_y,
+            '',
+            (60, 60),
+            size_percent
+        )
+        if args['sobel'] is not ... and args['sobel']:
+            img = img.filter(ImageFilter.FIND_EDGES)
+        o += await braille.to_braille_from_image(
+            img,
+            reverse=True if args['reverse'] is not Ellipsis else False,
+            size_percent=size_percent,
+            max_x=max_x,
+            max_y=max_y,
+            sensitivity=sens,
+            enable_padding=False,
+            pad_size=(60, 60),
+            enable_processing=False
+        )
+        return o
