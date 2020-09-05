@@ -15,9 +15,10 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
 import datetime
-import typing
 import math
+import random
 
+import twitchirc
 import aiohttp
 
 try:
@@ -42,10 +43,6 @@ try:
 except ImportError:
     import plugins.plugin_help as plugin_help
 
-# noinspection PyUnresolvedReferences
-import twitchirc
-import random
-
 NAME = 'replay'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
@@ -57,6 +54,10 @@ log = main.make_log_function(NAME)
 
 
 class Plugin(main.Plugin):
+    name = NAME
+    no_reload = False
+    commands = ['replay', 'qc']
+
     async def get_user(self, name, allow_refresh_token=True):
         async with aiohttp.request('get', 'https://api.twitch.tv/helix/users',
                                    params={'login': name},
@@ -138,7 +139,7 @@ class Plugin(main.Plugin):
             else:
                 return f'@{msg.user}, Created clip FeelsDankMan {chr(0x1f449)} {clip_url}'
 
-    async def create_clip(self, user_id: int, allow_refresh_token=True):
+    async def create_clip(self, user_id: int, allow_refresh_token=True, force_wait_for_create=False):
         # attempt to create the clip
         async with aiohttp.request('post', 'https://api.twitch.tv/helix/clips', params={
             'broadcaster_id': str(user_id)
@@ -158,18 +159,21 @@ class Plugin(main.Plugin):
                     and json['message'] == 'Clipping is not possible for an offline channel.'):
                 return 'OFFLINE'
         clip_id = json['data'][0]['id']
-        await asyncio.sleep(1)
-        while 1:
-            async with aiohttp.request('get', 'https://api.twitch.tv/helix/clips', params={
-                'id': clip_id
-            }, headers={
-                'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
-                'Client-ID': main.twitch_auth.json_data['client_id']
-            }) as r:
-                retrieved_clip_data = await r.json()
-                if retrieved_clip_data['data']:
-                    return retrieved_clip_data['data'][0]['url']
+        if force_wait_for_create:
             await asyncio.sleep(1)
+            while 1:
+                async with aiohttp.request('get', 'https://api.twitch.tv/helix/clips', params={
+                    'id': clip_id
+                }, headers={
+                    'Authorization': f'Bearer {main.twitch_auth.json_data["access_token"]}',
+                    'Client-ID': main.twitch_auth.json_data['client_id']
+                }) as r:
+                    retrieved_clip_data = await r.json()
+                    if retrieved_clip_data['data']:
+                        return retrieved_clip_data['data'][0]['url']
+                await asyncio.sleep(2)
+        else:
+            return f'https://clips.twitch.tv/{clip_id}'
 
     def __init__(self, module, source):
         super().__init__(module, source)
@@ -184,38 +188,21 @@ class Plugin(main.Plugin):
         plugin_help.add_manual_help_using_command('Creates a clip quickly, usage: quick_clip',
                                                   aliases=[
                                                       'qc',
-                                                      'clip'
-                                                  ])
+                                                  ])(self.c_clip)
 
         plugin_help.create_topic('replay channel', 'Channel to create the replay from. Must be live.',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
-                                     'replay channel:str'
-                                     'replay channel: str'
-                                     'replay channel:STR'
-                                     'replay channel: STR'
+                                     'replay channel:str',
+                                     'replay channel: str',
+                                     'replay channel:STR',
+                                     'replay channel: STR',
                                  ])
         plugin_help.create_topic('replay time', 'Time to go back in the VOD.',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
-                                     'replay time:time_delta'
-                                     'replay time: time_delta'
-                                     'replay time:TIME_DELTA'
-                                     'replay time: TIME_DELTA'
+                                     'replay time:time_delta',
+                                     'replay time: time_delta',
+                                     'replay time:TIME_DELTA',
+                                     'replay time: TIME_DELTA',
                                  ])
-
-    @property
-    def no_reload(self):
-        return False
-
-    @property
-    def name(self) -> str:
-        return NAME
-
-    @property
-    def commands(self) -> typing.List[str]:
-        return ['replay']
-
-    @property
-    def on_reload(self):
-        return super().on_reload
