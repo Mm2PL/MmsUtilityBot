@@ -13,7 +13,6 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import enum
 import typing
 
 import regex
@@ -104,11 +103,10 @@ class Plugin(main.Plugin):
 
         args = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
         if len(args) == 1:
-            main.bot.send(msg.reply(f'@{msg.user}, please select a mode. Available modes: '
-                                    f'replacement (will replace ping with [PING]), '
-                                    f'invisibles (will add invisible characters to pings), '
-                                    f'no@ (will remove the @)'))
-            return
+            return (f'@{msg.user}, please select a mode. Available modes: '
+                    f'replacement (will replace ping with [PING]), '
+                    f'invisibles (will add invisible characters to pings), '
+                    f'no@ (will remove the @)')
         args = args[1]
 
         if self._in(['replace', 'replacement', 'repl', 'r'], args.lower()):
@@ -148,27 +146,3 @@ class AntiPingMiddleWare(twitchirc.AbstractMiddleware):
                         message.text = message.text.replace(f'@{user}', f'@{new_ping}')
                     elif mode == OPTOUT_MODE_REPLACEMENT:
                         message.text = message.text.replace(f'@{user}', '@[PING]')
-
-    def receive(self, event: Event) -> None:
-        pass
-
-    def command(self, event: Event) -> None:
-        pass
-
-    def permission_check(self, event: Event) -> None:
-        pass
-
-    def join(self, event: Event) -> None:
-        pass
-
-    def part(self, event: Event) -> None:
-        pass
-
-    def disconnect(self, event: Event) -> None:
-        pass
-
-    def connect(self, event: Event) -> None:
-        pass
-
-    def add_command(self, event: Event) -> None:
-        pass
