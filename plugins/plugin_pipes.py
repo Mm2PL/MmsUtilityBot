@@ -20,19 +20,10 @@ from typing import Dict
 
 import regex
 from twitchirc import Event
+import twitchirc
 
 from plugins.utils import arg_parser
-
-try:
-    # noinspection PyPackageRequirements
-    import main
-
-except ImportError:
-    import util_bot as main
-
-    exit()
-# noinspection PyUnresolvedReferences
-import twitchirc
+import util_bot as main
 
 NAME = 'pipes'
 __meta_data__ = {
@@ -43,29 +34,58 @@ __meta_data__ = {
 log = main.make_log_function(NAME)
 
 
-class PipeWhisperMessage(twitchirc.WhisperMessage):
+class PipeWhisperMessage(main.StandardizedWhisperMessage):
 
-    def __init__(self, flags, user_from, user_to, text, outgoing=False, pipe_id=None):
-        super().__init__(flags, user_from, user_to, text, outgoing)
+    def __init__(self, user_from, user_to, text, platform, flags, outgoing=False, pipe_id=None):
+        super().__init__(
+            user_from=user_from,
+            user_to=user_to,
+            text=text,
+            platform=platform,
+            flags=flags,
+            outgoing=outgoing,
+        )
         self.pipe_id = pipe_id
 
     def reply(self, text: str):
-        new = PipeWhisperMessage(flags={}, user_from='OUTGOING', user_to=self.user_from, text=text, outgoing=True,
-                                 pipe_id=self.pipe_id)
+        new = PipeWhisperMessage(
+            user_from='OUTGOING',
+            user_to=self.user_from,
+            text=text,
+            platform=self.platform,
+            flags={},
+            outgoing=True,
+            pipe_id=self.pipe_id
+        )
         return new
 
 
-class PipeMessage(twitchirc.ChannelMessage):
-    def __init__(self, text: str, user: str, channel: str, outgoing=False, parent=None, pipe_id=None):
-        super().__init__(text, user, channel, outgoing, parent)
+class PipeMessage(main.StandardizedMessage):
+    def __init__(self, text: str, user: str, channel: str, platform, outgoing=False, parent=None, pipe_id=None):
+        super().__init__(
+            text=text,
+            user=user,
+            channel=channel,
+            platform=platform,
+            outgoing=outgoing,
+            parent=parent
+        )
         self.pipe_id = pipe_id
 
     def reply(self, text: str, force_slash=False):
-        return PipeMessage(text=text, user='OUTGOING', channel=self.channel, outgoing=True, pipe_id=self.pipe_id)
+        return PipeMessage(text=text, user='OUTGOING', channel=self.channel, platform=self.platform,
+                           outgoing=True, parent=self.parent, pipe_id=self.pipe_id)
 
     def reply_directly(self, text: str):
-        new = PipeWhisperMessage(flags={}, user_from='OUTGOING', user_to=self.user, text=text, outgoing=True,
-                                 pipe_id=self.pipe_id)
+        new = PipeWhisperMessage(
+            user_from='OUTGOING',
+            user_to=self.user,
+            text=text,
+            platform=self.platform,
+            flags={},
+            outgoing=True,
+            pipe_id=self.pipe_id
+        )
         return new
 
 
@@ -82,6 +102,7 @@ class Plugin(main.Plugin):
         self.command_pipe = main.bot.add_command('pipe')(self.command_pipe)
         main.bot.middleware.append(PipeMiddleware(self))
         self.command_replace = main.bot.add_command('replace')(self.command_replace)
+        self.command_regex_replace = main.bot.add_command('sub')(self.command_regex_replace)
         self.command_reverse = main.bot.add_command('reverse')(self.command_reverse)
 
     @property
@@ -100,12 +121,16 @@ class Plugin(main.Plugin):
     def on_reload(self):
         return super().on_reload
 
-    async def command_reverse(self, msg: twitchirc.ChannelMessage):
+    async def command_reverse(self, msg: main.StandardizedMessage):
         return ''.join(reversed((msg.text + ' ').split(' ', 1)[1]))
 
-    async def command_replace(self, msg: twitchirc.ChannelMessage):
-        # noinspection PyProtectedMember
-        argv = arg_parser._split_args(main.delete_spammer_chrs(msg.text))
+    async def command_replace(self, msg: main.StandardizedMessage):
+        try:
+            # noinspection PyProtectedMember
+            argv = arg_parser._split_args(main.delete_spammer_chrs(msg.text))
+        except arg_parser.ParserError as e:
+            return f'@{msg.user}, {e}'
+        print(argv)
         if len(argv) < 3:
             return f'@{msg.user}, Usage: replace OLD NEW TEXT...'
         old = argv[1]
@@ -113,7 +138,27 @@ class Plugin(main.Plugin):
         rest = ' '.join(argv[3:])
         return rest.replace(old, new)
 
-    async def command_pipe(self, msg: twitchirc.ChannelMessage):
+    async def command_regex_replace(self, msg: main.StandardizedMessage):
+        try:
+            # noinspection PyProtectedMember
+            argv = arg_parser._split_args(main.delete_spammer_chrs(msg.text))
+        except arg_parser.ParserError as e:
+            return f'@{msg.user}, {e}'
+        print(argv)
+        if len(argv) < 3:
+            return f'@{msg.user}, Usage: sub PATTERN REPLACEMENT TEXT...'
+        try:
+            pat = regex.compile(argv[1])
+        except:
+            return f'@{msg.user}, Invalid pattern.'
+        new = argv[2]
+        rest = ' '.join(argv[3:])
+        try:
+            return pat.sub(new, rest, timeout=0.1)
+        except TimeoutError:
+            return f'@{msg.user}, Replacement timed out.'
+
+    async def command_pipe(self, msg: main.StandardizedMessage):
         sub_commands = PIPE_REGEX.split(msg.text)
         sub_commands[0] = sub_commands[0].split(' ', 1)[1]
         print(sub_commands)
@@ -125,7 +170,15 @@ class Plugin(main.Plugin):
             self.pipe_locks[pipe_id] = asyncio.Lock()
             await self.pipe_locks[pipe_id].acquire()
 
-            new_msg = PipeMessage(cmd + ' ' + buf, msg.user, msg.channel, False, parent=msg.parent, pipe_id=pipe_id)
+            new_msg = PipeMessage(
+                text=cmd + ' ' + buf,
+                user=msg.user,
+                channel=msg.channel,
+                platform=msg.platform,
+                outgoing=False,
+                parent=msg.parent,
+                pipe_id=pipe_id
+            )
             new_msg.flags = msg.flags
 
             was_handled = False
@@ -189,25 +242,28 @@ class Plugin(main.Plugin):
 
         if redir_target.startswith('/dev/ttyIRC'):
             channel = redir_target.replace('/dev/ttyIRC', '').lstrip('/')
+            do_it_anyway = False
             if channel == '':
                 return 1, is_a_directory
+            if channel.endswith('_raw'):
+                channel = channel[::-1].replace('_raw'[::-1], '', 1)[::-1]
+                do_it_anyway = True
 
-            if channel != '*' and channel not in main.bot.channels_connected:
+            if channel != '*' and (channel not in main.bot.channels_connected and not do_it_anyway):
                 return 1, permission_denied + ' (cannot pipe into a channel that the bot is not in)'
             missing_perms = main.bot.check_permissions(new_msg, ['pipe.redirect.channel'], enable_local_bypass=False)
             if missing_perms:
                 return 1, permission_denied
             else:
                 if channel != '*':
-                    main.bot.send(
-                        twitchirc.ChannelMessage(
-                            text=pipe_info + response,
-                            user='OUTGOING',
-                            channel=channel,
-                            outgoing=True,
-                            parent=main.bot
-                        )
-                    )
+                    await main.bot.send(main.StandardizedMessage(
+                        text=response,
+                        user='OUTGOING',
+                        channel=channel,
+                        outgoing=True,
+                        parent=main.bot,
+                        platform=main.Platform.TWITCH
+                    ))
                 else:
                     missing_perms = main.bot.check_permissions(new_msg, ['pipe.redirect.channel.all'],
                                                                enable_local_bypass=False)
@@ -215,15 +271,14 @@ class Plugin(main.Plugin):
                         return 1, permission_denied
 
                     for i in main.bot.channels_connected:
-                        main.bot.send(
-                            twitchirc.ChannelMessage(
-                                text=pipe_info + response,
-                                user='OUTGOING',
-                                channel=i,
-                                outgoing=True,
-                                parent=main.bot
-                            )
-                        )
+                        await main.bot.send(main.StandardizedMessage(
+                            text=pipe_info + response,
+                            user='OUTGOING',
+                            channel=i,
+                            outgoing=True,
+                            parent=main.bot,
+                            platform=main.Platform.TWITCH
+                        ))
             return 0, ''
         elif redir_target.startswith('/dev/ttyWS'):
             user = redir_target.replace('/dev/ttyWS', '')
@@ -231,15 +286,13 @@ class Plugin(main.Plugin):
             if missing_perms:
                 return 1, permission_denied
             else:
-                main.bot.send(
-                    twitchirc.WhisperMessage(
-                        flags={},
-                        user_from=main.bot.username,
-                        user_to=user,
-                        text=pipe_info + response,
-                        outgoing=True
-                    )
-                )
+                await main.bot.send(twitchirc.WhisperMessage(
+                    flags={},
+                    user_from=main.bot.username,
+                    user_to=user,
+                    text=pipe_info + response,
+                    outgoing=True
+                ))
             return 0, ''
         elif redir_target.startswith('/dev/ttyUSB'):
             return 1, permission_denied
