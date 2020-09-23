@@ -1,9 +1,14 @@
 password
 twitch_api
-venv/
+*venv*/
 storage.json
-.idea/
+*idea*
 *__pycache__*
 twitch_api.json
 supibot_auth.json
 *secret*
+*auth*
+verification.md
+*.db
+*.json
+*.pem
