@@ -235,7 +235,7 @@ bots_invalidates = time.time()
 
 async def _load_bots():
     global bots, bots_invalidates
-    bots_invalidates = time.time() + 600  # make the bot list invalidate in 10 minutes.
+    bots_invalidates = time.time() + 1800  # make the bot list invalidate in 30 minutes.
     async with aiohttp.request('get', 'https://supinic.com/api/bot-program/bot/list') as r:
         r: aiohttp.ClientResponse
         if r.status == 200:
