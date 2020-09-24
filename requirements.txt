@@ -11,3 +11,4 @@ srcomapi
 pymysql
 regex
 websockets
+yasdu

@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import datetime
 import gc
 import inspect
 import os
@@ -26,6 +27,8 @@ from typing import Dict
 import argparse
 import traceback
 
+import requests
+import yasdu
 import twitchirc
 import json5 as json
 from sqlalchemy import create_engine
@@ -64,7 +67,6 @@ if __name__ == '__main__':
     if prog_args.base_addr:
         base_address = prog_args.base_addr
 init_twitch_auth()
-passwd = 'oauth:' + util_bot.twitch_auth.json_data['access_token']
 if debug:
     storage = twitchirc.JsonStorage('storage_debug.json', auto_save=True, default={
         'permissions': {
@@ -87,9 +89,6 @@ else:
     db_engine = create_engine(f'mysql+pymysql://mm_sbot:{urllib.parse.quote(storage["database_passwd"])}'
                               f'@localhost/mm_sbot')
 
-# bot = twitchirc.Bot(address='irc.chat.twitch.tv', username='Mm_sUtilityBot', password=passwd,
-#                     storage=storage, no_atexit=True)
-# bot.prefix = '!'
 bot.prefix = '!'
 bot.storage = storage
 
@@ -382,16 +381,13 @@ twitchirc.logging.log = util_bot.make_log_function('TwitchIRC')
 twitchirc.log = util_bot.make_log_function('TwitchIRC')
 
 bot.handlers['chat_msg'].append(chat_msg_handler)
+# TODO: put these commands into a file in the util_bot package.
 twitchirc.get_join_command(bot)
 twitchirc.get_part_command(bot)
 twitchirc.get_perm_command(bot)
 twitchirc.get_quit_command(bot)
 if 'counters' in bot.storage.data:
     counters = bot.storage['counters']
-if 'plebs' in bot.storage.data:
-    plebs = bot.storage['plebs']
-if 'subs' in bot.storage.data:
-    subs = bot.storage['subs']
 
 pubsub: typing.Optional[PubsubClient] = None
 
@@ -399,40 +395,42 @@ loop = asyncio.get_event_loop()
 
 pubsub_middleware = PubsubMiddleware()
 
-# async def _wait_for_pubsub_task(pubsub):
-#     while 1:
-#         try:
-#             print('await pubsub task')
-#             await pubsub.task
-#             print('pubsub task end')
-#         except asyncio.CancelledError:
-#             return
-#             continue
+if not os.path.isfile('auth.json'):
+    log('err', 'auth.json file not found.')
+    log('err', 'Create a file called auth.json')
+    log('err', 'Example file: {"twitch": ["bot_username", "bot_oauth"], "discord": "token"}')
+    exit(1)
 
-with open('discord_auth.json', 'r') as f:
-    try:
-        discord_auth = json.load(f)
-    except Exception as e:
-        print('Failed to load credentials for discord, disabling support')
-        print('Please wait 1s')
-        time.sleep(1)
+with open('auth.json', 'r') as f:
+    other_platform_auth = json.load(f)
 
 
 async def main():
     global pubsub
-    name = bot.storage['self_twitch_name']
     auth = {
-        Platform.TWITCH: (name, passwd)
+        Platform.TWITCH: (bot.storage['self_twitch_name'], 'oauth:' + util_bot.twitch_auth.json_data['access_token'])
     }
-    if discord_auth:
-        if 'access_token' not in discord_auth:
-            print('Failed to load `access_token` from Discord auth file.')
-            print('Please wait 1s')
-            time.sleep(1)
-        auth[Platform.DISCORD] = discord_auth['access_token']
+    wait = False
+    for plat in Platform:
+        if plat in auth:
+            continue
+        if plat.name.casefold() in other_platform_auth:
+            auth[plat] = other_platform_auth[plat.name.casefold()]
+        else:
+            log('warn', f'Failed to load auth for {plat.name} from auth file. Key: {plat.name.casefold()!r}')
+            wait = True
+    if not auth:
+        log('err', 'No platform authentication found')
+        log('err', 'Exiting')
+        return
+
+    if wait:
+        print('Please wait 5 seconds')
+        time.sleep(5)
+
     await bot.init_clients(auth)
     bot.clients[Platform.TWITCH].connection.middleware.append(UserStateCapturingMiddleware())
-    bot.username = name
+    bot.username = bot.storage['self_twitch_name']
 
     if 'self_id' in bot.storage.data:
         uid = bot.storage['self_id']
@@ -489,6 +487,13 @@ async def main():
     except KeyboardInterrupt:
         await bot.stop()
         return
+    except Exception as e:
+        exc = e
+        try:
+            await bot.stop()
+        except Exception as ex:
+            exc = ex
+        raise exc
 
 
 was_cleaned_up = False
@@ -497,11 +502,44 @@ was_cleaned_up = False
 async def clean_up(trigger_fire=False):
     global was_cleaned_up
     if was_cleaned_up:
-        was_cleaned_up = True
         return
+    was_cleaned_up = True
+
+    dump_path = None
     if trigger_fire:
         await bot.acall_middleware('fire', {'exception': e}, False)
+        dump_path = yasdu.dump(f'Bot_fail_{datetime.datetime.now().isoformat()}.json')
+        dump_path = os.path.abspath(dump_path)
+    if 'discord_ping_webhook' in bot.storage.data:
+        requests.post(
+            bot.storage['discord_ping_webhook'],
+            json={
+                "content": "restart",
+                "embeds": [
+                    {
+                        "title": f'{"[DEBUG]" if util_bot.debug else ""}The bot is stopping/restarting',
+                        "description": (
+                                f'`clean_up()` was hit with `trigger_fire` = `{trigger_fire}`\n'
+                                + (
+                                    f'The yasdu dump is at `{dump_path}`'
+                                    if dump_path
+                                    else 'There was no yasdu dump done.'
+                                )
+                        ),
+                        "color": 16711680
+                    }
+                ]
+            }
+        )
+
     await bot.stop()
+
+    if pubsub and pubsub.task:
+        pubsub.task.cancel()
+        try:
+            await pubsub.task
+        except asyncio.CancelledError:
+            pass
 
 
 try:
@@ -539,9 +577,8 @@ finally:
     bot.permissions.fix()
     for i in bot.permissions:
         bot.storage['permissions'][i] = bot.permissions[i]
-    # bot.storage['plebs'] = plebs
-    # bot.storage['subs'] = subs
     log('debug', 'save storage')
     bot.storage.save()
     log('debug', 'save storage: done')
     log('info', 'Wrapped up')
+sys.exit()
