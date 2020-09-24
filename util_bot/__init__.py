@@ -15,8 +15,6 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import contextlib as _ctxlib
 import datetime as _dt
-# noinspection PyProtectedMember
-import importlib._bootstrap as _import_bs
 import importlib.abc as _import_abc
 import importlib.util as _import_util
 import os as _os
@@ -27,6 +25,8 @@ import typing as _t
 from types import ModuleType
 import builtins as _builtins
 
+# noinspection PyProtectedMember
+import importlib._bootstrap as _import_bs
 import twitchirc as _twitchirc
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -52,6 +52,8 @@ from apis.supibot import ApiError, SupibotApi, SupibotAuth, SupibotEndpoint
 
 def make_log_function(plugin_name: str):
     def log(level, *data, **kwargs):
+        if level in console_log_ignore:
+            return
         if escalate_errors:
             if level in ['warn', 'WARN']:
                 level = 'err'
@@ -72,6 +74,7 @@ def make_log_function(plugin_name: str):
     return log
 
 
+console_log_ignore = ['debug', 'info']
 log = make_log_function('util_bot')
 _print = print
 bot = Bot()
@@ -173,15 +176,15 @@ class PluginNotLoadedException(Exception):
 
 def load_file(file_name: str) -> _t.Optional[Plugin]:
     file_name = _os.path.abspath(file_name)
-    log('info', f'Loading file {file_name}.')
+    log('debug', f'Loading file {file_name}.')
 
     for name, pl_obj in plugins.items():
         if pl_obj.source == file_name:
-            print(' -> ALREADY LOADED')
+            log('debug', ' -> ALREADY LOADED')
             return None
 
     plugin_name = _os.path.split(file_name)[1].replace('.py', '')
-    log('info', f' -> Name: {plugin_name}')
+    log('debug', f' -> Name: {plugin_name}')
     # noinspection PyProtectedMember
     spec: _import_bs.ModuleSpec = _import_util.spec_from_file_location(plugin_name, file_name)
 
@@ -204,7 +207,7 @@ def load_file(file_name: str) -> _t.Optional[Plugin]:
     ]
     _sys.modules[plugin_name] = pl.module
     plugins[pl.name] = pl
-    log('info', f' -> OKAY')
+    log('debug', f' -> OKAY')
     return pl
 
 

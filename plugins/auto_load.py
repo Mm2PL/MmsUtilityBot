@@ -43,7 +43,7 @@ log('info', 'Plugin `auto_load` loaded')
 if 'plugins' in main.bot.storage.data:
     if main.bot.storage['plugins'] == 'auto':
         for i in os.listdir('plugins'):
-            log('info', f'Trying to load file: {i}')
+            log('debug', f'Trying to load file: {i}')
             try:
                 main.load_file(i)
             except Exception as e:
@@ -52,7 +52,7 @@ if 'plugins' in main.bot.storage.data:
                     log('err', i)
     else:
         for i in main.bot.storage['plugins']:
-            log('info', f'Trying to load file: {i}')
+            log('debug', f'Trying to load file: {i}')
             try:
                 main.load_file(i)
             except Exception as e:
