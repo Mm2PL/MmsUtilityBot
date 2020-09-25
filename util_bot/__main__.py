@@ -499,17 +499,23 @@ async def main():
 was_cleaned_up = False
 
 
-async def clean_up(trigger_fire=False):
+async def clean_up(trigger_fire=False, exc=None):
     global was_cleaned_up
     if was_cleaned_up:
         return
     was_cleaned_up = True
 
     dump_path = None
+    exception_text = None
     if trigger_fire:
-        await bot.acall_middleware('fire', {'exception': e}, False)
-        dump_path = yasdu.dump(f'Bot_fail_{datetime.datetime.now().isoformat()}.json')
+        await bot.acall_middleware('fire', {'exception': exc}, False)
+        exception_text = traceback.format_exc()
+        if exception_text == 'NoneType: None\n':
+            exception_text = None
+        dump_path = yasdu.dump(f'Bot_fail_{datetime.datetime.now().isoformat()}.json',
+                               comment=exception_text)
         dump_path = os.path.abspath(dump_path)
+
     if 'discord_ping_webhook' in bot.storage.data:
         requests.post(
             bot.storage['discord_ping_webhook'],
@@ -524,6 +530,8 @@ async def clean_up(trigger_fire=False):
                                     f'The yasdu dump is at `{dump_path}`'
                                     if dump_path
                                     else 'There was no yasdu dump done.'
+                                ) + (
+                                    ('The exception is: ```' + exception_text + '```') if exception_text else ""
                                 )
                         ),
                         "color": 16711680
@@ -548,7 +556,7 @@ except KeyboardInterrupt:
     print('toplvl Got SIGINT, exiting.')
 except BaseException as e:
     traceback.print_exc()
-    loop.run_until_complete(clean_up(True))
+    loop.run_until_complete(clean_up(True, exc=e))
 finally:
     loop.run_until_complete(clean_up())
     log('debug', 'finally')
