@@ -97,6 +97,11 @@ async def command_whois(msg: util_bot.StandardizedMessage):
     elif args['name'] is not None:
         name = args['name']
         id_ = False
+
+        if name.startswith('#'):
+            id_ = True
+            name = name.lstrip('#')
+
     else:
         return (f'@{msg.user} {msg.text.split(" ")[0]} (name:TWITCH_USERNAME|id:TWITCH_ID) [+verbose] '
                 f'[channels:CHANNELS]. OR {msg.text.split(" ")[0]} TWITCH_USERNAME [+verbose] [channels:CHANNELS]')
@@ -226,6 +231,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             return f'@{msg.user}, Command output was too long, here\'s a hastebin: {url}'
         else:
             return ret_val
+
 
 command_whois_alias = plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists,
                                                            return_command=True)(command_whois)
