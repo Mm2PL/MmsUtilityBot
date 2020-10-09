@@ -27,6 +27,7 @@ class UserStateCapturingMiddleware(twitchirc.AbstractMiddleware):
         if isinstance(msg, twitchirc.UserstateMessage):
             is_vip = 'vip/1' in msg.flags['badges']
             is_mod = 'moderator/1' in msg.flags['badges']
+            is_broadcaster = 'broadcaster/1' in msg.flags['badges']
 
             user_state = {
                 'message': msg,
@@ -37,6 +38,8 @@ class UserStateCapturingMiddleware(twitchirc.AbstractMiddleware):
                 user_state['mode'] = 'mod'
             elif is_vip:
                 user_state['mode'] = 'vip'
+            elif is_broadcaster:
+                user_state['mode'] = 'mod'
             else:
                 user_state['mode'] = 'user'
 
