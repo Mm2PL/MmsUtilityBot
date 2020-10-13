@@ -23,6 +23,7 @@ import ast
 # noinspection PyUnresolvedReferences
 import random
 import sys
+import traceback
 import typing
 
 import aiohttp
@@ -255,7 +256,7 @@ class UnsafeError(Exception):
 class Math:
     """
     Taken from https://github.com/pajbot/pajbot/blob/master/pajbot/modules/math.py#L134
-    modified to support lambdas
+    modified to support lambdas and other things
 
     Original from: http://stackoverflow.com/a/9558001
     """
@@ -274,6 +275,10 @@ class Math:
         ast.USub: operator.neg,
         ast.RShift: operator.rshift,
         ast.LShift: operator.lshift,
+        ast.BitAnd: operator.and_,
+        ast.BitOr: operator.or_,
+        ast.MatMult: operator.matmul,
+        ast.Mod: operator.mod
     }
     functions = {
         'plot': _plot,
@@ -324,7 +329,8 @@ class Math:
         'lgamma': math.lgamma,
 
         'int': int,
-        'float': float
+        'float': float,
+        'str': str
     }
     default_locals = {
         'pi': math.pi,
@@ -346,7 +352,10 @@ class Math:
         >>> Math.eval_expr('1 + 2*3**(4^5) / (6 + -7)')
         -5.0
         """
-        return Math.nice_result(Math.eval_(ast.parse(expr, mode="eval").body, {}, ctx))
+        try:
+            return Math.nice_result(Math.eval_(ast.parse(expr, mode="eval").body, {}, ctx))
+        except SyntaxError as e:
+            _raise_from_eval(e)
 
     @staticmethod
     def nice_result(node):
@@ -360,9 +369,6 @@ class Math:
     @staticmethod
     def check_safe(node, opargs) -> typing.Tuple[bool, str]:
         if isinstance(node, ast.BinOp):
-            if isinstance(opargs[0], str) or isinstance(opargs[1], str):  # don't allow for creating huge strings
-                return False, 'refusing to operate on strings'
-
             if isinstance(node.op, ast.Mult):
                 bigger = max(opargs)
                 if bigger > Math.MAX_MULT:
@@ -452,17 +458,20 @@ class Math:
                 for keyword in node.keywords
             }
             args = [Math.eval_(i, locals_, ctx) for i in node.args]
-            if isinstance(Math.functions[target], FunctionWithCtx):
+            try:
+                if isinstance(Math.functions[target], FunctionWithCtx):
+                    return Math.functions[target](
+                        *args,
+                        ctx=ctx,
+                        **kwargs
+                    )
+
                 return Math.functions[target](
                     *args,
-                    ctx=ctx,
                     **kwargs
                 )
-
-            return Math.functions[target](
-                *args,
-                **kwargs
-            )
+            except Exception as exc:
+                _raise_from_eval(exc)  # re-raise exception from inside the "sandbox".
         else:
             _raise_from_eval(KeyError(f'Unknown or unsafe function: {target!r}'))
 
@@ -475,7 +484,7 @@ class Math:
 
         for i, elem in enumerate(node.args):
             if i >= len(func.args.args):
-                _raise_from_eval(TypeError(f'<lambda>() takes {len(func.args.args)} positional argument but '
+                _raise_from_eval(TypeError(f'<lambda>() takes {len(func.args.args)} positional arguments but '
                                            f'{len(node.args) + len(args)} were given'))
             func_arg = func.args.args[i]
             if func_arg.arg in args:
@@ -508,8 +517,10 @@ class Plugin(util_bot.Plugin):
     async def do_math(self, msg, code):
         ctx = Context()
         ctx.source_message = msg
+
         source = code
         ctx.source = source
+
         try:
             result = await asyncio.get_event_loop().run_in_executor(None, Math.eval_expr, source, ctx)
         except Exception as e:
@@ -561,6 +572,7 @@ class Plugin(util_bot.Plugin):
                 else:
                     return f'{msg.user}, `{result}`'
             else:
+                result = result.replace('\n', ' ').replace('\r', '')
                 return f'@{msg.user}, {result}'
 
     async def command_math(self, msg: StandardizedMessage):
