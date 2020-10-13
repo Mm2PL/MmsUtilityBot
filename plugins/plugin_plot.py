@@ -368,6 +368,10 @@ class Math:
 
     @staticmethod
     def check_safe(node, opargs) -> typing.Tuple[bool, str]:
+        not_all_numbers = any((not isinstance(i, (int, float)) for i in opargs))
+        if not_all_numbers:
+            return True, 'ok'
+
         if isinstance(node, ast.BinOp):
             if isinstance(node.op, ast.Mult):
                 bigger = max(opargs)
