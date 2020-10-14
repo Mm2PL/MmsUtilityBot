@@ -440,6 +440,19 @@ class Math:
             return node
         elif isinstance(node, ast.Call):  # <func>(<values>)
             return Math.call(node, locals_, ctx)
+        elif isinstance(node, ast.JoinedStr):  # f''
+            new_str = ''
+            for i in node.values:
+                if isinstance(i, ast.Constant):
+                    new_str += i.value
+                elif isinstance(i, ast.FormattedValue):
+                    new_str += Math.eval_(i, locals_, ctx)
+            return new_str
+        elif isinstance(node, ast.FormattedValue):
+            value = Math.eval_(node.value, locals_, ctx)
+            fspec = Math.eval_(node.format_spec, locals_, ctx) if node.format_spec else ''
+
+            return format(value, fspec)
         else:
             _raise_from_eval(NotImplementedError(f'Interpreting node type: {type(node)!r} is not implemented'))
 
