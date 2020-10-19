@@ -461,7 +461,7 @@ class Plugin(main.Plugin):
             )
         except arg_parser.ParserError as e:
             return f'Error: {e.message}'
-
+        # region argument parsing
         missing_args = []
         if args['url'] is ... and args['emote'] is ...:
             missing_args.append('url or emote')
@@ -491,6 +491,11 @@ class Plugin(main.Plugin):
         max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
         size_percent = None if args['size_percent'] is Ellipsis else args['size_percent']
 
+        if args['url'] is not ...:
+            missing_perms = await main.bot.acheck_permissions(msg, ['cancer.braille.url'], enable_local_bypass=False)
+            if missing_perms:
+                return f'@{msg.user}, You are missing the "cancer.braille.url" permission to use the url argument.'
+
         url = args['url'] if args['url'] is not ... else None
         if url and url.startswith('file://'):
             return f'@{msg.user}, you can\'t do this BabyRage'
@@ -519,14 +524,15 @@ class Plugin(main.Plugin):
                 url = emote_found.get_url('3x')
             else:
                 return f'@{msg.user}, Invalid url, couldn\'t find an emote matching this.'
-
+        # endregion
         img = await braille.download_image(url)
         img: Image.Image
         if img.format.lower() != 'gif':
             o = await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
         else:
-            missing_permissions = main.bot.check_permissions(msg, ['cancer.braille.gif'],
-                                                             enable_local_bypass=False)
+            # region gifs
+            missing_permissions = await main.bot.acheck_permissions(msg, ['cancer.braille.gif'],
+                                                                    enable_local_bypass=False)
             if missing_permissions:
                 o = 'Note: missing permissions to convert a gif. \n'
             else:
@@ -558,6 +564,7 @@ class Plugin(main.Plugin):
                             if frame % (self.status_every_frames * 2) == 0:
                                 await main.bot.send(msg.reply_directly(speed_msg))
                         await asyncio.sleep(0)
+            # endregion
 
         sendable = ' '.join(o.split('\n')[1:])
         if args['hastebin'] is not Ellipsis or len(sendable) > 500:
