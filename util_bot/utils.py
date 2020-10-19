@@ -14,6 +14,8 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import functools
+import warnings
 
 
 async def watch(fd):
@@ -52,3 +54,25 @@ def counter_difference(text, counter):
         else:
             return None
     return counter
+
+
+def deprecated(alternative=None):
+    """
+    Marks a function as deprecated. This is a decorator.
+
+    :param alternative: The best alternative function name. It will be displayed in the warning.
+    :returns: Actual decorator function.
+    """
+    # Taken from Rapptz's discord.py utils module.
+    def actual_decorator(func):
+        @functools.wraps(func)
+        def decorated(*args, **kwargs):
+            warnings.simplefilter('always', DeprecationWarning)  # turn off filter
+            instead = f', use {alternative}' if alternative else ''
+            warnings.warn(f'{func.__name__} is deprecated{instead}.', stacklevel=3, category=DeprecationWarning)
+            warnings.simplefilter('default', DeprecationWarning)  # reset filter
+            return func(*args, **kwargs)
+
+        return decorated
+
+    return actual_decorator
