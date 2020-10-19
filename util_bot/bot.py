@@ -27,7 +27,7 @@ from util_bot.clients.twitch import convert_twitchirc_to_standarized, TwitchClie
 from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 from . import Platform
 from .clients import CLIENTS
-from .utils import Reconnect
+from .utils import Reconnect, deprecated
 
 bot_instance = None
 RECONNECT = 'RECONNECT'
@@ -167,6 +167,7 @@ class Bot(twitchirc.Bot):
 
         return t
 
+    @deprecated('acheck_permissions')
     def check_permissions(self, message: twitchirc.ChannelMessage, permissions: typing.List[str],
                           enable_local_bypass=True):
         """
@@ -208,6 +209,60 @@ class Bot(twitchirc.Bot):
                                  False)
         return missing_permissions
 
+    async def acheck_permissions(self, message: twitchirc.ChannelMessage, permissions: typing.List[str],
+                                 enable_local_bypass=True, disable_handlers=False):
+        """
+        Check if the user has the required permissions to run a command
+
+        :param message: Message received.
+        :param permissions: Permissions required.
+        :param enable_local_bypass: If False this function will ignore the permissions \
+        `twitchirc.bypass.permission.local.*`. This is useful when creating a command that can change global \
+        settings.
+        :param disable_handlers: Disables any events/handlers being fired, essentially hiding the call from other \
+        machinery
+        :return: A list of missing permissions.
+
+        NOTE `permission_error` handlers are called if this function would return a non-empty list.
+        """
+        if not disable_handlers:
+            o = await self.acall_middleware('permission_check', dict(user=message.user, permissions=permissions,
+                                                                     message=message,
+                                                                     enable_local_bypass=enable_local_bypass),
+                                            cancelable=True)
+
+            if o is False:
+                return ['impossible.event_canceled']
+
+            if isinstance(o, tuple):
+                return o[1]
+
+        missing_permissions = []
+        if message.user not in self.permissions:
+            missing_permissions = permissions
+        else:
+            perms = self.permissions.get_permission_state(message)
+            if twitchirc.GLOBAL_BYPASS_PERMISSION in perms or \
+                    (enable_local_bypass
+                     and twitchirc.LOCAL_BYPASS_PERMISSION_TEMPLATE.format(message.channel) in perms):
+                return []
+            for p in permissions:
+                if p not in perms:
+                    missing_permissions.append(p)
+
+        if missing_permissions and not disable_handlers:
+            self.call_handlers('permission_error', message, None, missing_permissions)
+            await self.acall_middleware(
+                'permission_error',
+                {
+                    'message': message,
+                    'missing_permissions': missing_permissions
+                },
+                False
+            )
+        return missing_permissions
+
+    @deprecated('acheck_permissions_from_command')
     def check_permissions_from_command(self, message: twitchirc.ChannelMessage, command: twitchirc.Command):
         """
         Check if the user has the required permissions to run a command
