@@ -301,6 +301,45 @@ class Bot(twitchirc.Bot):
                                  False)
         return missing_permissions
 
+    async def acheck_permissions_from_command(self, message: twitchirc.ChannelMessage, command: twitchirc.Command):
+        """
+        Check if the user has the required permissions to run a command
+
+        :param message: Message received.
+        :param command: Command used.
+        :return: A list of missing permissions.
+
+        NOTE `permission_error` handlers are called if this function would return a non-empty list.
+        """
+        o = await self.acall_middleware(
+            'permission_check',
+            {
+                'user': message.user, 'permissions': command.permissions_required,
+                'message': message, 'command': command
+            },
+            cancelable=True
+        )
+        if o is False:
+            return ['impossible.event_canceled']
+
+        if isinstance(o, tuple):
+            return o[1]
+
+        missing_permissions = await self.acheck_permissions(message, command.permissions_required,
+                                                            command.enable_local_bypass, True)
+
+        if missing_permissions:
+            self.call_handlers('permission_error', message, command, missing_permissions)
+            await self.acall_middleware(
+                'permission_error',
+                {
+                    'message': message,
+                    'missing_permissions': missing_permissions
+                },
+                False
+            )
+        return missing_permissions
+
     async def _send_if_possible(self, message, source_message):
         if isinstance(message, str):
             await self.send(source_message.reply(message))
