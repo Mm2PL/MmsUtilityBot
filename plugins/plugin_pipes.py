@@ -288,12 +288,14 @@ class Plugin(main.Plugin):
             if missing_perms:
                 return 1, permission_denied
             else:
-                await main.bot.send(twitchirc.WhisperMessage(
+                await main.bot.send(main.StandardizedWhisperMessage(
                     flags={},
                     user_from=main.bot.username,
                     user_to=user,
                     text=pipe_info + response,
-                    outgoing=True
+                    outgoing=True,
+                    source_message=new_msg,
+                    platform=new_msg.platform
                 ))
             return 0, ''
         elif redir_target.startswith('/dev/ttyUSB'):
