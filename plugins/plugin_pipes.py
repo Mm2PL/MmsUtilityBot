@@ -251,7 +251,8 @@ class Plugin(main.Plugin):
 
             if channel != '*' and (channel not in main.bot.channels_connected and not do_it_anyway):
                 return 1, permission_denied + ' (cannot pipe into a channel that the bot is not in)'
-            missing_perms = main.bot.check_permissions(new_msg, ['pipe.redirect.channel'], enable_local_bypass=False)
+            missing_perms = await main.bot.acheck_permissions(new_msg, ['pipe.redirect.channel'],
+                                                              enable_local_bypass=False)
             if missing_perms:
                 return 1, permission_denied
             else:
@@ -265,8 +266,8 @@ class Plugin(main.Plugin):
                         platform=main.Platform.TWITCH
                     ))
                 else:
-                    missing_perms = main.bot.check_permissions(new_msg, ['pipe.redirect.channel.all'],
-                                                               enable_local_bypass=False)
+                    missing_perms = await main.bot.acheck_permissions(new_msg, ['pipe.redirect.channel.all'],
+                                                                      enable_local_bypass=False)
                     if missing_perms:
                         return 1, permission_denied
 
@@ -282,7 +283,8 @@ class Plugin(main.Plugin):
             return 0, ''
         elif redir_target.startswith('/dev/ttyWS'):
             user = redir_target.replace('/dev/ttyWS', '')
-            missing_perms = main.bot.check_permissions(new_msg, ['pipe.redirect.whispers'], enable_local_bypass=False)
+            missing_perms = await main.bot.acheck_permissions(new_msg, ['pipe.redirect.whispers'],
+                                                              enable_local_bypass=False)
             if missing_perms:
                 return 1, permission_denied
             else:
