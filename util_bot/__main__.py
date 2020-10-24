@@ -508,7 +508,6 @@ async def clean_up(trigger_fire=False, exc=None):
     dump_path = None
     exception_text = None
     if trigger_fire:
-        await bot.acall_middleware('fire', {'exception': exc}, False)
         exception_text = traceback.format_exc()
         if exception_text == 'NoneType: None\n':
             exception_text = None
