@@ -110,7 +110,7 @@ RECONNECTION_MESSAGES = [
 COOKIE_PATTERN = regex.compile(
     r'^\[Cookies\] '
     r'\['
-    r'(?P<rank>(?:P[1-4]: )?'
+    r'(?P<rank>(?:P\d+: )?'
     r'(?:[dD]efault|[bB]ronze|[sS]ilver|[gG]old|[pP]latinum|[dD]iamond|[mM]asters|[gG]rand[mM]asters|[lL]eader)'
     r')\] '
     r'(?P<name>[a-z0-9_]+) '
