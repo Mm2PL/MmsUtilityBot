@@ -431,7 +431,10 @@ class Math:
             )
             safe, info = Math.check_safe(node, opargs)
             if safe:
-                return Math.operators[type(node.op)](*opargs)
+                try:
+                    return Math.operators[type(node.op)](*opargs)
+                except ArithmeticError as e:
+                    _raise_from_eval(e)
             else:
                 _raise_from_eval(UnsafeError(info))
         elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
