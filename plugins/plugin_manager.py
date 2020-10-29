@@ -85,12 +85,12 @@ class CommandBlacklistMiddleware(twitchirc.AbstractMiddleware):
             event.cancel()
 
 
-def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Command, twitchirc.ChannelMessage], bool],
+def add_conditional_alias(alias: str, condition: typing.Callable[[twitchirc.Command, StandardizedMessage], bool],
                           return_command=False):
     def decorator(command: twitchirc.Command):
         @main.bot.add_command(alias, enable_local_bypass=command.enable_local_bypass,
                               required_permissions=command.permissions_required)
-        async def new_command(msg: twitchirc.ChannelMessage):
+        async def new_command(msg: StandardizedMessage):
             if condition(command, msg):
                 return await command.acall(msg)
 
