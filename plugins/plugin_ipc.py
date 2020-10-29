@@ -26,7 +26,7 @@ import typing
 import uuid
 import re
 import traceback
-from typing import Dict
+from typing import Dict, List
 
 import twitchirc
 from twitchirc import Event
@@ -123,22 +123,6 @@ class IPCMiddleware(twitchirc.AbstractMiddleware):
 main.bot.middleware.append(IPCMiddleware())
 
 
-# def new_send(message: typing.Union[str, twitchirc.ChannelMessage], queue='misc') -> None:
-#     if isinstance(message, twitchirc.ChannelMessage) and (message.user.startswith('__IPC ')
-#                                                           or message.channel.startswith('__IPC ')):
-#         print(message)
-#         sock_id = int(message.channel.split(' ', 1)[1])
-#         if sock_id in sockets:
-#             sockets[sock_id].send(('~~' + message.text).encode('utf-8'))
-#         else:
-#             return  # socket was closed.
-#     else:
-#         return  # _old_send(message, queue)
-#
-#
-# main.bot.send = new_send
-#
-#
 def add_command(command_name):
     def decorator(func):
         commands[command_name.lower()] = func
@@ -157,11 +141,8 @@ def _purge_closed():
             del response_write_queues[k]
 
 
-msg_buffer: Dict[int, bytes] = {
-}
-response_write_queues: Dict[int, queue.Queue] = {
-
-}
+msg_buffer: Dict[int, bytes] = {}
+response_write_queues: Dict[int, queue.Queue] = {}
 
 
 def _find_message(sock_id):
@@ -257,8 +238,10 @@ def _check_for_new_connections():
     if read_ready:
         sock, ip = server_socket.accept()
         sockets.append(sock)
-        print(f'Accepted connection for {ip}. Sock id {sockets.last_id}')
-        response_write_queues[sockets.last_id] = queue.Queue()
+        socket_id = sockets.last_id
+        print(f'Accepted connection for {ip}. Sock id {socket_id}')
+
+        response_write_queues[socket_id] = queue.Queue()
         sock.send(f'~Welcome to the Mm\'s Utility bot IPC interface.\r\n'.encode('utf-8'))
         sock.send(f'~You have logged in with ID {sockets.last_id}\r\n'.encode('utf-8'))
         sock.send(format_json({
@@ -269,13 +252,21 @@ def _check_for_new_connections():
 
 
 def _write_queued_messages():
+    _purge_closed()
+    to_purge = []
     for sid, q in response_write_queues.items():
         while not q.empty():
             task = q.get(False)
             log('debug', f'Write message {task} to socket {sid}')
+            if sid not in sockets:
+                to_purge.append(sid)
+                q.task_done()
+                break
             sockets[sid].send(task)
             q.task_done()
             log('debug', f'Done.')
+    for s in to_purge:
+        del response_write_queues[s]
 
 
 def on_timer_hit():
@@ -531,6 +522,3 @@ def _command_all_settings(sock: socket.socket, msg: str, socket_id):
             } for k, v in plugin_manager.all_settings.items()
         }
     })
-
-
-print(commands)
