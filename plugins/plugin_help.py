@@ -202,9 +202,11 @@ def _command_help_check_special_topics(topic, msg):
     if topic.lower() in ['all', 'topics', 'help topics', 'all topics']:
         return _command_help_meta_all(msg)
     elif topic.lower() == 'commands':
-        return _command_help_meta_commands_doc(msg)
+        return _command_help_meta_commands_doc_available(msg)
     elif topic.lower() == 'all commands':
         return _command_help_meta_commands_all(msg)
+    elif topic.lower() == 'documented commands':
+        return _command_help_meta_commands_doc(msg)
 
 
 def _command_help_meta_commands_all(msg):
@@ -232,7 +234,7 @@ def _command_help_meta_commands_all(msg):
         return f'@{msg.user} All commands: {new_msg}'
 
 
-def _command_help_meta_commands_doc(msg):
+def _command_help_meta_commands_doc_available(msg):
     all_commands: Dict[str, Callable[..., Any]] = {}
     for command in main.bot.commands:
         if command.chat_command not in all_help:
@@ -254,17 +256,40 @@ def _command_help_meta_commands_doc(msg):
             new_msg += i + ', '
     new_msg = new_msg[:-2]
     if msgs:
-        # for num, i in enumerate(msgs):
-        #     main.bot.send(msg.reply(f'@{msg.user} All documented commands: (p{num + 1}/{len(msgs)}) {i}'))
+        return [f'@{msg.user} Available documented commands: ({num + 1}/{len(msgs)}) {i}' for num, i in enumerate(msgs)]
+    else:
+        return f'@{msg.user} Available documented commands: {new_msg}'
+
+
+def _command_help_meta_commands_doc(msg):
+    all_commands: Dict[str, Callable[..., Any]] = {}
+    for command in main.bot.commands:
+        if command.chat_command not in all_help:
+            continue
+        if command.function in all_commands.values():
+            continue
+        else:
+            all_commands[command.chat_command] = command.function
+    msgs = []
+    new_msg = ''
+    for i in all_commands.keys():
+        if len(new_msg) + len(i) > MSG_LEN_LIMIT:
+            msgs.append(new_msg)
+            new_msg = ''
+        else:
+            new_msg += i + ', '
+    new_msg = new_msg[:-2]
+    if msgs:
         return [f'@{msg.user} All documented commands: ({num + 1}/{len(msgs)}) {i}' for num, i in enumerate(msgs)]
     else:
         return f'@{msg.user} All documented commands: {new_msg}'
 
 
+@plugin_manager.add_conditional_alias('man', plugin_prefixes.condition_prefix_exists)
 @plugin_manager.add_conditional_alias('help', plugin_prefixes.condition_prefix_exists)
 @main.bot.add_command('mb.help')
-def command_help(msg: twitchirc.ChannelMessage):
-    cd_state = main.do_cooldown('help', msg, global_cooldown=10, local_cooldown=20, )
+def command_help(msg: main.StandardizedMessage):
+    cd_state = main.do_cooldown('help', msg, global_cooldown=10, local_cooldown=20)
     if cd_state:
         return
 
@@ -298,36 +323,47 @@ def command_help(msg: twitchirc.ChannelMessage):
         return f'@{msg.user} {find_topic(topic, section)}'
 
 
-create_topic('help TOPIC', 'The topic you want to search for. It can be an existing topic or "all topics", '
-                           '"commands", "all commands"',
-             section=SECTION_ARGS,
-             links=[
-                 'mb.help TOPIC'
-             ])
-create_topic('help SECTION', 'The section you want to search in. See sections(7).',
-             section=SECTION_ARGS,
-             links=[
-                 'mb.help TOPIC'
-             ])
-create_topic('help', 'Search for help. Man-like usage: '
-                     'help SECTION TOPIC or '
-                     'help TOPIC. See sections(7). Sections are denoted in parenthesis after the topic name, '
-                     'like help(1)',
-             section=SECTION_COMMANDS,
-             links=[
-                 'mb.help'
-             ])
+create_topic(
+    'help TOPIC',
+    (
+        'The topic you want to search for. It can be an existing topic or "all topics", '
+        '"commands", "all commands", "documented commands"'
+    ),
+    section=SECTION_ARGS,
+    links=[
+        'mb.help TOPIC',
+        'man TOPIC'
+    ])
+create_topic(
+    'help SECTION',
+    'The section you want to search in. See sections(7).',
+    section=SECTION_ARGS,
+    links=[
+        'mb.help SECTION',
+        'man SECTION'
+    ]
+)
+create_topic(
+    'help',
+    (
+        'Search for help. Man-like usage: '
+        'help SECTION TOPIC or '
+        'help TOPIC. See sections(7). Sections are denoted in parenthesis after the topic name, '
+        'like help(1)'
+    ),
+    section=SECTION_COMMANDS,
+    links=[
+        'mb.help',
+        'man'
+    ]
+)
 create_topic(
     'sections',
     ('Sections:'
      + ', '.join([f'{k} {v["section_doc"]}' for k, v in all_help.items()])),
     section=SECTION_MISC,
     links=[
-        'help sections'
+        'help sections',
+        'man sections'
     ]
-)
-create_topic(
-    'me',
-    'What do you need help with? Do you need one of these? https://en.wikipedia.org/wiki/List_of_suicide_crisis_lines',
-    section=SECTION_MISC
 )
