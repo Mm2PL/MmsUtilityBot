@@ -76,11 +76,9 @@ def create_topic(topic, help_, section=1, links: typing.Optional[list] = None):
         for link in links:
             all_help[0][link] = (section, topic)
     if help_ is None:
-        # noinspection PyTypeChecker
-        all_help[topic] = f'Topic {topic!r} exists but there was no help found :( .'
+        all_help[section][topic] = f'Topic {topic!r} exists but there was no help found :( .'
     else:
         all_help[section][topic] = help_
-    log('debug', f'Created help topic {topic}({section}){f" with links {links}" if links is not None else ""}: {help_}')
 
 
 def _try_find_link(topic, section: typing.Optional[int] = None) -> Union[Tuple[int, str], Tuple[None, None]]:
