@@ -370,13 +370,11 @@ class Bot(twitchirc.Bot):
             'source_msg': message,
             'command': handler
         })
-        await self._a_wait_for_tasks()
 
-    async def _a_wait_for_tasks(self):
+    async def _a_wait_for_tasks(self, timeout=0.2):
         if not self._tasks:
             return
-        done, _ = await asyncio.wait({i['task'] for i in self._tasks}, timeout=0.05)
-        # don't pause the bot for long unnecessarily.
+        done, _ = await asyncio.wait({i['task'] for i in self._tasks}, timeout=timeout)
         for task in done:
             t = None
             for elem in self._tasks:
@@ -472,6 +470,42 @@ class Bot(twitchirc.Bot):
     def run(self):
         raise NotImplementedError('sync function')
 
+    async def _run_scheduler(self):
+        while 1:
+            self.scheduler.run(blocking=False)
+            await asyncio.sleep(1)
+
+    async def _platform_message_flush_loop(self, platform):
+        while 1:
+            await self.clients[platform].flush_queues()
+            await asyncio.sleep(1)
+
+    async def _platform_recv_loop(self, platform):
+        while 1:
+            print(f'Wait for {platform!s} to recv')
+            msgs = await self.clients[platform].receive()
+            print(f'Done waiting for {platform!s} to recv')
+            for i in msgs:
+                self.call_handlers('any_msg', i)
+                if isinstance(i, twitchirc.PingMessage):
+                    await self.clients[Platform.TWITCH].send(i.reply())
+                elif isinstance(i, twitchirc.ReconnectMessage):
+                    await self.reconnect_client(Platform.TWITCH)
+                elif isinstance(i, StandardizedMessage):
+                    self.call_handlers('chat_msg', i)
+                    await self._acall_command_handlers(i)
+                elif isinstance(i, StandardizedWhisperMessage):
+                    print('whisper', i)
+                    await self._acall_command_handlers(i)
+                await self.flush_queue(3)
+
+    async def _command_task_awaiter(self):
+        while 1:
+            if self._tasks:
+                await self._a_wait_for_tasks(10)
+            else:
+                await asyncio.sleep(0.1)
+
     async def _arun(self):
         """
         Brains behind :py:meth:`run`. Doesn't include the `KeyboardInterrupt` handler.
@@ -481,15 +515,12 @@ class Bot(twitchirc.Bot):
         self.hold_send = False
         self._load_prefixes()
         self.call_handlers('start')
-        while 1:
-            run_result = await self._run_once()
-            if run_result is False:
-                twitchirc.log('debug', 'break')
-                break
-
-            self.scheduler.run(blocking=False)
-            await self._a_wait_for_tasks()
-            await asyncio.sleep(0)
+        scheduler_task = asyncio.create_task(self._run_scheduler())
+        awaiter_task = asyncio.create_task(self._command_task_awaiter())
+        platform_recv_tasks = [self._platform_recv_loop(platform) for platform in list(Platform)]
+        platform_flush_tasks = [self._platform_message_flush_loop(platform) for platform in list(Platform)]
+        await asyncio.wait((scheduler_task, *platform_recv_tasks, *platform_flush_tasks, awaiter_task),
+                           return_when=asyncio.FIRST_EXCEPTION)
         await self.disconnect()
 
     def _run(self):
@@ -631,41 +662,7 @@ class Bot(twitchirc.Bot):
         raise NotImplementedError('xd')
 
     async def _run_once(self):
-        """
-        Do everything needed to run, but don't loop. This can be used as a non-blocking version of
-        :py:meth:`run`.
-
-        :return: False if the bot should quit, True if everything went right, RECONNECT if the bot needs to
-        reconnect.
-        """
-        twitchirc.log('debug', 'Receiving.')
-        await self.receive()
-        twitchirc.log('debug', 'Processing.')
-        self.receive_queue = self.process_messages(100)  # process all the messages.
-        twitchirc.log('debug', 'Calling handlers.')
-        for i in self.receive_queue.copy():
-            twitchirc.log('debug', '<', repr(i))
-            self.call_handlers('any_msg', i)
-            if isinstance(i, twitchirc.PingMessage):
-                await self.clients[Platform.TWITCH].send(i.reply())
-                if i in self.receive_queue:
-                    self.receive_queue.remove(i)
-                continue
-            elif isinstance(i, twitchirc.ReconnectMessage):
-                self.receive_queue.remove(i)
-                await self.reconnect_client(Platform.TWITCH)
-            elif isinstance(i, StandardizedMessage):
-                self.call_handlers('chat_msg', i)
-                await self._acall_command_handlers(i)
-            elif isinstance(i, StandardizedWhisperMessage):
-                print('whisper', i)
-                await self._acall_command_handlers(i)
-            if i in self.receive_queue:  # this check may fail if self.part() was called.
-                self.receive_queue.remove(i)
-        if not self.channels_connected:  # if the bot left every channel, stop processing messages.
-            return False
-        await self.flush_queue(max_messages=100)
-        return True
+        raise NotImplementedError('Replaced with loops for each platform.')
 
     async def aconnect(self):
         for p, client in self.clients.items():
