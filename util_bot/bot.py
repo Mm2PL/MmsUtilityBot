@@ -385,7 +385,6 @@ class Bot(twitchirc.Bot):
                 try:
                     result = await t['task']
                 except BaseException as e:
-
                     for line in traceback.format_exc(1000).split('\n'):
                         twitchirc.log('warn', line)
 
@@ -668,6 +667,7 @@ class Bot(twitchirc.Bot):
         for p, client in self.clients.items():
             print(f'Connecting to {p.name}')
             await client.connect()
+        await self.acall_middleware('connect', {}, False)
 
     async def init_clients(self, auths: typing.Dict[Platform, typing.Any]):
         for plat, auth in auths.items():
