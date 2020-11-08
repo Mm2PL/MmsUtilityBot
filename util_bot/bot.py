@@ -346,11 +346,11 @@ class Bot(twitchirc.Bot):
             )
         return missing_permissions
 
-    async def _send_if_possible(self, message, source_message):
+    async def _send_if_possible(self, message, source_message: StandardizedMessage):
         if isinstance(message, str):
             await self.send(source_message.reply(message))
         elif isinstance(message, twitchirc.ChannelMessage):
-            await self.send(convert_twitchirc_to_standarized([message]))
+            await self._send_if_possible(convert_twitchirc_to_standarized([message], message_parent=self))
         elif isinstance(message, (StandardizedMessage, StandardizedWhisperMessage)):
             await self.send(message)
         elif isinstance(message, list):
