@@ -61,14 +61,20 @@ class Bot(twitchirc.Bot):
             # ('name', Platform.TWITCH): 'prefix'
         }
 
-    async def send(self, msg: StandardizedMessage, **kwargs):
+    async def send(self, msg: StandardizedMessage, is_reconnect=False, **kwargs):
         o = await self.acall_middleware('send', dict(message=msg, queue=msg.channel), cancelable=True)
         if o is False:
             twitchirc.log('debug', str(msg), ': canceled')
             return
 
         if msg.platform in self.clients:
-            await self.clients[msg.platform].send(msg)
+            try:
+                await self.clients[msg.platform].send(msg)
+            except Reconnect as e:
+                await self.reconnect_client(e.platform)
+                if is_reconnect:
+                    raise RuntimeError('Failed to send message even after reconnect')
+                return await self.send(msg, is_reconnect=True)
         else:
             raise RuntimeError(f'Cannot send message without a client being present for platform {msg.platform!r}')
 
