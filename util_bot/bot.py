@@ -350,7 +350,8 @@ class Bot(twitchirc.Bot):
         if isinstance(message, str):
             await self.send(source_message.reply(message))
         elif isinstance(message, twitchirc.ChannelMessage):
-            await self._send_if_possible(convert_twitchirc_to_standarized([message], message_parent=self))
+            await self._send_if_possible(convert_twitchirc_to_standarized([message], message_parent=self),
+                                         source_message)
         elif isinstance(message, (StandardizedMessage, StandardizedWhisperMessage)):
             await self.send(message)
         elif isinstance(message, list):
