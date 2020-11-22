@@ -101,10 +101,11 @@ RECONNECTION_MESSAGES = [
     'RECONNECTION DETECTED HONEYDETECTED',
     'HONEYDETECTED /',
     'Am I next in the queue to restart? PepeS',
-    'FeelsJavascriptMan new changes?',
+    # 'FeelsJavascriptMan new changes?',
     f'Suggest more reconnection messages PagChomp {unicodedata.lookup("WHITE RIGHT POINTING BACKHAND INDEX")} _suggest',
     f'{unicodedata.lookup("EYES")} @{{executor}}',
     'HONEYDETECTED PRÓBA PONOWNEGO NAWIĄZANIA POŁĄCZENIA ZOSTAŁA ZAKOŃCZONA SUKCESEM',
+    f'ppL {unicodedata.lookup("KEYBOARD")}'
 ]
 
 COOKIE_PATTERN = regex.compile(
@@ -116,36 +117,10 @@ COOKIE_PATTERN = regex.compile(
     r'(?P<name>[a-z0-9_]+) '
     r'(?!you have already claimed)'
 )
-COOLDOWN_TIMEOUT = 1.5
-
-PRESTIGE_PATTERN = regex.compile('P([1-4]):')
-COOKIE_PRESTIGE_TIMES = {
-    0: 2 * 60 * 60,
-    1: 75 * 60,
-    2: 50 * 60,
-    3: 45 * 60,
-
-    # 0: '2h',
-    # 1: '1h',
-    # 2: '30m',
-    # 3: '20m'
-}
 
 
 class Plugin(main.Plugin):
     _sneeze: Tuple[float, typing.Optional[twitchirc.ChannelMessage]]
-
-    def _time_from_rank(self, text) -> int:
-        prestige_match = PRESTIGE_PATTERN.findall(text)
-        if prestige_match:
-            level = int(prestige_match[0])
-            if level in COOKIE_PRESTIGE_TIMES:
-                return COOKIE_PRESTIGE_TIMES[level]
-            else:
-                log('warn', f'Unknown prestige level: {level!r}. Message {text!r}')
-                return COOKIE_PRESTIGE_TIMES[0]
-        else:
-            return COOKIE_PRESTIGE_TIMES[0]
 
     def waytoodank_timer(self):
         if self._sneeze[0] <= time.time() and self._sneeze[1] is not None:
@@ -348,7 +323,7 @@ class Plugin(main.Plugin):
         m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
         print(msg.user, m)
         if m and m[0][1].lower() in self.cookie_optin:
-            time_ = self._time_from_rank(msg.text)
+            time_ = 2 * 60 * 60
             print(time_)
             print('cookie opt in okay')
 
@@ -369,18 +344,20 @@ class Plugin(main.Plugin):
                 j = await r.json()
                 print(j)
                 if r.status == 200:
-                    main.bot.send(msg.reply(f'@{m[0][1].lower()}, I set up a cookie reminder for you :), '
-                                            f'id: {j["data"]["reminderID"]}'))
+                    await main.bot.send(msg.reply(
+                        f'@{m[0][1].lower()}, I set up a cookie reminder for you :), '
+                        f'id: {j["data"]["reminderID"]}'
+                    ))
                 else:
-                    main.bot.send(msg.reply(f'@{m[0][1].lower()}, monkaS {chr(0x1f6a8)}'
-                                            f'failed to create cookie reminder '))
+                    await main.bot.send(msg.reply(
+                        f'@{m[0][1].lower()}, monkaS {chr(0x1f6a8)}'
+                        f'failed to create cookie reminder '
+                    ))
 
         elif not m:
             log('warn', f'matching against regex failed: {msg.text!r}')
 
     async def _honeydetected(self, msg: twitchirc.ChannelMessage):
-        if msg.text.startswith('pepeL'):  # new reconnection message
-            return f'ppL {unicodedata.lookup("KEYBOARD")}'
         random_msg = random.choice(RECONNECTION_MESSAGES)
         random_msg = random_msg.replace('{executor}', msg.user)
         while '{ping}' in random_msg:
