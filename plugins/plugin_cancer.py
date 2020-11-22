@@ -18,7 +18,6 @@ import datetime
 import time
 import unicodedata
 import warnings
-from typing import Tuple
 import typing
 
 import aiohttp
@@ -72,6 +71,14 @@ except ImportError:
 
     plugin_emotes: PluginEmotes
 
+main.load_file('plugins/plugin_chat_cache.py')
+try:
+    import plugin_chat_cache as plugin_chat_cache
+except ImportError:
+    from plugins.plugin_chat_cache import Plugin as PluginChatCache
+
+    plugin_chat_cache: PluginChatCache
+
 import random
 
 import twitchirc
@@ -120,12 +127,7 @@ COOKIE_PATTERN = regex.compile(
 
 
 class Plugin(main.Plugin):
-    _sneeze: Tuple[float, typing.Optional[twitchirc.ChannelMessage]]
-
-    def waytoodank_timer(self):
-        if self._sneeze[0] <= time.time() and self._sneeze[1] is not None:
-            main.bot.send(self._sneeze[1].reply('WAYTOODANK'))
-            self._sneeze = (-1, None)
+    _sneeze_cooldown: float
 
     @property
     def cooldown_timeout(self):
@@ -156,7 +158,7 @@ class Plugin(main.Plugin):
         super().__init__(module, source)
         warnings.simplefilter('error', Image.DecompressionBombWarning)
 
-        self._sneeze = (-1, None)
+        self._sneeze_cooldown = time.time()
         self.storage = main.PluginStorage(self, main.bot.storage)
 
         # region Settings
@@ -207,10 +209,6 @@ class Plugin(main.Plugin):
         )
         # endregion
 
-        # region Schedule events
-        main.bot.schedule_repeated_event(0.1, 1, self.waytoodank_timer, (), {})
-        # endregion
-
         # region Register commands
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
@@ -238,22 +236,12 @@ class Plugin(main.Plugin):
                               and msg.user in ['thepositivebot', 'mm2pl']
                               and msg.text.startswith('\x01ACTION [Cookies]'))
         )
-        self._ps_sneeze_cancel = main.bot.add_command('ps sneeze cancel')(self._ps_sneeze_cancel)
-        self._ps_sneeze_cancel.matcher_function = (
+        self._ps_sneeze = main.bot.add_command('[ps sneeze integration]')(self._ps_sneeze)
+        self._ps_sneeze.limit_to_channels = ['supinic', 'mm2pl']
+        self._ps_sneeze.matcher_function = (
             lambda msg, cmd: (
-                    msg.user == 'supibot' and self._sneeze[1] is not None
-                    and (
-                            msg.text.startswith(self._sneeze[1].user + ', The playsound\'s cooldown has not passed '
-                                                                       'yet! Try again in')
-                            or msg.text.startswith(self._sneeze[1].user + ', Playsounds are currently disabled!')
-                    )
-            )
-        )
-        self._ps_sneeze_init = main.bot.add_command('ps sneeze init')(self._ps_sneeze_init)
-        self._ps_sneeze_init.limit_to_channels = ['supinic', 'mm2pl']
-        self._ps_sneeze_init.matcher_function = (
-            lambda msg, cmd: (
-                msg.text.startswith('$ps sneeze')
+                    msg.user in ('supibot', 'mm2pl')
+                    and msg.text.endswith('Playsound has been played correctly on stream.')
             )
         )
         self.c_asd = main.bot.add_command('asd')(self.c_asd)
@@ -312,12 +300,23 @@ class Plugin(main.Plugin):
                                                   None)(self.command_braillefy)
         # endregion
 
-    async def _ps_sneeze_init(self, msg: twitchirc.ChannelMessage):
-        self._sneeze = (time.time() + self.cooldown_timeout, msg)
-
-    async def _ps_sneeze_cancel(self, msg: twitchirc.ChannelMessage):
+    async def _ps_sneeze(self, msg: main.StandardizedMessage):
         # don't respond if the playsound didn't play
-        self._sneeze = (-1, None)
+        now = time.time()
+        if self._sneeze_cooldown > now:
+            return
+
+        msgs = plugin_chat_cache.find_messages(
+            msg.channel, min_timestamp=now - self.cooldown_timeout,
+            expr=regex.compile(r'^\$ps')
+        )
+        for m in msgs:
+            if m.text.startswith('$ps sneeze'):
+                self._sneeze_cooldown = now + 1_200  # cooldown taken from Supinic's website
+                return f'WAYTOODANK @{msg.user}'
+
+        # no $ps sneeze found in history, return nothing
+        return None
 
     async def _cookie(self, msg: twitchirc.ChannelMessage):
         m = COOKIE_PATTERN.findall(main.delete_spammer_chrs(msg.text.replace('\x01ACTION ', '')))
