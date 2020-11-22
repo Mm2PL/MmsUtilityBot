@@ -104,27 +104,21 @@ class BanPhraseMiddleware(twitchirc.AbstractMiddleware):
 
 main.bot.middleware.append(BanPhraseMiddleware())
 
-ban_phrase_read_only_session = None
-
 
 def _init():
-    global ban_phrase_read_only_session
-
-    ban_phrase_read_only_session = main.Session()
-    ban_phrase_read_only_session.flush = lambda *a, **kw: print('BP: Flushing a readonly session.')
-    print('Load ban phrases.')
-    for i in BanPhrase.load_all(ban_phrase_read_only_session):
-        ban_phrases.append(i)
-    print(f'Done. Loaded {len(ban_phrases)} ban phrases.')
+    log('debug', 'Load ban phrases.')
+    with main.session_scope() as s:
+        for i in BanPhrase.load_all(s):
+            ban_phrases.append(i)
+    log('debug', f'Done. Loaded {len(ban_phrases)} ban phrases.')
 
 
 main.bot.schedule_event(0.1, 100, _init, (), {})
 
 
 def _reload_ban_phrases():
-    global ban_phrases, ban_phrase_read_only_session
+    global ban_phrases
     ban_phrases = []
-    ban_phrase_read_only_session.close()
     _init()
     return 'Done.'
 
