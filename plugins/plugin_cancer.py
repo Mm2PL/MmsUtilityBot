@@ -311,9 +311,10 @@ class Plugin(main.Plugin):
             expr=regex.compile(r'^\$ps')
         )
         for m in msgs:
-            if m.text.startswith('$ps sneeze'):
+            # make sure it's the right $ps result.
+            if m.text.startswith('$ps sneeze') and msg.text.startswith(m.user + ','):
                 self._sneeze_cooldown = now + 1_200  # cooldown taken from Supinic's website
-                return f'WAYTOODANK @{msg.user}'
+                return f'WAYTOODANK @{m.user}'
 
         # no $ps sneeze found in history, return nothing
         return None
