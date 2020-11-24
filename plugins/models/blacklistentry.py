@@ -83,5 +83,4 @@ def get(Base, session_scope, blacklists, expire_queue):
             return self._check_channel(message) and self._check_command(cmd) and self._check_user(message)
 
 
-
     return BlacklistEntry

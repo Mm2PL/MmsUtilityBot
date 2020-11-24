@@ -237,6 +237,7 @@ class BlacklistMiddleware(twitchirc.AbstractMiddleware):
         message: twitchirc.ChannelMessage = event.data['message']
         command: twitchirc.Command = event.data['command']
         for bl in blacklists.copy():
+            print(bl)
             r = bl.check(message, command)
             if r is True:
                 log('info', f'Ignored {message.user}\'s command ({command.chat_command!r}), \n'
