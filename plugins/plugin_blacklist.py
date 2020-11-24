@@ -77,14 +77,16 @@ class Plugin(main.Plugin):
     def reload_blacklist(self):
         global blacklists
         with self.expire_lock:  # don't expire black lists while reloading
+            blacklists.clear()
             with main.session_scope() as dank_circle:
-                blacklists = BlacklistEntry.load_all(dank_circle)
+                blacklists.extend(BlacklistEntry.load_all(dank_circle))
 
     def _post_init(self):
         global blacklists
         # load all entries
         with main.session_scope() as dank_circle:
-            blacklists = BlacklistEntry.load_all(dank_circle)
+            blacklists.clear()
+            blacklists.extend(BlacklistEntry.load_all(dank_circle))
 
         # initialize middleware
         main.bot.middleware.append(
