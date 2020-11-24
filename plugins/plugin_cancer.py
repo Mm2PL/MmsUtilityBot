@@ -154,6 +154,12 @@ class Plugin(main.Plugin):
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
+    async def _at_detection(self, msg: main.StandardizedMessage):
+        if msg.text.startswith(('!vanish', '$vanish')):
+            return f"{msg.text.split(' ', 1)[0]} {msg.user} :)"
+        else:
+            return f'{msg.user} NaM'
+
     def __init__(self, module, source):
         super().__init__(module, source)
         warnings.simplefilter('error', Image.DecompressionBombWarning)
@@ -218,6 +224,20 @@ class Plugin(main.Plugin):
                                                       required_permissions=['cancer.braille'])(self.c_braillefy)
 
         # region Fake Commands
+        self._at_detection = main.bot.add_command('[at detection]')(self._at_detection)
+        self._at_detection.limit_to_channels = ['pajlada', 'supinic']
+        self._at_detection.matcher_function = (
+            lambda msg, cmd: (
+                msg.platform == main.Platform.TWITCH and (
+                    # implicit return here ↓
+                    main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
+                ) or msg.platform == main.Platform.DISCORD and (
+                    [i for i in msg.source_message.mentions
+                     if i == main.bot.clients[main.Platform.DISCORD].connection.user]
+                )
+            )
+        )
+
         self._honeydetected = main.bot.add_command('honydetected reconnected')(self._honeydetected)
         self._honeydetected.matcher_function = (
             lambda msg, cmd: (
