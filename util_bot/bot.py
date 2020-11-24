@@ -520,7 +520,7 @@ class Bot(twitchirc.Bot):
         platform_recv_tasks = [self._platform_recv_loop(platform) for platform in list(Platform)]
         platform_flush_tasks = [self._platform_message_flush_loop(platform) for platform in list(Platform)]
         await asyncio.wait((scheduler_task, *platform_recv_tasks, *platform_flush_tasks, awaiter_task),
-                           return_when=asyncio.FIRST_EXCEPTION)
+                           return_when=asyncio.FIRST_COMPLETED)
         await self.disconnect()
 
     def _run(self):

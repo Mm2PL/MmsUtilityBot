@@ -483,17 +483,12 @@ async def main():
 
     await bot.join(bot.username.lower())
     try:
-        await asyncio.wait({bot.arun(), pubsub.task}, return_when=asyncio.FIRST_EXCEPTION)
+        done, pending = await asyncio.wait({bot.arun(), pubsub.task}, return_when=asyncio.FIRST_COMPLETED)
     except KeyboardInterrupt:
         await bot.stop()
         return
-    except Exception as e:
-        exc = e
-        try:
-            await bot.stop()
-        except Exception as ex:
-            exc = ex
-        raise exc
+    for j in done:
+        await j  # retrieve any exceptions
 
 
 was_cleaned_up = False
