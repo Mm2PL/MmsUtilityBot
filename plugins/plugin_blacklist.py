@@ -236,6 +236,8 @@ class Plugin(main.Plugin):
 
 class BlacklistMiddleware(twitchirc.AbstractMiddleware):
     def command(self, event: Event) -> None:
+        if event.canceled:
+            return
         message: twitchirc.ChannelMessage = event.data['message']
         command: twitchirc.Command = event.data['command']
         for bl in blacklists.copy():
