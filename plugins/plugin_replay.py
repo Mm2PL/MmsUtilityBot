@@ -89,6 +89,7 @@ class Plugin(main.Plugin):
             args['time'] = datetime.timedelta(seconds=30)
         if args['channel'] is ...:
             args['channel'] = msg.channel
+
         if args['channel'] != msg.channel:
             j_data = await self.get_user(args['channel'])
             if 'data' not in j_data:
@@ -96,7 +97,7 @@ class Plugin(main.Plugin):
 
             if len(j_data['data']) == 0:
                 return f'@{msg.user}, failed to find user.'
-            user = j_data['data'][0]
+            user = j_data['data'][0]['id']
         else:
             user = msg.flags['room-id']
 
