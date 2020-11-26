@@ -170,7 +170,7 @@ class PubsubClient:
                                     await f(topic, data)
                                 else:
                                     f(topic, data)
-                            else:
+                            if not self.callbacks[topic]:
                                 warnings.warn(f'UNHANDLED PUBSUB MESSAGE TOPIC {topic}', PubsubWarning)
                         elif msg['type'] == 'RESPONSE':
                             if msg['error']:
