@@ -483,7 +483,17 @@ class Bot(twitchirc.Bot):
     async def _platform_recv_loop(self, platform):
         while 1:
             print(f'Wait for {platform!s} to recv')
-            msgs = await self.clients[platform].receive()
+            try:
+                msgs = await self.clients[platform].receive()
+            except Reconnect:
+                pre_reconnect = 0.5
+                print(f'Waiting for {pre_reconnect}s before reconnecting to {platform!s}...')
+                await asyncio.sleep(pre_reconnect)
+                print(f'Reconnecting to {platform!s}...')
+                await self.reconnect_client(platform)
+                print(f'Reconnected to {platform!s}...')
+                continue
+
             print(f'Done waiting for {platform!s} to recv')
             for i in msgs:
                 self.call_handlers('any_msg', i)
