@@ -65,7 +65,6 @@ class PubsubMiddleware(twitchirc.AbstractMiddleware):
         if channel_name not in channel_live_state:
             channel_live_state[channel_name] = time.monotonic()
 
-        print('testing123', msg)
         if msg['type'] == 'viewcount':
             if not channel_live_state.get(channel_name):
                 await util_bot.bot.acall_middleware('stream-up', {
