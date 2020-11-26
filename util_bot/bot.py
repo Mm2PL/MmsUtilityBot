@@ -620,21 +620,6 @@ class Bot(twitchirc.Bot):
         for client in self.clients.values():
             await client.flush_queues()
 
-    async def receive(self):
-        futures = []
-        for platform, client in self.clients.items():
-            futures.append(client.receive())
-        done, pending = await asyncio.wait(futures, return_when=asyncio.FIRST_COMPLETED)
-        for i in pending:
-            print(f'cancel pending {i}')
-            i.cancel()
-
-        for i in done:
-            try:
-                self.recv_q += await i
-            except Reconnect as e:
-                await self.reconnect_client(e.platform)
-
     def process_messages(self, max_messages: int = 1, mode=-1):
         q = self.recv_q.copy()
         self.recv_q.clear()
