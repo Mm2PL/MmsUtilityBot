@@ -60,6 +60,7 @@ class Bot(twitchirc.Bot):
         self.prefixes = {
             # ('name', Platform.TWITCH): 'prefix'
         }
+        self.pubsub = None
 
     async def send(self, msg: StandardizedMessage, is_reconnect=False, **kwargs):
         o = await self.acall_middleware('send', dict(message=msg, queue=msg.channel), cancelable=True)

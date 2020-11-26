@@ -477,6 +477,7 @@ async def main():
     pubsub.listen([
         f'chat_moderator_actions.{uid}.{uid}'
     ])
+    bot.pubsub = pubsub
     bot.middleware.append(pubsub_middleware)
     for i in bot.channels_connected:
         pubsub_middleware.join(twitchirc.Event('join', {'channel': i}, bot, cancelable=False, has_result=False))
