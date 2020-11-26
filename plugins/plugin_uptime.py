@@ -13,10 +13,14 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import datetime
 import time
+from typing import Dict, Union
 
 import aiohttp
+from twitchirc import Event
+
 
 try:
     # noinspection PyPackageRequirements
@@ -40,6 +44,16 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function('uptime')
+UPTIME_CACHE_EXPIRATION_TIME = 60
+cache_data_lock = asyncio.Lock()
+cached_stream_data: Dict[str, Dict[str, Union[float, Dict[str, str]]]] = {
+    # 'channel': {
+    #     'expire': time.monotonic(),
+    #     'data': {
+    #         'started_at': "%Y-%m-%dT%H:%M:%SZ"
+    #     }
+    # }
+}
 
 
 @main.bot.add_command('title', available_in_whispers=False)
@@ -68,7 +82,6 @@ async def _fetch_stream_data(channel, no_refresh=False) -> dict:
         c_uptime_r.raise_for_status()
 
         json_data = await c_uptime_r.json()
-    print(json_data)
     data = json_data['data']
     return data
 
@@ -78,9 +91,26 @@ async def command_uptime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('uptime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
         return
-    data = await _fetch_stream_data(msg.channel)
+    now = time.monotonic()
+    async with cache_data_lock:
+        cache = cached_stream_data.get(msg.channel, {
+            'expire': 0,
+            'data': None
+        })
+
+        cached_stream_data[msg.channel] = cache
+        if cache and cache['expire'] > now:
+            data = cache['data']
+        else:
+            data = await _fetch_stream_data(msg.channel)
+            if data:
+                data = data[0]
+                cache['data'] = data
+                cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
+            else:
+                cache['data'] = None
+
     if data:
-        data = data[0]
         start_time = datetime.datetime(*(time.strptime(data['started_at'],
                                                        "%Y-%m-%dT%H:%M:%SZ")[0:6]))
         uptime = round_time_delta(datetime.datetime.utcnow() - start_time)
@@ -109,7 +139,6 @@ async def _fetch_last_vod_data(channel_id, no_refresh=False):
         video_r.raise_for_status()
 
         json_data = await video_r.json()
-    print(json_data)
     data = json_data['data']
     return data
 
@@ -129,11 +158,8 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
 
     data = vod_data[0]
     duration = _parse_duration(data['duration'])
-    print(duration)
-
     struct_time = time.strptime(data['created_at'],
                                 "%Y-%m-%dT%H:%M:%SZ")
-    print(struct_time)
     created_at = datetime.datetime(year=struct_time[0],
                                    month=struct_time[1],
                                    day=struct_time[2],
@@ -145,7 +171,6 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
     time_start_difference = now - created_at
     offline_for = round_time_delta(time_start_difference - duration)
 
-    print(duration, created_at, offline_for)
     return f'@{msg.user}, {msg.channel} has been offline for {offline_for}'
 
 
@@ -173,3 +198,56 @@ def _parse_duration(duration: str) -> datetime.timedelta:
                 hours = int(buf)
                 buf = ''
     return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+
+
+class UptimeMiddleware(twitchirc.AbstractMiddleware):
+    def __init__(self):
+        self.listeners = []
+
+    async def aon_action(self, event: Event):
+        if event.name == 'stream-up':
+            await self.astream_up(event)
+        elif event.name == 'stream-down':
+            await self.astream_down(event)
+        elif event.name == 'viewcount':
+            await self.aviewcount(event)
+
+    async def astream_up(self, event: Event) -> None:
+        channel_name = event.data.get('channel_name')
+        cache = cached_stream_data.get(channel_name, {
+            'expire': 0,
+            'data': None
+        })
+        cached_stream_data[channel_name] = cache
+
+        now = time.monotonic()
+        cache['data'] = {
+            'started_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        }
+        cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
+
+    async def astream_down(self, event: Event) -> None:
+        channel_name = event.data.get('channel_name')
+        cache = cached_stream_data.get(channel_name, {
+            'expire': 0,
+            'data': None
+        })
+        cached_stream_data[channel_name] = cache
+
+        now = time.monotonic()
+        cache['data'] = None
+        cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
+
+    async def aviewcount(self, event: Event) -> None:
+        channel_name = event.data.get('channel_name')
+        cache = cached_stream_data.get(channel_name, None)
+        if not cache or not cache['data']:
+            return  # will have to fetch the start time either way
+
+        cached_stream_data[channel_name] = cache
+
+        now = time.monotonic()
+        cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
+
+
+main.bot.middleware.append(UptimeMiddleware())
