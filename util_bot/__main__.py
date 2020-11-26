@@ -483,6 +483,47 @@ async def main():
         pubsub_middleware.join(twitchirc.Event('join', {'channel': i}, bot, cancelable=False, has_result=False))
 
     await bot.join(bot.username.lower())
+
+    futures = []
+    log('info', 'Spam async inits')
+    for plugin in util_bot.plugins.values():
+        log('info', f'Call async init for {plugin}')
+        futures.append(asyncio.create_task(plugin.async_init()))
+
+    async_init_time = 5.0
+
+    _, pending = await asyncio.wait(futures, timeout=async_init_time,
+                                    return_when=asyncio.ALL_COMPLETED)
+    # wait for every plugin to initialize before proceeding
+    if pending:
+        log('err', f'Waiting for async inits timed out after {async_init_time} seconds. '
+                   f'Assuming waiting longer will not help, exiting.')
+
+        plugin_objects = list(util_bot.plugins.values())
+        table_data = [('State', 'Plugin name', 'Path')]
+        for index, fut in enumerate(futures):
+            fut: asyncio.Future
+            plugin = plugin_objects[index]  # order should be the same.
+            done = 'done' if fut.done() else 'TIMED OUT'
+
+            table_data.append((done, plugin.name, plugin.source))
+        table = ''
+        cols = 3
+
+        # calculate maximum length of elements for each row
+        col_max = [len(max(table_data, key=lambda o: len(o[col_id]))[col_id]) for col_id in range(cols)]
+
+        for row in table_data:
+            for col_id, col in enumerate(row):
+                table += col
+                _print(col_max[col_id], repr(col), len(col))
+                table += (col_max[col_id] - len(col) + 1) * ' '
+            table += '\n'
+        _print(table)
+        log('warn', table)
+
+        raise TimeoutError('Waiting for async inits timed out')
+    log('warn', 'async inits done')
     try:
         done, pending = await asyncio.wait({bot.arun(), pubsub.task}, return_when=asyncio.FIRST_COMPLETED)
     except KeyboardInterrupt:

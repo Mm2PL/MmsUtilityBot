@@ -56,6 +56,9 @@ class Plugin:
         """
         return util_bot.search_for_refs(self)
 
+    async def async_init(self):
+        pass
+
 
 class PluginStorage:
     def __repr__(self):
