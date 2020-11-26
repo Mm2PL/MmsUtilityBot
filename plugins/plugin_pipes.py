@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import copy
 import time
 import typing
 from typing import Dict
@@ -24,6 +25,7 @@ import twitchirc
 
 from plugins.utils import arg_parser
 import util_bot as main
+from util_bot.clients.twitch import convert_twitchirc_to_standarized
 
 NAME = 'pipes'
 __meta_data__ = {
@@ -90,7 +92,6 @@ class PipeMessage(main.StandardizedMessage):
 
 
 class Plugin(main.Plugin):
-    pipe_locks: Dict[float, asyncio.Lock]
 
     def __init__(self, module, source):
         super().__init__(module, source)
@@ -98,9 +99,11 @@ class Plugin(main.Plugin):
         self.pipe_responses = {
 
         }
-        self.pipe_locks = {}
         self.command_pipe = main.bot.add_command('pipe')(self.command_pipe)
-        main.bot.middleware.append(PipeMiddleware(self))
+
+        self.middleware = PipeMiddleware(self)
+        main.bot.middleware.append(self.middleware)
+
         self.command_replace = main.bot.add_command('replace')(self.command_replace)
         self.command_regex_replace = main.bot.add_command('sub')(self.command_regex_replace)
         self.command_reverse = main.bot.add_command('reverse')(self.command_reverse)
@@ -117,9 +120,8 @@ class Plugin(main.Plugin):
     def commands(self) -> typing.List[str]:
         return super().commands
 
-    @property
     def on_reload(self):
-        return super().on_reload
+        main.bot.middleware.remove(self.middleware)
 
     async def command_reverse(self, msg: main.StandardizedMessage):
         return ''.join(reversed((msg.text + ' ').split(' ', 1)[1]))
@@ -141,20 +143,27 @@ class Plugin(main.Plugin):
     async def command_regex_replace(self, msg: main.StandardizedMessage):
         try:
             # noinspection PyProtectedMember
-            argv = arg_parser._split_args(main.delete_spammer_chrs(msg.text))
+            argv = arg_parser._split_args(main.delete_spammer_chrs(msg.text), strict_escapes=False)
         except arg_parser.ParserError as e:
             return f'@{msg.user}, {e}'
         print(argv)
         if len(argv) < 3:
             return f'@{msg.user}, Usage: sub PATTERN REPLACEMENT TEXT...'
+        pattern = argv[1]
+        if pattern.startswith('/') and pattern.count('/') >= 2:
+            pattern = pattern.lstrip('/')
+            flags, p = pattern[::-1].split('/', 1)
+
+            pattern = f'(?{flags}){p[::-1]}'
+
         try:
-            pat = regex.compile(argv[1])
+            pat = regex.compile(pattern)
         except:
             return f'@{msg.user}, Invalid pattern.'
         new = argv[2]
         rest = ' '.join(argv[3:])
         try:
-            return pat.sub(new, rest, timeout=0.1)
+            return pat.sub(new, rest, timeout=0.5)
         except TimeoutError:
             return f'@{msg.user}, Replacement timed out.'
 
@@ -167,9 +176,6 @@ class Plugin(main.Plugin):
             print('processing command', cmd)
             pipe_id = time.time()
             self.active_pipes.append(pipe_id)
-            self.pipe_locks[pipe_id] = asyncio.Lock()
-            await self.pipe_locks[pipe_id].acquire()
-
             new_msg = PipeMessage(
                 text=cmd + ' ' + buf,
                 user=msg.user,
@@ -194,15 +200,30 @@ class Plugin(main.Plugin):
 
             command_name = new_msg.text.split(' ', 1)[0]
             for handler in main.bot.commands:
+                if handler.limit_to_channels is not None and new_msg.channel not in handler.limit_to_channels:
+                    continue
+
                 if command_name == handler.ef_command.rstrip(' '):
-                    # noinspection PyProtectedMember
-                    await main.bot._call_command(handler, new_msg)
+                    o = await main.bot.acall_middleware('command', {'message': new_msg, 'command': handler},
+                                                        cancelable=True)
+                    if o is False:
+                        return (f'@{msg.user}, [pipe] command: {handler.chat_command!r} was canceled in the middle of '
+                                f'executing your pipe')
+
+                    command_output = await handler.acall(new_msg)
+                    if isinstance(command_output, str):
+                        command_output = new_msg.reply(command_output)
+                    elif isinstance(command_output, twitchirc.ChannelMessage):
+                        command_output = convert_twitchirc_to_standarized([command_output], main.bot)[0]
+                    else:
+                        return f'@{msg.user}, [PIPE] Command {(cmd + " ").split(" ")[0]} returned nothing.'
+
+                    self.pipe_responses[pipe_id] = command_output
                     was_handled = True
                     break
 
             if not was_handled:
                 return f'@{msg.user}, [pipe] unknown command: {(cmd + " ").split(" ")[0]}.'
-            await self.pipe_locks[pipe_id].acquire()
             if pipe_id in self.pipe_responses and self.pipe_responses[pipe_id]:
                 if redir_target is not None:
                     exit_code, output = await self._process_redirection(redir_target, new_msg,
@@ -336,9 +357,23 @@ class PipeMiddleware(twitchirc.AbstractMiddleware):
         super().__init__()
         self.parent: Plugin = parent
 
-    def send(self, event: Event) -> None:
-        msg = event.data['message']
-        if isinstance(msg, (PipeWhisperMessage, PipeMessage)):
-            self.parent.pipe_responses[msg.pipe_id] = msg
-            event.cancel()
-            self.parent.pipe_locks[msg.pipe_id].release()
+    async def aon_action(self, event: Event) -> None:
+        if event.name == 'command':
+            await self.acommand(event)
+
+    async def acommand(self, event: Event) -> None:
+        message: typing.Union[main.StandardizedMessage, typing.Any] = event.data.get('message')
+        command: twitchirc.Command = event.data.get('command')
+        if command.forced_prefix or command.matcher_function:
+            return
+
+        if isinstance(message, main.StandardizedMessage):  # has to be a message from the user
+            if '|' in message.text or '>' in message.text:  # implicit pipe invocation
+                event.cancel()
+                msg2 = copy.copy(message)
+                prefix = main.bot.get_prefix(message.channel, message.platform, message)
+                msg2.text = f'{prefix}pipe {msg2.text.replace(prefix, "", 1)}'
+                print(f'implicit pipe text {msg2.text}')
+                output = await self.parent.command_pipe.acall(msg2)
+                print(output)
+                await main.bot._send_if_possible(output, message)
