@@ -239,12 +239,12 @@ class Plugin(main.Plugin):
         )
 
         self._honeydetected = main.bot.add_command('honydetected reconnected')(self._honeydetected)
+        self._honeydetected.limit_to_channels = ['supinic', 'mm2pl']
         self._honeydetected.matcher_function = (
             lambda msg, cmd: (
-                    msg.user in ['supibot', 'mm2pl']
-                    and msg.channel in ['supinic', 'mm2pl']
-                    and (msg.text == 'ppCircle'
-                         or msg.text == 'HONEYDETECTED RECONNECTED')
+                msg.user in ['supibot', 'mm2pl']
+                and (msg.text == 'ppCircle'
+                     or msg.text == 'HONEYDETECTED RECONNECTED')
             )
         )
 
