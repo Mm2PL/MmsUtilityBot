@@ -28,7 +28,7 @@ CACHE_EXPIRE_TIME = 15 * 60
 
 
 def _is_pleb(msg: twitchirc.ChannelMessage) -> bool:
-    print(msg.flags['badges'])
+    # print(msg.flags['badges'])
     for i in (msg.flags['badges'] if isinstance(msg.flags['badges'], list) else [msg.flags['badges']]):
         # print(i)
         if i.startswith('subscriber'):
@@ -57,18 +57,18 @@ def get(Base, session_scope, log):
         }
 
         def expire_caches(self):
-            print('expire caches')
+            # print('expire caches')
             current_time = time.time()
             for obj_id, obj_data in self.cache.copy().items():
                 if obj_data['expires'] < current_time:
-                    print(obj_id, 'expired', obj_data)
+                    # print(obj_id, 'expired', obj_data)
                     del self.cache[obj_id]
 
         def add_to_cache(self, obj):
             if obj.id in self.cache:
                 print(f'[failed] Add to cache {obj}')
                 return
-            print(f'Add to cache {obj}')
+            # print(f'Add to cache {obj}')
             # print(self.cache)
             self.cache[obj.id] = {
                 'expires': time.time() + CACHE_EXPIRE_TIME,
@@ -105,7 +105,7 @@ def get(Base, session_scope, log):
 
         @reconstructor
         def _reconstructor(self):
-            print(f'reconstructor for {self!r}')
+            # print(f'reconstructor for {self!r}')
             self.import_permissions()
             User.add_to_cache(self)
 
@@ -116,11 +116,11 @@ def get(Base, session_scope, log):
         @staticmethod
         def _get_by_message(msg, no_create, session):
             User.expire_caches()
-            print(f'get by message {msg}')
+            # print(f'get by message {msg}')
             if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
                 for obj_id, obj_data in User.cache.items():
                     if obj_data['obj'].twitch_id == int(msg.flags['user-id']):
-                        print(f'load from cache {obj_data}')
+                        # print(f'load from cache {obj_data}')
                         return obj_data['obj']
 
                 user: User = (session.query(User)
@@ -129,7 +129,7 @@ def get(Base, session_scope, log):
             elif hasattr(msg, 'platform') and msg.platform.name == 'DISCORD':
                 for obj_id, obj_data in User.cache.items():
                     if obj_data['obj'].discord_id == int(msg.flags['discord-user-id']):
-                        print(f'load from cache {obj_data}')
+                        # print(f'load from cache {obj_data}')
                         return obj_data['obj']
 
                 user: User = (session.query(User)
@@ -300,14 +300,14 @@ def get(Base, session_scope, log):
             self.sub_in_raw = ', '.join(sub_in)
 
         def remove_mod_in(self, channel):
-            print(repr(channel))
+            # print(repr(channel))
             channel = channel.lower()
             if channel not in self.mod_in:
                 return
             mod_in = self.mod_in
-            print(mod_in)
+            # print(mod_in)
             mod_in.remove(channel)
-            print(mod_in)
+            # print(mod_in)
             self.mod_in_raw = ', '.join(mod_in)
 
         def add_mod_in(self, channel):
