@@ -65,6 +65,10 @@ class StandardizedMessage(twitchirc.ChannelMessage):
             raise NotImplementedError(f'Unable to convert an instance of StandardizedMessage for platform '
                                       f'{self.platform.name} to bytes')
 
+    @property
+    def user_mention(self):
+        return self.parent.clients[self.platform].format_mention(self)
+
 
 class StandardizedWhisperMessage(twitchirc.WhisperMessage):
     def __init__(self, user_from, user_to, text, platform: Platform,

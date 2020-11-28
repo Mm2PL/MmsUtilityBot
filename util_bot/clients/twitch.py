@@ -75,7 +75,10 @@ class TwitchClient(AbstractClient):
         self.connection.part(channel)
 
     async def flush_queues(self):
-        self.connection.flush_queue(100)
+        return self.connection.flush_queue(100)
+
+    async def format_mention(self, msg: StandardizedMessage) -> str:
+        return f'@{msg.user}'
 
     async def reconnect(self):
         self.connection.call_middleware('reconnect', (), False)

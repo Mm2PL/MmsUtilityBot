@@ -49,6 +49,10 @@ class AbstractClient(abc.ABC):
     async def flush_queues(self):
         pass
 
+    @abc.abstractmethod
+    async def format_mention(self, msg) -> str:
+        pass
+
     async def reconnect(self):
         await self.disconnect()
         await self.connect()

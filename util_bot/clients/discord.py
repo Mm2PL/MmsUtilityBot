@@ -74,6 +74,9 @@ class DiscordClient(AbstractClient):
         # Underlying client does not need an explicit part call.
         pass
 
+    async def format_mention(self, msg: StandardizedMessage) -> str:
+        return msg.user  # should already be <@id>
+
     async def flush_queues(self):
         # Underlying client does not need an explicit flush_queues call.
         pass
