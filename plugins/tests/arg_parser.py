@@ -24,8 +24,8 @@ except ImportError:
     from .utils import arg_parser
 
 
-class Test(TestCase):
-    # region general tests
+class GeneralTests(TestCase):
+    """Tests that check the parser behaviour using the public interface."""
     def test_parse_args_unknown(self):
         try:
             arg_parser.parse_args('this is a simple test', args_types={})
@@ -52,7 +52,7 @@ class Test(TestCase):
     def test_parse_args_bool_bad_type(self):
         try:
             arg_parser.parse_args('+test', {'test': str})
-        except:
+        except arg_parser.ParserError:
             pass
         else:
             self.fail()
@@ -98,9 +98,9 @@ class Test(TestCase):
 
     # endregion
 
-    # endregion
 
-    # region converters
+class ConverterTests(TestCase):
+    """Tests that check if converters work"""
     def test_parse_args_str(self):
         output = arg_parser.parse_args('test=value', args_types={'test': str})
         self.assertEqual(output, {'test': 'value'})
@@ -243,7 +243,7 @@ class Test(TestCase):
         now = datetime.datetime.fromtimestamp(round(datetime.datetime.now().timestamp()))
         try:
             arg_parser._time_converter(datetime.datetime, {'format': '%H %M %S'},
-                                                    now.strftime('%Y-%m-%d %H:%M:%S'))
+                                       now.strftime('%Y-%m-%d %H:%M:%S'))
         except arg_parser.ParserError:
             pass
         else:
@@ -261,10 +261,13 @@ class Test(TestCase):
 
     def test_converter_regex_bad_input(self):
         test_string = 'this isn\'t a test'
-        result = arg_parser._regex_converter('regex', {
-            'regex': re.compile(r'this ?is ?a ?test')
-        }, test_string)
-        if result:
+        try:
+            arg_parser._regex_converter('regex', {
+                'regex': re.compile(r'this ?is ?a ?test')
+            }, test_string)
+        except arg_parser.ParserError:
+            return
+        else:
             self.fail()
 
     def test_converter_regex_string_pattern(self):
@@ -292,8 +295,10 @@ class Test(TestCase):
         self.fail()
 
     # endregion
-    # endregion
 
+
+class InternalTests(TestCase):
+    """Tests that check the internals using the internal interface"""
     # region split test
     def test_split_args(self):
         self.assertEqual(arg_parser._split_args('this is a simple test'), ['this', 'is', 'a', 'simple', 'test'])
@@ -394,10 +399,17 @@ class Test(TestCase):
 
     # region _parse_simple_value
     def test_parse_simple_value_normal(self):
-        self.assertEqual(arg_parser._parse_simple_value('a=b', ['a=b'], 0), ('a', 'b'))
+        self.assertEqual(arg_parser._parse_simple_value('a=b', ['a=b'], 0), ('a', 'b', 1))
 
     def test_parse_simple_value_with_space(self):
-        self.assertEqual(arg_parser._parse_simple_value('a=', ['a=', 'b'], 0), ('a', 'b'))
+        self.assertEqual(arg_parser._parse_simple_value('a=', ['a=', 'b'], 0), ('a', 'b', 2))
+
+    def test_parse_simple_value_did_you_mean(self):
+        try:
+            arg_parser._parse_simple_value('a:', ["a:"], 0)
+        except arg_parser.ParserError as e:
+            return e
+        self.fail()
     # endregion
 
 

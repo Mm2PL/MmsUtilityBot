@@ -34,14 +34,38 @@ POSITIONAL = -1
 
 
 def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=False, no_arg_fill=False,
-               ignore_arg_zero=True, defaults=None):
+               ignore_arg_zero=True, defaults: typing.Optional[typing.Dict[str, typing.Any]] = None):
+    """
+    Parse arguments from text.
+    Accepted formats:
+      - Key=value
+      - Key:value
+      - Key= value
+      - Key: value
+
+    :param text: Text to parse
+    :param args_types: Types for arguments. Used when converting strings into appropriate datatypes
+    :param strict_escapes: Should \\\\ escapes be strict. Unknown escapes and trailing backslashes will raise \
+    exceptions if this is true
+    :param strict_quotes: Should quotes (") be strict. Unclosed quotes will raise exceptions if this is true
+    :param no_arg_fill: Fills arguments that are not present with Ellipsis, if defaults are present, they will \
+    overwrite the Ellipsis
+    :param ignore_arg_zero: If true, positional argument #0 in the input will be ignored when it's unexpected.
+    :param defaults: Default values for arguments, will not be modified. NOTE: mutable objects will not be deep copied.
+    :return: Parsed out arguments as a Dict[str, Any]
+    """
     text = text.rstrip(' \U000E0000')
     args = {}
     current_positional = 0
     argv = _split_args(text, strict_escapes=strict_escapes, strict_quotes=strict_quotes)
+    to_skip = None
     for num, token in enumerate(argv.copy()):
+        if to_skip is not None and to_skip > num:
+            continue
         if ':' in token or '=' in token:
-            k, v = _parse_simple_value(token, argv, num)
+            k, v, count_consumed = _parse_simple_value(token, argv, num)
+            if count_consumed > 1:
+                to_skip = num + count_consumed
             if k in args:
                 raise ParserError(f'Duplicate argument: {k}')
             args[k] = v
@@ -92,6 +116,7 @@ def _split_args(text, strict_escapes=True, strict_quotes=False,
             '\\\\': '\\',
             '\\|': '|',
             '\\"': '"'
+            # r'\ ' is a special case
         }
     is_quoted = False
     is_escaped = False
@@ -141,27 +166,29 @@ def _split_args(text, strict_escapes=True, strict_quotes=False,
     return argv
 
 
-def _parse_simple_value(token: str, argv: typing.List[str], num: int):
+def _parse_simple_value(token: str, argv: typing.List[str], num: int) -> typing.Tuple[str, str, int]:
     token2 = token.replace(':', '=', 1).split('=', 1)
+    count_consumed = 1
     if len(token2[1]) == 0:  # expect a value after a space.
+        count_consumed = 2
         if len(argv) > num + 1:
             token2[1] = argv[num + 1]
+            if token2[1].endswith(('=', ':')):  # make `a0: a1: value` be interpreted as {"a0": "", "a1": "value"}
+                token2[1] = ''
+                count_consumed -= 1
         else:
-            dym = token + '""'
-            raise ParserError(f'Expected value after token {token!r}. Did you mean {dym}?')
+            raise ParserError(f'Expected a value after {token2[0]!r}.')
     # else: key and value is in token2.
-    return token2[0], token2[1]
+    return token2[0], token2[1], count_consumed
 
 
 def _parse_non_string_args(args, args_types):
     for key, value in args.copy().items():
         if key in args_types:
-            type_ = args_types[key]
-            args[key] = handle_typed_argument(value, (type_, {}))
+            args[key] = handle_typed_argument(value, args_types[key])
         else:
             if isinstance(key, int) and POSITIONAL in args_types:
-                type_ = args_types[POSITIONAL]
-                args[key] = handle_typed_argument(value, (type_, {}))
+                args[key] = handle_typed_argument(value, args_types[POSITIONAL])
             else:
                 raise ParserError(f'Unexpected argument: {key}')
 
@@ -208,13 +235,19 @@ def _regex_converter(converter, options, value):
     if 'regex' in options:
         if isinstance(options['regex'], (str, bytes)):
             pat = regex.compile(options['regex'])
+            nice_pattern = options['regex']
         elif hasattr(options['regex'], 'pattern'):
             pat = regex.compile(options['regex'].pattern)
+            nice_pattern = options['regex'].pattern
         else:
             raise ParserError(f'Cannot parse {value!r} as {converter}, regular expression provided was '
                               f'{type(options["regex"])}, expected a compiled pattern, string or bytes-like object.')
 
-        return pat.match(value)
+        val = pat.match(value)
+        if val is None:
+            raise ParserError(f"Argument {value!r} does not match expected pattern: "
+                              f"{repr(nice_pattern)[:50]}{'…' if len(nice_pattern) > 50 else ''}.")
+        return val
     else:
         raise ParserError(f'Cannot parse {value!r} as {converter} without a regular expression.')
 
