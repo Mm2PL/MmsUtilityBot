@@ -48,6 +48,7 @@ from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 import plugins.models.user as user_model
 # noinspection PyUnresolvedReferences
 from apis.supibot import ApiError, SupibotApi, SupibotAuth, SupibotEndpoint
+from .base_commands import command_join, command_perm, command_part
 
 
 def make_log_function(plugin_name: str):

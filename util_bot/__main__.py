@@ -381,11 +381,9 @@ twitchirc.logging.log = util_bot.make_log_function('TwitchIRC')
 twitchirc.log = util_bot.make_log_function('TwitchIRC')
 
 bot.handlers['chat_msg'].append(chat_msg_handler)
-# TODO: put these commands into a file in the util_bot package.
-twitchirc.get_join_command(bot)
-twitchirc.get_part_command(bot)
-twitchirc.get_perm_command(bot)
-twitchirc.get_quit_command(bot)
+bot.add_command('perm')(util_bot.command_perm)
+bot.add_command('join')(util_bot.command_join)
+bot.add_command('part')(util_bot.command_part)
 if 'counters' in bot.storage.data:
     counters = bot.storage['counters']
 

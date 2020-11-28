@@ -582,11 +582,14 @@ class Bot(twitchirc.Bot):
         :param channel: Channel you want to join.
         :return: nothing.
         """
+        channel = channel.lower().strip('#')
+
         o = await self.acall_middleware('join', dict(channel=channel), True)
         if o is False:
             return
         await self.clients[platform].join(channel)
-        self.channels_connected.append(channel)
+        if channel not in self.channels_connected:
+            self.channels_connected.append(channel)
 
     async def part(self, channel, platform=Platform.TWITCH):
         """
@@ -597,11 +600,15 @@ class Bot(twitchirc.Bot):
         :param channel: Channel you want to leave.
         :return: nothing.
         """
+        channel = channel.lower().strip('#')
+
         o = await self.acall_middleware('part', dict(channel=channel), cancelable=True)
         if o is False:
             return
         await self.clients[platform].part(channel)
-        self.channels_to_remove.append(channel)
+
+        while channel in self.channels_connected:
+            self.channels_connected.remove(channel)
 
     def twitch_mode(self):
         self.cap_reqs(True)
