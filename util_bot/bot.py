@@ -22,6 +22,7 @@ from typing import Dict, Tuple
 
 import twitchirc
 
+import util_bot
 from util_bot.clients.abstract_client import AbstractClient
 from util_bot.clients.twitch import convert_twitchirc_to_standarized, TwitchClient
 from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
@@ -483,7 +484,7 @@ class Bot(twitchirc.Bot):
 
     async def _platform_recv_loop(self, platform):
         while 1:
-            print(f'Wait for {platform!s} to recv')
+            # print(f'Wait for {platform!s} to recv')
             try:
                 msgs = await self.clients[platform].receive()
             except Reconnect:
@@ -495,8 +496,10 @@ class Bot(twitchirc.Bot):
                 print(f'Reconnected to {platform!s}...')
                 continue
 
-            print(f'Done waiting for {platform!s} to recv')
+            # print(f'Done waiting for {platform!s} to recv')
             for i in msgs:
+                if util_bot.debug:
+                    twitchirc.log('debug', str(i))
                 self.call_handlers('any_msg', i)
                 if isinstance(i, twitchirc.PingMessage):
                     await self.clients[Platform.TWITCH].send(i.reply())
