@@ -119,8 +119,8 @@ class PubsubClient:
         while 1:
             try:
                 elem = await queue.get()
-
-                self.log_function(f'> {elem}')
+                if not ('type' in elem and elem['type'] == 'PING'):
+                    self.log_function(f'> {elem}')
                 await ws.send(json.dumps(elem))
             except asyncio.CancelledError:
                 break
@@ -159,7 +159,8 @@ class PubsubClient:
                                 break
                             continue
 
-                        self.log_function(f'< {recved_msg!r}')
+                        if 'PONG' not in recved_msg:
+                            self.log_function(f'< {recved_msg!r}')
                         msg = json.loads(recved_msg)
                         if msg['type'] == 'MESSAGE':
                             topic = msg['data']['topic']
