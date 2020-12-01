@@ -505,11 +505,23 @@ class Math:
                         ctx=ctx,
                         **kwargs
                     )
+                elif isinstance(target_func, ast.Lambda):
+                    call = ast.Call()
+                    call.func = target_func
 
-                return target_func(
-                    *args,
-                    **kwargs
-                )
+                    call.keywords = {}
+                    for k, v in kwargs.items():
+                        call.keywords[k] = ast.Constant(v)
+
+                    call.args = []
+                    for i in args:
+                        call.args.append(ast.Constant(i))
+                    return Math.call_lambda(call, locals_, ctx)
+                else:
+                    return target_func(
+                        *args,
+                        **kwargs
+                    )
             except Exception as exc:
                 _raise_from_eval(exc)  # re-raise exception from inside the "sandbox".
         else:
