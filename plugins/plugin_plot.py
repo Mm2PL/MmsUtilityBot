@@ -443,6 +443,12 @@ class Math:
             return node
         elif isinstance(node, ast.Call):  # <func>(<values>)
             return Math.call(node, locals_, ctx)
+        elif isinstance(node, ast.Subscript):  # <val>[<val>]
+            return Math.eval_(node.value, locals_, ctx)[Math.eval_(node.slice, locals_, ctx)]
+        elif isinstance(node, ast.NamedExpr):
+            val = Math.eval_(node.value)
+            locals_[Math.eval_(node.target)] = val
+            return val
         elif isinstance(node, ast.JoinedStr):  # f''
             new_str = ''
             for i in node.values:
