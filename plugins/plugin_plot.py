@@ -446,8 +446,14 @@ class Math:
         elif isinstance(node, ast.Subscript):  # <val>[<val>]
             return Math.eval_(node.value, locals_, ctx)[Math.eval_(node.slice, locals_, ctx)]
         elif isinstance(node, ast.NamedExpr):
+
+            if isinstance(node.target, ast.Name):
+                name = node.value.id
+            else:
+                _raise_from_eval(RuntimeError(':= target is not a Name. This is currently not supported.'))
+
             val = Math.eval_(node.value, locals_, ctx)
-            locals_[Math.eval_(node.target, locals_, ctx)] = val
+            locals_[name] = val
             return val
         elif isinstance(node, ast.JoinedStr):  # f''
             new_str = ''
