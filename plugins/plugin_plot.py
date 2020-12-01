@@ -484,21 +484,29 @@ class Math:
     @staticmethod
     def call_function_by_name(node: ast.Call, locals_, ctx):
         target = node.func.id
+        target_func = None
         if target in Math.functions:
+            target_func = Math.functions[target]
+        elif target in locals_:
+            target_func = locals_[target]
+        else:
+            _raise_from_eval(NameError(f'Unknown function {target!r}'))
+
+        if target_func:
             kwargs = {
                 keyword.arg: Math.eval_(keyword.value, locals_, ctx)
                 for keyword in node.keywords
             }
             args = [Math.eval_(i, locals_, ctx) for i in node.args]
             try:
-                if isinstance(Math.functions[target], FunctionWithCtx):
-                    return Math.functions[target](
+                if isinstance(target_func, FunctionWithCtx):
+                    return target_func(
                         *args,
                         ctx=ctx,
                         **kwargs
                     )
 
-                return Math.functions[target](
+                return target_func(
                     *args,
                     **kwargs
                 )
