@@ -448,7 +448,7 @@ class Math:
         elif isinstance(node, ast.NamedExpr):
 
             if isinstance(node.target, ast.Name):
-                name = node.value.id
+                name = node.target.id
             else:
                 _raise_from_eval(RuntimeError(':= target is not a Name. This is currently not supported.'))
 
