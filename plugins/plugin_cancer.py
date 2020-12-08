@@ -137,6 +137,11 @@ REPO_MAP = {
     'pb1': 'pajbot/pajbot',
     'mm_sutilitybot': 'Mm2PL/MmsUtilityBot',
     'mmsbot': 'Mm2PL/MmsUtilityBot',
+    'spm': 'Supinic/supibot-package-manager',
+    'supinic.com': 'Supinic/supinic.com',
+    'supi-core': 'Supinic/supi-core',
+    'supicore': 'Supinic/supi-core',
+    'supibot': 'Supinic/supibot',
 }
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 
