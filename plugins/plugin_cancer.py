@@ -135,6 +135,8 @@ REPO_MAP = {
     'pb': 'pajbot/pajbot',
     'pb2': 'pajbot/pajbot2',
     'pb1': 'pajbot/pajbot',
+    'mm_sutilitybot': 'Mm2PL/MmsUtilityBot',
+    'mmsbot': 'Mm2PL/MmsUtilityBot',
 }
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 
@@ -219,7 +221,7 @@ class Plugin(main.Plugin):
         )
         self.issue_linker_optin_setting = plugin_manager.Setting(
             self,
-            'cancer.issue_linder_optin',
+            'cancer.issue_linker_optin',
             default_value=[],
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
