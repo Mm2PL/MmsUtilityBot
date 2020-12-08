@@ -124,6 +124,19 @@ COOKIE_PATTERN = regex.compile(
     r'(?P<name>[a-z0-9_]+) '
     r'(?!you have already claimed)'
 )
+ISSUE_PATTERN = regex.compile(
+    r'\b([^ #]*)#(\d+)'
+)
+REPO_MAP = {
+    'ch2': 'Chatterino/Chatterino2',
+    'ch1': 'fourtf/Chatterino',
+    'c2': 'Chatterino/Chatterino2',
+    'c1': 'fourtf/Chatterino',
+    'pb': 'pajbot/pajbot',
+    'pb2': 'pajbot/pajbot2',
+    'pb1': 'pajbot/pajbot',
+}
+ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 
 
 class Plugin(main.Plugin):
@@ -140,6 +153,11 @@ class Plugin(main.Plugin):
     @property
     def cookie_optin(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.cookie_optin_setting)
+
+    @property
+    def issue_linker_optin(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(
+            self.issue_linker_optin_setting)
 
     @property
     def status_every_frames(self):
@@ -199,6 +217,13 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
+        self.issue_linker_optin_setting = plugin_manager.Setting(
+            self,
+            'cancer.issue_linder_optin',
+            default_value=[],
+            scope=plugin_manager.SettingScope.GLOBAL,
+            write_defaults=True
+        )
         self.status_every_frames_setting = plugin_manager.Setting(
             self,
             'cancer.status_every_frames',
@@ -217,6 +242,7 @@ class Plugin(main.Plugin):
 
         # region Register commands
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
+        self.c_issue_optin = main.bot.add_command('issuelinker')(self.c_issue_optin)
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
 
@@ -253,6 +279,11 @@ class Plugin(main.Plugin):
             lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
                               and msg.user in ['thepositivebot', 'mm2pl']
                               and msg.text.startswith('\x01ACTION [Cookies]'))
+        )
+        self.c_link_issue = main.bot.add_command('issue link detection')(self.c_link_issue)
+        self.c_link_issue.limit_to_channels = ['pajlada', 'supinic', 'mm2pl']
+        self.c_link_issue.matcher_function = (
+            lambda msg, cmd: ('#' in msg.text and ISSUE_PATTERN.search(msg.text))
         )
         self._ps_sneeze = main.bot.add_command('[ps sneeze integration]')(self._ps_sneeze)
         self._ps_sneeze.limit_to_channels = ['supinic', 'mm2pl']
@@ -308,6 +339,9 @@ class Plugin(main.Plugin):
                                  ])
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
                                                   'cookies', None)(self.c_cookie_optin)
+        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will have links issue '
+                                                  'posted when an issue is mentioned. Format is (REPO)?#NUMBER',
+                                                  None)(self.c_issue_optin)
         plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
                                                   'Usage: pyramid <size> <text...>',
                                                   None)(self.command_pyramid)
@@ -594,3 +628,30 @@ class Plugin(main.Plugin):
             enable_processing=False
         )
         return o
+
+    async def c_issue_optin(self, msg: main.StandardizedMessage):
+        cd_state = main.do_cooldown('issuelinker', msg, global_cooldown=0, local_cooldown=60)
+        if cd_state:
+            return
+        if msg.user.lower() in self.issue_linker_optin:
+            self.issue_linker_optin.remove(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with main.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
+            return f'@{msg.user} You have been removed from the issue-linker opt-in list.'
+        else:
+            self.issue_linker_optin.append(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with main.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
+            return f'@{msg.user} You have been added to the issue-linker opt-in list.'
+
+    async def c_link_issue(self, msg: main.StandardizedMessage):
+        valid_issue_links = ISSUE_PATTERN.findall(msg.text)
+        if not valid_issue_links:
+            return
+        links = []
+        for repo, issue in valid_issue_links:
+            repo = REPO_MAP.get(repo, repo)
+            links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
+        return ' '.join(links)
