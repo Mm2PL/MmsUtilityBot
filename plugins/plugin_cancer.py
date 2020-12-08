@@ -649,6 +649,9 @@ class Plugin(main.Plugin):
             return f'@{msg.user} You have been added to the issue-linker opt-in list.'
 
     async def c_link_issue(self, msg: main.StandardizedMessage):
+        if msg.user not in self.issue_linker_optin:
+            return
+
         valid_issue_links = ISSUE_PATTERN.findall(msg.text)
         if not valid_issue_links:
             return
