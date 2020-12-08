@@ -654,6 +654,6 @@ class Plugin(main.Plugin):
             return
         links = []
         for repo, issue in valid_issue_links:
-            repo = REPO_MAP.get(repo, repo)
+            repo = REPO_MAP.get(repo.casefold(), repo)
             links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
         return ' '.join(links)
