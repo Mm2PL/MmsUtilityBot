@@ -656,6 +656,9 @@ class Plugin(main.Plugin):
     async def c_link_issue(self, msg: main.StandardizedMessage):
         if msg.user not in self.issue_linker_optin:
             return
+        cd_state = main.do_cooldown('[issue linker]', msg, global_cooldown=1, local_cooldown=5)
+        if cd_state:
+            return
 
         valid_issue_links = ISSUE_PATTERN.findall(msg.text)
         if not valid_issue_links:
