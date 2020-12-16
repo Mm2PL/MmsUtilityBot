@@ -43,12 +43,14 @@ async def command_perm(msg: StandardizedMessage):
     elif args.flush:
         return await _perm_flush(args, msg)
 
+
 async def _perm_flush(args, msg):
-    bot.permissions.fix()
+    util_bot.bot.permissions.fix()
     for i in bot.permissions:
-        bot.storage['permissions'][i] = bot.permissions[i]
-    bot.storage.save()
+        util_bot.bot.storage['permissions'][i] = util_bot.bot.permissions[i]
+    util_bot.bot.storage.save()
     return f'@{msg.user}, Flushed permissions.'
+
 
 async def _perm_list(args, msg):
     if await util_bot.bot.acheck_permissions(msg, [twitchirc.PERMISSION_COMMAND_PERM_LIST]):
