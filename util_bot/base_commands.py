@@ -28,6 +28,7 @@ async def command_perm(msg: StandardizedMessage):
     g.add_argument('-a', '--add', metavar=('USER', 'PERMISSION'), nargs=2, dest='add')
     g.add_argument('-r', '--remove', metavar=('USER', 'PERMISSION'), nargs=2, dest='remove')
     g.add_argument('-l', '--list', metavar='USER', const=msg.user, default=None, nargs='?', dest='list')
+    g.add_argument('-f', '--flush', action='store_true', dest='flush')
     g.add_argument('-h', '--help', action='store_true', dest='help')
     args = p.parse_args(args=msg.text.split(' ')[1:])
     if args is None or args.help:
@@ -39,7 +40,15 @@ async def command_perm(msg: StandardizedMessage):
         return await _perm_remove(args, msg)
     elif args.list:
         return await _perm_list(args, msg)
+    elif args.flush:
+        return await _perm_flush(args, msg)
 
+async def _perm_flush(args, msg):
+    bot.permissions.fix()
+    for i in bot.permissions:
+        bot.storage['permissions'][i] = bot.permissions[i]
+    bot.storage.save()
+    return f'@{msg.user}, Flushed permissions.'
 
 async def _perm_list(args, msg):
     if await util_bot.bot.acheck_permissions(msg, [twitchirc.PERMISSION_COMMAND_PERM_LIST]):
