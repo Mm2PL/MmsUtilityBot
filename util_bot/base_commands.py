@@ -46,7 +46,7 @@ async def command_perm(msg: StandardizedMessage):
 
 async def _perm_flush(args, msg):
     util_bot.bot.permissions.fix()
-    for i in bot.permissions:
+    for i in util_bot.bot.permissions:
         util_bot.bot.storage['permissions'][i] = util_bot.bot.permissions[i]
     util_bot.bot.storage.save()
     return f'@{msg.user}, Flushed permissions.'
