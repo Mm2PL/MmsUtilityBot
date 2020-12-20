@@ -211,12 +211,11 @@ def new_counter_command(counter_name, counter_message, limit_to_channel: typing.
         print(repr(text), msg.text)
         new_counter_value = counter_difference(text, c[msg.channel])
         if new_counter_value is None:
-            bot.send(msg.reply(f'Not a number: {text}'))
-            return
+            return f'Not a number: {text}'
         else:
             c[msg.channel] = new_counter_value
         val = c[msg.channel]
-        bot.send(show_counter_status(val, old_val, counter_name, counter_message, msg))
+        return show_counter_status(val, old_val, counter_name, counter_message, msg)
 
     command.source = command_source
     return command
