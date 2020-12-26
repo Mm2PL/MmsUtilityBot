@@ -109,6 +109,11 @@ def parse_args(text: str, args_types: dict, strict_escapes=True, strict_quotes=F
     return args
 
 
+def split_args(text, strict_escapes=True, strict_quotes=False,
+               escapes: typing.Optional[typing.Dict[str, str]] = None) -> typing.List[str]:
+    return _split_args(text, strict_escapes, strict_quotes, escapes)
+
+
 def _split_args(text, strict_escapes=True, strict_quotes=False,
                 escapes: typing.Optional[typing.Dict[str, str]] = None) -> typing.List[str]:
     if escapes is None:
