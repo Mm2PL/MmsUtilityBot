@@ -288,7 +288,7 @@ class Plugin(main.Plugin):
                               and msg.text.startswith('\x01ACTION [Cookies]'))
         )
         self.c_link_issue = main.bot.add_command('issue link detection')(self.c_link_issue)
-        self.c_link_issue.limit_to_channels = ['pajlada', 'supinic', 'mm2pl']
+        self.c_link_issue.limit_to_channels = ['pajlada', 'supinic', 'mm2pl', 'zneix']
         self.c_link_issue.matcher_function = (
             lambda msg, cmd: ('#' in msg.text and ISSUE_PATTERN.search(msg.text))
         )
