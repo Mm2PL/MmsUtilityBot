@@ -179,6 +179,16 @@ class Plugin(main.Plugin):
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
+    def _issuelinker_enabled_setting_on_load(self, channel_settings: plugin_manager.ChannelSettings):
+        is_enabled = channel_settings.get(self.issuelinker_enabled_setting)
+        username = channel_settings.channel.last_known_username
+        if is_enabled and username not in self.c_link_issue.limit_to_channels:
+            self.c_link_issue.limit_to_channels.append(username)
+            self.c_issue_optin.limit_to_channels.append(username)
+        elif not is_enabled and username in self.c_link_issue.limit_to_channels:
+            self.c_link_issue.limit_to_channels.remove(username)
+            self.c_issue_optin.limit_to_channels.remove(username)
+
     async def _at_detection(self, msg: main.StandardizedMessage):
         if msg.text.startswith(('!vanish', '$vanish')):
             return f"{msg.text.split(' ', 1)[0]} {msg.user} :)"
@@ -215,6 +225,17 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.PER_CHANNEL,
             write_defaults=True,
             help_='Toggles if the mb.pyramid command is enabled in the channel.'
+        )
+
+        self.issuelinker_enabled_setting = plugin_manager.Setting(
+            self,
+            'cancer.issuelinker_enabled',
+            default_value=False,
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True,
+            help_='Toggles if the issue linker is enabled in the channel. Also requires user opt-in. '
+                  'See _help issuelinker.',
+            on_load=self._issuelinker_enabled_setting_on_load
         )
 
         self.cookie_optin_setting = plugin_manager.Setting(
@@ -288,7 +309,7 @@ class Plugin(main.Plugin):
                               and msg.text.startswith('\x01ACTION [Cookies]'))
         )
         self.c_link_issue = main.bot.add_command('issue link detection')(self.c_link_issue)
-        self.c_link_issue.limit_to_channels = ['pajlada', 'supinic', 'mm2pl', 'zneix']
+        self.c_link_issue.limit_to_channels = []
         self.c_link_issue.matcher_function = (
             lambda msg, cmd: ('#' in msg.text and ISSUE_PATTERN.search(msg.text))
         )
