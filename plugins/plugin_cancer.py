@@ -271,6 +271,7 @@ class Plugin(main.Plugin):
         # region Register commands
         self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
         self.c_issue_optin = main.bot.add_command('issuelinker')(self.c_issue_optin)
+        self.c_issue_optin.limit_to_channels = []
         self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
                                                     enable_local_bypass=True)(self.c_pyramid)
 
