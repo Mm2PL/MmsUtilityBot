@@ -127,7 +127,7 @@ class Plugin(main.Plugin):
                                               f'{math.floor((t.seconds % 3600) % 60):0>.0f}s'
 
     async def c_clip(self, msg: twitchirc.ChannelMessage):
-        cd_state = main.do_cooldown(cmd='quick_clip', msg=msg)
+        cd_state = main.do_cooldown(cmd='quick_clip', msg=msg, global_cooldown=30, local_cooldown=60)
         if cd_state:
             return
         clip_url = await self.create_clip(msg.flags['room-id'])
@@ -149,15 +149,14 @@ class Plugin(main.Plugin):
             'Client-ID': main.twitch_auth.json_data['client_id']
         }) as r:
             json = await r.json()
-            if 'status' in json and json['status'] == 401:
+            if r.status == 401:
                 if allow_refresh_token:
                     main.twitch_auth.refresh()
                     main.twitch_auth.save()
                     return await self.create_clip(user_id, allow_refresh_token=False)
                 else:
                     r.raise_for_status()
-            if ('status' in json and json['status'] == 404
-                    and json['message'] == 'Clipping is not possible for an offline channel.'):
+            if r.status == 404 and json['message'] == 'Clipping is not possible for an offline channel.':
                 return 'OFFLINE'
         clip_id = json['data'][0]['id']
         if force_wait_for_create:
