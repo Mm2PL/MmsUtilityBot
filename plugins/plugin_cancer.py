@@ -142,6 +142,8 @@ REPO_MAP = {
     'supi-core': 'Supinic/supi-core',
     'supicore': 'Supinic/supi-core',
     'supibot': 'Supinic/supibot',
+    'dankerino': 'Mm2PL/chatterino2',
+    'd2': 'Mm2PL/chatterino2'
 }
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 
