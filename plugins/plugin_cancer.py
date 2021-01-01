@@ -409,6 +409,8 @@ class Plugin(main.Plugin):
             time_ = 2 * 60 * 60
             print(time_)
             print('cookie opt in okay')
+            return (f'@{m[0][1].lower()}, Supibot and its API are down. '
+                    f'Could not set up a cookie reminder :(')
 
             params = {
                 'username': m[0][1].lower(),
