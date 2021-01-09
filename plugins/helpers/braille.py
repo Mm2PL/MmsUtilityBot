@@ -73,6 +73,7 @@ async def to_braille_from_image(img: Image, reverse: bool = False, size_percent:
     if size_percent is None and max_x is None and max_y is None:
         raise RuntimeError('You have to specify either size_percent, max_x or max_y for to_braille to work.')
     output: str = ''
+    img = img.convert('RGBA')
     if enable_processing:
         img, output = await crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size, size_percent)
 
@@ -126,7 +127,6 @@ async def to_braille_from_image(img: Image, reverse: bool = False, size_percent:
 
 async def crop_and_pad_image(enable_padding, img, max_x, max_y, output, pad_size, size_percent):
     org_size = (img.width, img.height)
-    img = img.convert('RGBA')
     await asyncio.sleep(0)
     if size_percent is None:
         img.thumbnail((max_x, max_y))
