@@ -515,7 +515,8 @@ class Plugin(main.Plugin):
                     'pad_x': int,
                     'reverse': bool,
                     'hastebin': bool,
-                    'sobel': bool
+                    'sobel': bool,
+                    'resize': bool
                 },
                 strict_escapes=True,
                 strict_quotes=True
@@ -529,6 +530,9 @@ class Plugin(main.Plugin):
         if missing_args:
             return (f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
+
+        if args['resize'] is ...:
+            args['resize'] = True
 
         if args['url'] is not ... and args['emote'] is not ...:
             return f'@{msg.user}, cannot provide both an emote name and a url.'
@@ -608,7 +612,7 @@ class Plugin(main.Plugin):
                     frame += 1
                     o += f'\nFrame {frame}\n'
                     frame_start = time.time()
-                    o = await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
+                    o += await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
                     time_taken = round(time.time() - start_time)
                     frame_time = time.time() - frame_start
                     if frame_time > 1:
@@ -637,15 +641,16 @@ class Plugin(main.Plugin):
             return sendable
 
     async def _single_image_to_braille(self, args, img, max_x, max_y, sens, size_percent):
-        img, o = await braille.crop_and_pad_image(
-            False,
-            img,
-            max_x,
-            max_y,
-            '',
-            (60, 60),
-            size_percent
-        )
+        if args['resize']:
+            img, o = await braille.crop_and_pad_image(
+                False,
+                img,
+                max_x,
+                max_y,
+                '',
+                (60, 60),
+                size_percent
+            )
         if args['sobel'] is not ... and args['sobel']:
             img = img.filter(ImageFilter.FIND_EDGES)
         o += await braille.to_braille_from_image(
