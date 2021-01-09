@@ -651,6 +651,8 @@ class Plugin(main.Plugin):
                 (60, 60),
                 size_percent
             )
+        else:
+            o = ''
         if args['sobel'] is not ... and args['sobel']:
             img = img.filter(ImageFilter.FIND_EDGES)
         o += await braille.to_braille_from_image(
