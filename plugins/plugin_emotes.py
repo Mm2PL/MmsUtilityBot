@@ -43,6 +43,7 @@ class Plugin(main.Plugin):
         super().__init__(module, source)
         self.bttv = BttvEmoteCache()
         self.ffz = FFZEmoteCache()
+        self.twitch = TwitchEmoteCache()
 
     @property
     def no_reload(self):
@@ -76,6 +77,10 @@ class Plugin(main.Plugin):
             pass
         try:
             return await self.ffz.find_global_emote(name)
+        except KeyError:
+            pass
+        try:
+            return await self.twitch.find_global_emote(name)
         except KeyError:
             pass
 
@@ -215,3 +220,49 @@ class FFZEmoteCache(EmoteCache):
             else:
                 log('error', f'Bad status: {r.status}\n'
                              f'{r.content}')
+
+
+class TwitchEmoteCache(EmoteCache):
+    async def load_globals(self):
+        async with aiohttp.request('get', self.global_url) as r:
+            log('info', f'Loaded Twitch global emotes (emote set 0) with status {r.status}')
+            data = await r.json()
+            for e in data['emotes']:
+                e['channel'] = data['channel']
+                e['channelid'] = data['channelid']
+                e['channellogin'] = data['channellogin']
+                e['tier'] = data['tier']
+                self.globals[e] = self._parse_emote(e)
+
+    async def load_channel(self, channel_id: str):
+        # twitch has no channel emotes
+        pass
+
+    def __init__(self):
+        super().__init__()
+        self.channel_url = 'https://api.ivr.fi/twitch/emotes/{}'
+        self.global_url = 'https://api.ivr.fi/twitch/emoteset/0'
+
+    async def find_global_emote(self, name: str) -> typing.Optional[Emote]:
+        if name in self.globals:
+            log('info', f'Using cached Twitch global emote {name!r}')
+            return self.globals[name]
+
+        async with aiohttp.request('get', self.channel_url.format(name)) as r:
+            log('info', f'Tried loading Twitch global emote {name!r} with status {r.status}')
+            if r.status == 404:
+                self.globals[name] = None
+                return
+
+            self.globals[name] = self._parse_emote(await r.json())
+            return self.globals[name]
+
+    async def find_channel_emote(self, name: str, channel_id: str):
+        return
+
+    def _parse_emote(self, data: dict):
+        return Emote(data['emotecode'], data.get('emoteurl_3x') or data.get('url'), data['emoteid'], {
+            '1x': data['emoteurl_1x'],
+            '2x': data['emoteurl_2x'],
+            '3x': data['emoteurl_3x'] or data.get('url')
+        }, **data)
