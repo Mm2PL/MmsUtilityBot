@@ -83,6 +83,7 @@ g.add_argument('--set-platform',
                     'to NEW_PREFIX. This action cannot be undone '
                     'using the old prefix, be careful',
                dest='set_platform')
+g.add_argument('--unset', action='store_true', help='Unsets the prefix from the channel.', dest='unset')
 
 prefix_parser.add_argument('--channel', metavar='CHANNEL', nargs=1, dest='channel')
 
@@ -118,6 +119,17 @@ async def command_prefix(msg: StandardizedMessage):
                     f' {msg.platform.name.capitalize()!r}.')
         else:
             return f'@{msg.user} Invalid prefix {args.set!r}.'
+    elif args.unset:
+        chan = _command_prefix_get_channel(msg, args)
+        key = (chan, msg.platform)
+        if key not in main.bot.prefixes:
+            return (f'@{msg.user} Unable to unset prefix for channel {chan} on platform '
+                    f'{msg.platform.name.capitalize()!r}, channel has no prefix override.')
+
+        del main.bot.prefixes[key]
+
+        return (f'@{msg.user} Unset override prefix for channel {chan} on platform '
+                f'{msg.platform.name.capitalize()!r}.')
     elif args.set_platform:
         args.set_platform, plat = args.set_platform
 
