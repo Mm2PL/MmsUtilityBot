@@ -409,7 +409,6 @@ class Plugin(main.Plugin):
             time_ = 2 * 60 * 60
             print(time_)
             print('cookie opt in okay')
-            return f'$remind @{m[0][1].lower()} in 2h Supibot Cookie :)'
 
             params = {
                 'username': m[0][1].lower(),
