@@ -338,11 +338,13 @@ class Plugin(main.Plugin):
         plugin_help.create_topic('braillefy url',
                                  'URL pointing to image you want to convert.',
                                  section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('braillefy reverse',
-                                 'Should the output braille be reversed.',
+        plugin_help.create_topic('braillefy emote',
+                                 'Emote name (current channel or Twitch emote assumed) or '
+                                 '#CHANNEL_NAME:EMOTE_NAME to use an emote from another channel.',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('braillefy sensitivity',
-                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha)',
+                                 'Per-channel sensitivity of the converter. r(ed), g(reen), b(lue), a(lpha). '
+                                 'Usage: sensitivity_(r, g, b or a):NUMBER',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
                                      'braillefy sensitivity_r',
@@ -350,16 +352,29 @@ class Plugin(main.Plugin):
                                      'braillefy sensitivity_b',
                                      'braillefy sensitivity_a'
                                  ])
+        plugin_help.create_topic('braillefy reverse',
+                                 'Should the output braille be reversed. '
+                                 'Usage: +reverse',
+                                 section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('braillefy size',
                                  'Size of the image. Defaults: max_x = 60, pad_y = 60, '
-                                 'size_percent=[undefined]. max_x, pad_y are in pixels.',
+                                 'size_percent=[undefined]. max_x, pad_y are in pixels. '
+                                 'If resize option is set to False (-resize) no resizing will be done. '
+                                 'Usages: size_percent:NUMBER, max_x:NUMBER, pad_y:NUMBER',
                                  section=plugin_help.SECTION_ARGS,
                                  links=[
                                      'braillefy size_percent',
                                      'braillefy max_x',
                                      'braillefy pad_y',
+                                     'braillefy resize',
                                  ])
-
+        plugin_help.create_topic('braillefy hastebin',
+                                 'Should the ascii be put into a hastebin?'
+                                 'Usage: +hastebin',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('braillefy sobel',
+                                 'Should a edge detection filter be applied before creating the ascii? '
+                                 'See Wikipedia:Sobel. Usage: braillefy (...) +sobel')
         plugin_help.create_topic('plugin_cancer',
                                  'Plugin dedicated to things that shouldn\'t be done '
                                  '(responding to messages other than commands, spamming).',
@@ -369,18 +384,20 @@ class Plugin(main.Plugin):
                                      'cancer'
                                  ])
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
-                                                  'cookies', None)(self.c_cookie_optin)
+                                                  'cookies. Usage: cookie', None)(self.c_cookie_optin)
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will have links issue '
-                                                  'posted when an issue is mentioned. Format is (REPO)?#NUMBER',
+                                                  'posted when an issue is mentioned. Format is (REPO)?#NUMBER. '
+                                                  'Usage: issuelinker',
                                                   None)(self.c_issue_optin)
         plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
                                                   'Usage: pyramid <size> <text...>',
                                                   None)(self.command_pyramid)
-        plugin_help.add_manual_help_using_command('Convert an image into braille. '
-                                                  'Usage: braillefy (url:URL|emote:EMOTE) [+reverse] '
-                                                  '[sensitivity_(r|g|b|a):float] [size_percent:float] '
-                                                  '[max_x:int] [pad_y:int]',
-                                                  None)(self.command_braillefy)
+        plugin_help.add_manual_help_using_command(
+            'Convert an image into braille. '
+            'Usage: braillefy (url:URL|emote:EMOTE) [sensitivity_(r|g|b|a):float] '
+            '[size_percent:float] [max_x:int] [pad_y:int] [+reverse] [+hastebin] [+sobel] [-resize]',
+            None
+        )(self.command_braillefy)
         # endregion
 
     async def _ps_sneeze(self, msg: main.StandardizedMessage):
