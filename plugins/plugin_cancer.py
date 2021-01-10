@@ -698,5 +698,7 @@ class Plugin(main.Plugin):
         links = []
         for repo, issue in valid_issue_links:
             repo = REPO_MAP.get(repo.casefold(), repo)
+            if '/' not in repo:
+                continue
             links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
         return ' '.join(links)
