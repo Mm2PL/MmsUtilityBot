@@ -72,8 +72,20 @@ class Command(twitchirc.Command):
         if not isinstance(cooldown, CommandCooldown):
             cooldown = CommandCooldown(*cooldown)
         self.cooldown = cooldown
-        if not self.matcher_function:
-            self.matcher_function = self.subprefix_matcher
+
+        self._legacy_matcher = None
+        self._matcher_function = matcher_function or self.subprefix_matcher
+
+    @property
+    def matcher_function(self):
+        if self._legacy_matcher:
+            return lambda msg, prefix: self._legacy_matcher(msg, self)
+        return self._matcher_function
+
+    @matcher_function.setter
+    def matcher_function(self, value):
+        self._legacy_matcher = value
+
 
     async def check_cooldown(self, msg) -> bool:
         per_channel_key, per_platform_key, per_user_key = self.cooldown_keys(msg)
