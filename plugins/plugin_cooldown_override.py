@@ -74,35 +74,14 @@ class Plugin(main.Plugin):
 
 
 class CooldownOverrideMiddleware(twitchirc.AbstractMiddleware):
-    def send(self, event: Event) -> None:
-        pass
-
-    def receive(self, event: Event) -> None:
-        pass
-
     def command(self, event: Event) -> None:
-        cmd: twitchirc.Command = event.data.get('command')
-        msg: twitchirc.ChannelMessage = event.data.get('message')
+        cmd: main.Command = event.data.get('command')
+        msg: main.StandardizedMessage = event.data.get('message')
         s = plugin_manager.channel_settings[msg.channel].get('disable_channel_cooldown')
         if s:
-            global_cooldown = f'global_{msg.channel}_{cmd.chat_command}'
-            if global_cooldown in main.cooldowns:
-                del main.cooldowns[global_cooldown]
-
-    def permission_check(self, event: Event) -> None:
-        pass
-
-    def join(self, event: Event) -> None:
-        pass
-
-    def part(self, event: Event) -> None:
-        pass
-
-    def disconnect(self, event: Event) -> None:
-        pass
-
-    def connect(self, event: Event) -> None:
-        pass
-
-    def add_command(self, event: Event) -> None:
-        pass
+            per_channel_key, _, _ = cmd.cooldown_keys(msg)
+            legacy_global_cooldown = f'global_{msg.channel}_{cmd.chat_command}'
+            if legacy_global_cooldown in main.cooldowns:
+                del main.cooldowns[legacy_global_cooldown]
+            if per_channel_key in main.cooldowns:
+                del main.cooldowns[per_channel_key]

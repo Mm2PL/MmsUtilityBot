@@ -271,31 +271,53 @@ class Plugin(main.Plugin):
         # endregion
 
         # region Register commands
-        self.c_cookie_optin = main.bot.add_command('cookie')(self.c_cookie_optin)
-        self.c_issue_optin = main.bot.add_command('issuelinker')(self.c_issue_optin)
-        self.c_issue_optin.limit_to_channels = []
-        self.command_pyramid = main.bot.add_command('mb.pyramid', required_permissions=['cancer.pyramid'],
-                                                    enable_local_bypass=True)(self.c_pyramid)
+        self.c_cookie_optin = main.bot.add_command(
+            'cookie',
+            cooldown=main.CommandCooldown(10, 5, 0)
+        )(self.c_cookie_optin)
 
-        self.command_braillefy = main.bot.add_command('braillefy', enable_local_bypass=True,
-                                                      required_permissions=['cancer.braille'])(self.c_braillefy)
+        self.c_issue_optin = main.bot.add_command(
+            'issuelinker',
+            cooldown=main.CommandCooldown(10, 5, 0)
+        )(self.c_issue_optin)
+        self.c_issue_optin.limit_to_channels = []
+        self.command_pyramid = main.bot.add_command(
+            'mb.pyramid',
+            required_permissions=['cancer.pyramid'],
+            enable_local_bypass=True,
+            cooldown=main.CommandCooldown(30, 30, 0)
+        )(self.c_pyramid)
+
+        self.command_braillefy = main.bot.add_command(
+            'braillefy',
+            enable_local_bypass=True,
+            required_permissions=['cancer.braille'],
+            cooldown=main.CommandCooldown(15, 0, 0)
+        )(self.c_braillefy)
 
         # region Fake Commands
-        self._at_detection = main.bot.add_command('[at detection]')(self._at_detection)
+        self._at_detection = main.bot.add_command(
+            '[at detection]',
+            cooldown=main.CommandCooldown(30, 30, 0)
+        )(self._at_detection)
+
         self._at_detection.limit_to_channels = ['pajlada', 'supinic']
         self._at_detection.matcher_function = (
             lambda msg, cmd: (
                     msg.platform == main.Platform.TWITCH and (
-                # implicit return here ↓
-                    main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
-            ) or msg.platform == main.Platform.DISCORD and (
+                        # implicit return here ↓
+                        main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
+                    ) or msg.platform == main.Platform.DISCORD and (
                         [i for i in msg.source_message.mentions
                          if i == main.bot.clients[main.Platform.DISCORD].connection.user]
                     )
             )
         )
 
-        self._honeydetected = main.bot.add_command('honydetected reconnected')(self._honeydetected)
+        self._honeydetected = main.bot.add_command(
+            'honydetected reconnected',
+            cooldown=main.CommandCooldown(0, 120, 0)
+        )(self._honeydetected)
         self._honeydetected.limit_to_channels = ['supinic', 'mm2pl']
         self._honeydetected.matcher_function = (
             lambda msg, cmd: (
@@ -305,18 +327,27 @@ class Plugin(main.Plugin):
             )
         )
 
-        self._cookie = main.bot.add_command('cookie detection')(self._cookie)
+        self._cookie = main.bot.add_command(
+            'cookie detection',
+            cooldown=main.CommandCooldown(0, 0, 0)
+        )(self._cookie)
         self._cookie.matcher_function = (
             lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
                               and msg.user in ['thepositivebot', 'mm2pl']
                               and msg.text.startswith('\x01ACTION [Cookies]'))
         )
-        self.c_link_issue = main.bot.add_command('issue link detection')(self.c_link_issue)
+        self.c_link_issue = main.bot.add_command(
+            'issue link detection',
+            cooldown=main.CommandCooldown(5, 1, 0)  # 1s channel cooldown to avoid bots triggering it
+        )(self.c_link_issue)
         self.c_link_issue.limit_to_channels = []
         self.c_link_issue.matcher_function = (
             lambda msg, cmd: ('#' in msg.text and ISSUE_PATTERN.search(msg.text))
         )
-        self._ps_sneeze = main.bot.add_command('[ps sneeze integration]')(self._ps_sneeze)
+        self._ps_sneeze = main.bot.add_command(
+            '[ps sneeze integration]',
+            cooldown=main.CommandCooldown(30, 0, 0)
+        )(self._ps_sneeze)
         self._ps_sneeze.limit_to_channels = ['supinic', 'mm2pl']
         self._ps_sneeze.matcher_function = (
             lambda msg, cmd: (
@@ -324,7 +355,10 @@ class Plugin(main.Plugin):
                     and msg.text.endswith('Playsound has been played correctly on stream.')
             )
         )
-        self.c_asd = main.bot.add_command('asd')(self.c_asd)
+        self.c_asd = main.bot.add_command(
+            'asd',
+            cooldown=main.CommandCooldown(15, 5, 0)
+        )(self.c_asd)
         self.c_asd.limit_to_channels = ['simon36']
         self.c_asd.matcher_function = (
             lambda msg, cmd: (
@@ -465,9 +499,6 @@ class Plugin(main.Plugin):
         return random_msg
 
     def c_cookie_optin(self, msg: twitchirc.ChannelMessage):
-        cd_state = main.do_cooldown('cookie', msg, global_cooldown=60, local_cooldown=60)
-        if cd_state:
-            return
         if msg.user.lower() in self.cookie_optin:
             self.cookie_optin.remove(msg.user.lower())
             plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
@@ -484,9 +515,6 @@ class Plugin(main.Plugin):
     async def c_pyramid(self, msg: twitchirc.ChannelMessage):
         if not self._get_pyramid_enabled(msg.channel):
             return f'@{msg.user}, This command is disabled here.'
-        cd_state = main.do_cooldown('pyramid', msg, global_cooldown=60, local_cooldown=60)
-        if cd_state:
-            return
         t = main.delete_spammer_chrs(msg.text).split(' ', 1)
         if len(t) == 1:
             return f'@{msg.user}, Usage: pyramid <size> <text...>'
@@ -513,9 +541,6 @@ class Plugin(main.Plugin):
         return 'NaM !!!'
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
-        cd_state = main.do_cooldown('braille', global_cooldown=0, local_cooldown=60, msg=msg)
-        if cd_state:
-            return
         try:
             args = arg_parser.parse_args(
                 msg.text.split(' ', 1)[1],
@@ -685,9 +710,6 @@ class Plugin(main.Plugin):
         return o
 
     async def c_issue_optin(self, msg: main.StandardizedMessage):
-        cd_state = main.do_cooldown('issuelinker', msg, global_cooldown=0, local_cooldown=60)
-        if cd_state:
-            return
         if msg.user.lower() in self.issue_linker_optin:
             self.issue_linker_optin.remove(msg.user.lower())
             plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
@@ -704,10 +726,6 @@ class Plugin(main.Plugin):
     async def c_link_issue(self, msg: main.StandardizedMessage):
         if msg.user not in self.issue_linker_optin:
             return
-        cd_state = main.do_cooldown('[issue linker]', msg, global_cooldown=1, local_cooldown=5)
-        if cd_state:
-            return
-
         valid_issue_links = ISSUE_PATTERN.findall(msg.text)
         if not valid_issue_links:
             return

@@ -77,12 +77,8 @@ current_process = psutil.Process()
                                            'the amount of registered commands and if possible how many commands are '
                                            'blacklisted',
                                            aliases=['ping'])
-@plugin_manager.add_conditional_alias('ping', plugin_prefixes.condition_prefix_exists)
-@main.bot.add_command('mb.ping')
+@main.bot.add_command('ping', cooldown=main.CommandCooldown(10, 5, 0))
 def command_ping_simple(msg: twitchirc.ChannelMessage):
-    cd_state = main.do_cooldown('ping', msg, global_cooldown=int(1.5 * 60), local_cooldown=2 * 60)
-    if cd_state:
-        return
     return (f'@{msg.user} PONG! Bot has been running for '
             f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))} and is using '
             f'{current_process.memory_info().rss/1_000_000:.2f}MB of ram, '
