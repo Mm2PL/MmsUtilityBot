@@ -238,4 +238,3 @@ if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']
 else:
     main.bot.storage['command_blacklist'] = {}
-
