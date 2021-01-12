@@ -362,8 +362,7 @@ class Bot(twitchirc.Bot):
     async def _send_if_possible(self, message, source_message: StandardizedMessage):
         print('send if possible', message)
         if (isinstance(message, tuple) and len(message) == 2
-                and isinstance(message[0], CommandResult)
-                and (isinstance(message[1], str) or message[1] is None)):
+                and isinstance(message[0], CommandResult)):
             no_perm_setting = self.no_permissions_message_settings.get(
                 (source_message.channel, source_message.platform), False
             )
