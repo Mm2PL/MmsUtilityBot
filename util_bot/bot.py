@@ -28,6 +28,7 @@ from util_bot.clients.twitch import convert_twitchirc_to_standarized, TwitchClie
 from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 from . import Platform
 from .clients import CLIENTS
+from .command import Command, CommandCooldown, CommandResult
 from .utils import Reconnect, deprecated
 
 bot_instance = None
@@ -62,6 +63,7 @@ class Bot(twitchirc.Bot):
             # ('name', Platform.TWITCH): 'prefix'
         }
         self.pubsub = None
+        self.no_permissions_message_settings: Dict[Tuple[str, Platform], bool] = {}
 
     async def send(self, msg: StandardizedMessage, is_reconnect=False, **kwargs):
         o = await self.acall_middleware('send', dict(message=msg, queue=msg.channel), cancelable=True)
@@ -96,16 +98,24 @@ class Bot(twitchirc.Bot):
                     enable_local_bypass: bool = True,
                     required_permissions: typing.Optional[typing.List[str]] = None,
                     limit_to_channels: typing.Optional[typing.List[str]] = None,
-                    available_in_whispers: bool = True):
+                    available_in_whispers: bool = True,
+                    cooldown: typing.Optional[CommandCooldown] = None):
         if required_permissions is None:
             required_permissions = []
 
-        def decorator(func: typing.Callable) -> twitchirc.Command:
-            cmd = twitchirc.Command(chat_command=command,
-                                    function=func, forced_prefix=forced_prefix, parent=self,
-                                    enable_local_bypass=enable_local_bypass,
-                                    limit_to_channels=limit_to_channels,
-                                    available_in_whispers=available_in_whispers)
+        def decorator(func: typing.Callable) -> Command:
+            cmd = Command(
+                chat_command=command,
+                function=func,
+                parent=self,
+                limit_to_channels=limit_to_channels,
+                available_in_whispers=available_in_whispers
+            )
+            cmd.forced_prefix = forced_prefix
+            cmd.enable_local_bypass = enable_local_bypass
+            if cooldown:
+                cmd.cooldown = cooldown
+
             cmd.permissions_required.extend(required_permissions)
             self.commands.append(cmd)
             self.call_middleware('add_command', (cmd,), cancelable=False)
@@ -342,14 +352,26 @@ class Bot(twitchirc.Bot):
                 'permission_error',
                 {
                     'message': message,
-                    'missing_permissions': missing_permissions
+                    'missing_permissions': missing_permissions,
+                    'command': command
                 },
                 False
             )
         return missing_permissions
 
     async def _send_if_possible(self, message, source_message: StandardizedMessage):
-        if isinstance(message, str):
+        print('send if possible', message)
+        if (isinstance(message, tuple) and len(message) == 2
+                and isinstance(message[0], CommandResult)
+                and (isinstance(message[1], str) or message[1] is None)):
+            no_perm_setting = self.no_permissions_message_settings.get(
+                (source_message.channel, source_message.platform), False
+            )
+            if ((message[0] == CommandResult.NO_PERMISSIONS and no_perm_setting)
+                    or message[0] != CommandResult.NO_PERMISSIONS):
+                return await self._send_if_possible(message[1], source_message)
+
+        elif isinstance(message, str):
             await self.send(source_message.reply(message))
         elif isinstance(message, (StandardizedMessage, StandardizedWhisperMessage)):
             await self.send(message)
@@ -367,7 +389,7 @@ class Bot(twitchirc.Bot):
         o = await self.acall_middleware('command', {'message': message, 'command': handler}, cancelable=True)
         if o is False:
             return
-        t = asyncio.create_task(handler.acall(message))
+        t = asyncio.create_task(handler.sacall(message))
         self._tasks.append({
             'task': t,
             'source_msg': message,
@@ -412,23 +434,18 @@ class Bot(twitchirc.Bot):
             if ' ' not in message.text:
                 message.text += ' '
             for handler in self.commands:
-                if message.text.startswith(prefix + handler.ef_command):
+                handler: Command
+                if handler.matcher_function(message, prefix):
                     await self._call_command(handler, message)
                     was_handled = True
+                    break
             if not was_handled:
                 self._do_unknown_command(message)
         else:
-            was_handled = await self._acall_forced_prefix_commands(message)
-            if not was_handled:
-                await self._acall_custom_handler_commands(message)
+            await self._acall_forced_prefix_commands(message)
 
     def _call_forced_prefix_commands(self, message):
         raise NotImplementedError('sync function')
-
-    async def _acall_custom_handler_commands(self, message):
-        for handler in self.commands:
-            if callable(handler.matcher_function) and handler.matcher_function(message, handler):
-                await self._call_command(handler, message)
 
     async def _acall_forced_prefix_commands(self, message):
         for handler in self.commands:

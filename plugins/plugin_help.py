@@ -71,7 +71,7 @@ all_help: Dict[int, Union[Dict[str, Tuple[int, str]], Dict[str, str]]] = {
 MSG_LEN_LIMIT = 200
 
 
-def create_topic(topic, help_, section=1, links: typing.Optional[list] = None):
+def create_topic(topic, help_, section=1, links: typing.Optional[typing.Iterable] = None):
     if links is not None:
         for link in links:
             all_help[0][link] = (section, topic)
@@ -165,10 +165,12 @@ def auto_help_parser(parser: typing.Union[argparse.ArgumentParser, twitchirc.Arg
 
 
 def add_manual_help_using_command(help_, aliases=None):
-    def decorator(command: twitchirc.Command):
+    def decorator(command: main.Command) -> main.Command:
         nonlocal aliases
         if aliases is None:
             aliases = []
+        aliases.extend(command.aliases or [])
+        aliases = set(aliases)
         create_topic(command.chat_command, help_,
                      section=1,
                      links=aliases)
