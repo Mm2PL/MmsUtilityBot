@@ -60,9 +60,10 @@ class Plugin(main.Plugin):
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
         )
-        self.to_create_queue = queue.Queue()
-        self.link_queue = queue.Queue()
-        self.c_hastebin = main.bot.add_command('hastebin')(self.c_hastebin)
+        self.c_hastebin = main.bot.add_command(
+            'hastebin',
+            cooldown=main.CommandCooldown(30, 0, 0)
+        )(self.c_hastebin)
         plugin_help.add_manual_help_using_command('Create a hastebin of the message you provided.')(self.c_hastebin)
 
     @property
@@ -75,9 +76,6 @@ class Plugin(main.Plugin):
             return response['key']
 
     async def c_hastebin(self, msg: twitchirc.ChannelMessage):
-        cd_state = main.do_cooldown('hastebin', msg, global_cooldown=0, local_cooldown=30)
-        if cd_state:
-            return
         data = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)[1]
 
         link = await self.upload(data)
