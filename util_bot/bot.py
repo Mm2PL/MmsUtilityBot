@@ -427,21 +427,19 @@ class Bot(twitchirc.Bot):
 
         prefix = self.get_prefix(message.channel, message.platform, message)
         # print(prefix, message.text.startswith(prefix))
-
-        if message.text.startswith(prefix):
-            was_handled = False
-            if ' ' not in message.text:
-                message.text += ' '
-            for handler in self.commands:
-                handler: Command
-                if handler.matcher_function(message, prefix):
-                    await self._call_command(handler, message)
-                    was_handled = True
-                    break
-            if not was_handled:
+        was_handled = False
+        if ' ' not in message.text:
+            message.text += ' '
+        for handler in self.commands:
+            handler: Command
+            if handler.matcher_function(message, prefix):
+                print('call command!', handler.chat_command)
+                await self._call_command(handler, message)
+                was_handled = True
+                break
+        if not was_handled:
+            if not await self._acall_forced_prefix_commands(message):
                 self._do_unknown_command(message)
-        else:
-            await self._acall_forced_prefix_commands(message)
 
     def _call_forced_prefix_commands(self, message):
         raise NotImplementedError('sync function')
