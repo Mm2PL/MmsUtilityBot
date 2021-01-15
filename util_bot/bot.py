@@ -27,6 +27,7 @@ from util_bot.clients.abstract_client import AbstractClient
 from util_bot.clients.twitch import convert_twitchirc_to_standarized, TwitchClient
 from util_bot.msg import StandardizedMessage, StandardizedWhisperMessage
 from . import Platform
+from .channel import Channel
 from .clients import CLIENTS
 from .command import Command, CommandCooldown, CommandResult
 from .utils import Reconnect, deprecated
@@ -64,6 +65,8 @@ class Bot(twitchirc.Bot):
         }
         self.pubsub = None
         self.no_permissions_message_settings: Dict[Tuple[str, Platform], bool] = {}
+
+        self.channels: Dict[Tuple[str, Platform], Channel] = {}
 
     async def send(self, msg: StandardizedMessage, is_reconnect=False, **kwargs):
         o = await self.acall_middleware('send', dict(message=msg, queue=msg.channel), cancelable=True)
