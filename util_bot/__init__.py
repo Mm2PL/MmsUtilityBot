@@ -240,7 +240,7 @@ _sys.meta_path.append(PluginMetaPathFinder())
 User, flush_users = user_model.get(Base, session_scope, log)
 
 
-class AliasCommand(_twitchirc.Command):
+class AliasCommand(Command):
     pass
 
 
