@@ -48,6 +48,9 @@ call_command_handlers = main.bot._call_command_handlers
 blacklist: typing.Dict[
     str, typing.List[str]
 ] = {}
+whitelist: typing.Dict[
+    str, typing.List[str]
+]
 error_notification_channel = (None, Platform.TWITCH)
 
 
@@ -82,6 +85,13 @@ class CommandBlacklistMiddleware(twitchirc.AbstractMiddleware):
             # command is blocked in this channel.
             log('info', f'User {message.user} attempted to call command {command.chat_command} in channel '
                         f'{message.channel} where it is blacklisted. (platform {message.platform!r})')
+            event.cancel()
+        prefix = main.bot.get_prefix(message.channel, message.platform, message)
+        invocation = message.text.split(' ')[0].replace(prefix, '', 1)
+        log('warn', repr(invocation))
+        if message.channel in whitelist and invocation not in whitelist[message.channel]:
+            log('warn', f'User {message.user} attempted to call command {command.chat_command} in channel '
+                        f'{message.channel} where it is not whitelisted. (platform {message.platform!r})')
             event.cancel()
 
 
@@ -169,7 +179,7 @@ def command_unblacklist(msg: twitchirc.ChannelMessage) -> str:
     args = msg.text.split(' ')
     if len(args) != 2:
         return (f'@{msg.user} Usage: '
-                f'"{main.bot.prefix}{command_unblacklist.chat_command} COMMAND". '
+                f'"{command_unblacklist.chat_command} COMMAND". '
                 f'Where COMMAND is the command you want to unblacklist.')
     target = args[1]
     for i in main.bot.commands:
@@ -179,7 +189,25 @@ def command_unblacklist(msg: twitchirc.ChannelMessage) -> str:
                         f"here.")
             blacklist[msg.channel].remove(target)
             return f'@{msg.user} Unblacklisted command {target} from channel #{msg.channel}.'
-    return f'@{msg.user} Cannot unblacklist nonexistent command {target}.'
+
+
+@main.bot.add_command('mb.unwhitelist_command', required_permissions=['util.unwhitelist_command'],
+                      enable_local_bypass=True)
+def command_unwhitelist(msg: twitchirc.ChannelMessage) -> str:
+    v = ensure_whitelist(msg.channel)
+    if v:
+        return v
+    args = msg.text.split(' ')
+    if len(args) != 2:
+        return (f'@{msg.user} Usage: '
+                f'"{command_unwhitelist.chat_command} COMMAND". '
+                f'Where COMMAND is the command you want to unwhitelist.')
+    target = args[1]
+    if target not in whitelist[msg.channel]:
+        return (f"@{msg.user} Cannot unwhitelist command {target} that isn't whitelisted "
+                f"here.")
+    whitelist[msg.channel].remove(target)
+    return f'@{msg.user} Unwhitelisted command {target} from channel #{msg.channel}.'
 
 
 @main.bot.add_command('mb.blacklist_command', required_permissions=['util.blacklist_command'], enable_local_bypass=True)
@@ -188,7 +216,7 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
     args = msg.text.split(' ')
     if len(args) != 2:
         return (f'@{msg.user} Usage: '
-                f'"{main.bot.prefix}{command_blacklist.chat_command} COMMAND". '
+                f'"{command_blacklist.chat_command} COMMAND". '
                 f'Where COMMAND is the command you want to blacklist.')
     target = args[1]
     if target in blacklist[msg.channel]:
@@ -198,8 +226,27 @@ def command_blacklist(msg: twitchirc.ChannelMessage) -> str:
         if i.chat_command == target:
             blacklist[msg.channel].append(target)
             return (f'@{msg.user} Blacklisted command {target}. '
-                    f'To undo use {main.bot.prefix}{command_unblacklist.chat_command} {target}.')
+                    f'To undo use {command_unblacklist.chat_command} {target}.')
     return f'@{msg.user} Cannot blacklist nonexistent command {target}.'
+
+
+@main.bot.add_command('mb.whitelist_command', required_permissions=['util.whitelist_command'], enable_local_bypass=True)
+def command_whitelist(msg: twitchirc.ChannelMessage) -> str:
+    v = ensure_whitelist(msg.channel)
+    if v:
+        return v
+    args = msg.text.split(' ')
+    if len(args) != 2:
+        return (f'@{msg.user} Usage: '
+                f'"{command_whitelist.chat_command} COMMAND". '
+                f'Where COMMAND is the command you want to whitelist.')
+    target = args[1]
+    if target in whitelist[msg.channel]:
+        return f'@{msg.user} That command is already whitelisted.'
+
+    whitelist[msg.channel].append(target)
+    return (f'@{msg.user} whitelisted command {target}. '
+            f'To undo use {command_unwhitelist.chat_command} {target}.')
 
 
 @main.bot.add_command('mb.list_blacklisted_commands', required_permissions=['util.blacklist_command'],
@@ -210,23 +257,29 @@ def command_list_blacklisted(msg: twitchirc.ChannelMessage) -> None:
                             f'{", ".join(blacklist[msg.channel])}'))
 
 
-@main.bot.add_command('blacklisted_join', required_permissions=[twitchirc.PERMISSION_COMMAND_JOIN],
+@main.bot.add_command('mb.list_whitelisted_commands', required_permissions=['util.whitelist_command'],
+                      enable_local_bypass=True)
+def command_list_whitelisted(msg: twitchirc.ChannelMessage) -> str:
+    v = ensure_whitelist(msg.channel)
+    if v:
+        return v
+    return (f'@{msg.user}, There are {len(whitelist[msg.channel])} whitelisted commands: '
+            f'{", ".join(whitelist[msg.channel])}')
+
+
+@main.bot.add_command('mb.setup_whitelist', required_permissions=['util.setup_whitelist'],
                       enable_local_bypass=False)
-def command_join_blacklisted(msg: twitchirc.ChannelMessage) -> str:
+async def command_join_blacklisted(msg: main.StandardizedMessage) -> str:
     ensure_blacklist(msg.channel)
-    chan = msg.text.split(' ')[1].lower()
-    if chan in ['all']:
-        return f'Cannot join #{chan}.'
-    if chan in main.bot.channels_connected:
-        return f'This bot is already in channel #{chan}.'
-    else:
-        blacklist[msg.channel] = [i.chat_command for i in main.bot.commands]
-        blacklist[msg.channel].remove('mb.blacklist_command')
-        blacklist[msg.channel].remove('mb.unblacklist_command')
-        blacklist[msg.channel].remove('mb.list_blacklisted_commands')
-        main.bot.send(msg.reply(f'Joining channel #{chan} with all commands blacklisted apart from '
-                                f'mb.blacklist_command, mb.unblacklist_command and mb.list_blacklisted_command'))
-        main.bot.join(chan)
+    whitelist[msg.channel] = []
+    whitelist[msg.channel].append('mb.whitelist_command')
+    whitelist[msg.channel].append('mb.unwhitelist_command')
+    whitelist[msg.channel].append('mb.list_whitelisted_commands')
+    channel_ident = (msg.channel, msg.platform)
+    if channel_ident in main.bot.channels:
+        main.bot.channels[channel_ident].mode = main.ChannelMode.WHITELISTED_READ_WRITE
+    return (f'Set up white list for channel #{msg.channel}: no commands whitelisted apart from '
+            f'mb.whitelist_command, mb.unwhitelist_command and mb.list_whitelisted_commands')
 
 
 def ensure_blacklist(channel):
@@ -234,7 +287,17 @@ def ensure_blacklist(channel):
         blacklist[channel] = []
 
 
+def ensure_whitelist(channel):
+    if channel not in blacklist:
+        return 'Channel not in whitelist mode.'
+
+
 if 'command_blacklist' in main.bot.storage.data:
     blacklist = main.bot.storage['command_blacklist']
 else:
     main.bot.storage['command_blacklist'] = {}
+
+if 'command_whitelist' in main.bot.storage.data:
+    whitelist = main.bot.storage['command_whitelist']
+else:
+    main.bot.storage['command_whitelist'] = {}
