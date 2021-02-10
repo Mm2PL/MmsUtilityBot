@@ -58,7 +58,11 @@ log = main.make_log_function('ping')
 def _blacklist_info(channel: str):
     if plugin_manager is not None:
         plugin_manager.ensure_blacklist(channel)
-        return f'{len(plugin_manager.blacklist[channel])} commands blacklisted in this channel.'
+        wl = plugin_manager.whitelist.get(channel)
+        if wl:
+            return f' {len(wl)} commands whitelisted in this channel.'
+        else:
+            return f' {len(plugin_manager.blacklist[channel])} commands blacklisted in this channel.'
     else:
         return ''
 
@@ -75,12 +79,11 @@ current_process = psutil.Process()
 
 @plugin_help.add_manual_help_using_command('Show that the bot is running, how long has it been running for, '
                                            'the amount of registered commands and if possible how many commands are '
-                                           'blacklisted',
-                                           aliases=['ping'])
+                                           'blacklisted')
 @main.bot.add_command('ping', cooldown=main.CommandCooldown(10, 5, 0))
 def command_ping_simple(msg: twitchirc.ChannelMessage):
     return (f'@{msg.user} PONG! Bot has been running for '
             f'{datetime.timedelta(seconds=round(main.uptime().total_seconds()))} and is using '
             f'{current_process.memory_info().rss/1_000_000:.2f}MB of ram, '
             f'{len(main.bot.commands)} '
-            f'commands registered. {_blacklist_info(msg.channel)}{_channel_info()}')
+            f'commands registered.{_blacklist_info(msg.channel)}{_channel_info()}')
