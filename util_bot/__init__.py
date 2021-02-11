@@ -250,14 +250,6 @@ def add_alias(bot_obj, alias):
             command.aliases.append(alias)
         else:
             command.aliases = [alias]
-
-        async def alias_func(msg: _twitchirc.ChannelMessage):
-            return await command.acall(msg)
-
-        alias_func = AliasCommand(alias, alias_func, parent=bot_obj, limit_to_channels=command.limit_to_channels,
-                                  matcher_function=command.matcher_function)
-        bot_obj.commands.append(alias_func)
-
         return command
 
     return decorator

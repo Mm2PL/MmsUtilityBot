@@ -79,13 +79,12 @@ class Command(twitchirc.Command):
     @property
     def matcher_function(self):
         if self._legacy_matcher:
-            return lambda msg, prefix: self._legacy_matcher(msg, self)
+            return lambda msg, prefix: bool(self._legacy_matcher(msg, self))
         return self._matcher_function
 
     @matcher_function.setter
     def matcher_function(self, value):
         self._legacy_matcher = value
-
 
     async def check_cooldown(self, msg) -> bool:
         per_channel_key, per_platform_key, per_user_key = self.cooldown_keys(msg)
@@ -150,20 +149,18 @@ class Command(twitchirc.Command):
             val = self.function(message)
 
         if (isinstance(val, tuple) and len(val) == 2
-                and isinstance(val[0], CommandResult)
-                and (isinstance(val[1], str) or val[1] is None)):
-            # checks if val is a Tuple[CommandResult, Optional[str]]
+                and isinstance(val[0], CommandResult)):
+            # checks if val is a Tuple[CommandResult, Any]
             return val
         return CommandResult.OK, val
 
     def default_matcher(self, msg, prefix, aliases=None):
-        # print('default matcher test', repr(msg), repr(prefix), repr(prefix+self.ef_command))
         if msg.text.startswith(prefix + self.ef_command):
-            return True
+            return prefix + self.ef_command
 
         for al in self.aliases + (aliases or []):
-            if msg.text.startswith(al + ' '):
-                return True
+            if msg.text.startswith(prefix + al + ' '):
+                return prefix + al + ' '
 
         return False
 
