@@ -330,7 +330,11 @@ class Math:
 
         'int': int,
         'float': float,
-        'str': str
+        'str': str,
+        'abs': abs,
+        'min': min,
+        'max': max,
+        'len': len
     }
     default_locals = {
         'pi': math.pi,
