@@ -562,7 +562,10 @@ class Plugin(util_bot.Plugin):
         super().__init__(module, source)
         self.math_help = (f'Usage: math <python code>, this command allows for usage of a restricted subset of '
                           f'Python {sys.version_info[0]}.{sys.version_info[1]}')
-        self.command_math = util_bot.bot.add_command('math')(self.command_math)
+        self.command_math = util_bot.bot.add_command(
+            'math',
+            cooldown=util_bot.CommandCooldown(5, 0, 0, True)
+        )(self.command_math)
         plugin_help.create_topic('math', self.math_help,
                                  section=plugin_help.SECTION_COMMANDS,
                                  links=[
