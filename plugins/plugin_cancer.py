@@ -302,17 +302,20 @@ class Plugin(main.Plugin):
         )(self._at_detection)
 
         self._at_detection.limit_to_channels = ['pajlada', 'supinic']
+        # @formatter:off
+        # whitespace gets fucked here
         self._at_detection.matcher_function = (
             lambda msg, cmd: (
-                    msg.platform == main.Platform.TWITCH and (
-                        # implicit return here ↓
-                        main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
-                    ) or msg.platform == main.Platform.DISCORD and (
-                        [i for i in msg.source_message.mentions
-                         if i == main.bot.clients[main.Platform.DISCORD].connection.user]
-                    )
+                msg.platform == main.Platform.TWITCH and (
+                    # implicit return here ↓
+                    main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
+                ) or msg.platform == main.Platform.DISCORD and (
+                    [i for i in msg.source_message.mentions
+                     if i == main.bot.clients[main.Platform.DISCORD].connection.user]
+                )
             )
         )
+        # @formatter:on
 
         self._honeydetected = main.bot.add_command(
             'honydetected reconnected',
