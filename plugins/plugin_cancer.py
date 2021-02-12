@@ -125,7 +125,13 @@ COOKIE_PATTERN = regex.compile(
     r'(?!you have already claimed)'
 )
 ISSUE_PATTERN = regex.compile(
-    r'\b([^ #]*)#(\d+)'
+    r'\b([^ #]*)'
+    r'(?:'
+    + (
+        r'#(?P<issue>\d+)'
+        r'|@(?P<commit>[a-zA-Z0-9~^]{4,40})'
+    )
+    + r')'
 )
 REPO_MAP = {
     'ch2': 'Chatterino/Chatterino2',
@@ -146,6 +152,7 @@ REPO_MAP = {
     'd2': 'Mm2PL/chatterino2'
 }
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
+COMMIT_LINK_FORMAT = 'https://github.com/{repo}/commit/{hash}'
 
 
 class Plugin(main.Plugin):
@@ -738,9 +745,13 @@ class Plugin(main.Plugin):
         if not valid_issue_links:
             return main.CommandResult.OTHER_FILTERED, None
         links = []
-        for repo, issue in valid_issue_links:
+        for repo, issue, commit in valid_issue_links:
             repo = REPO_MAP.get(repo.casefold(), repo)
             if '/' not in repo:
                 continue
-            links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
+            if issue:
+                links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
+            elif commit:
+                links.append(COMMIT_LINK_FORMAT.format(repo=repo, hash=commit))
+
         return (main.CommandResult.OK, ' '.join(links)) if links else (main.CommandResult.OTHER_FILTERED, None)
