@@ -352,7 +352,7 @@ class Plugin(main.Plugin):
         )(self.c_link_issue)
         self.c_link_issue.limit_to_channels = []
         self.c_link_issue.matcher_function = (
-            lambda msg, cmd: ('#' in msg.text and ISSUE_PATTERN.search(msg.text))
+            lambda msg, cmd: (('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text))
         )
         self._ps_sneeze = main.bot.add_command(
             '[ps sneeze integration]',
