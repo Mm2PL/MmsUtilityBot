@@ -514,10 +514,10 @@ class Plugin(main.Plugin):
 
     async def c_pyramid(self, msg: twitchirc.ChannelMessage):
         if not self._get_pyramid_enabled(msg.channel):
-            return f'@{msg.user}, This command is disabled here.'
+            return main.CommandResult.NOT_WHITELISTED, f'@{msg.user}, This command is disabled here.'
         t = main.delete_spammer_chrs(msg.text).split(' ', 1)
         if len(t) == 1:
-            return f'@{msg.user}, Usage: pyramid <size> <text...>'
+            return main.CommandResult.OTHER_FAILED, f'@{msg.user}, Usage: pyramid <size> <text...>'
         args = t[1].rstrip()
         size = ''
         for arg in args.split(' '):
@@ -529,7 +529,7 @@ class Plugin(main.Plugin):
             args: str = args.replace(size, '', 1).rstrip() + ' '
             size = int(size)
             if not args.strip(' '):
-                return f'@{msg.user}, Nothing to send. NaM'
+                return main.CommandResult.OTHER_FAILED, f'@{msg.user}, Nothing to send. NaM'
             output = []
             for i in range(1, size):
                 output.append(args * i)
@@ -563,20 +563,21 @@ class Plugin(main.Plugin):
                 strict_quotes=True
             )
         except arg_parser.ParserError as e:
-            return f'Error: {e.message}'
+            return main.CommandResult.OTHER_FAILED, f'Error: {e.message}'
         # region argument parsing
         missing_args = []
         if args['url'] is ... and args['emote'] is ...:
             missing_args.append('url or emote')
         if missing_args:
-            return (f'Error: You are missing the {",".join(missing_args)} '
+            return (main.CommandResult.OTHER_FAILED,
+                    f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
 
         if args['resize'] is ...:
             args['resize'] = True
 
         if args['url'] is not ... and args['emote'] is not ...:
-            return f'@{msg.user}, cannot provide both an emote name and a url.'
+            return main.CommandResult.OTHER_FAILED, f'@{msg.user}, cannot provide both an emote name and a url.'
 
         num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgb'])
         alpha = args['sensitivity_a'] if args['sensitivity_a'] is not Ellipsis else 1
@@ -585,13 +586,15 @@ class Plugin(main.Plugin):
                                                               args['sensitivity_b'], alpha)
             is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
             if is_zero:
-                return f'Error: Sensitivity cannot be zero. MEGADANK'
+                return main.CommandResult.OTHER_FAILED, f'Error: Sensitivity cannot be zero. MEGADANK'
         elif num_defined == 0:
             sens = (2, 2, 2, 1)
         else:
-            return f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.'
+            return (main.CommandResult.OTHER_FAILED,
+                    f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.')
         if args['size_percent'] is not ... and args['max_y'] is not ...:
-            return f'Error: you cannot provide the size percentage and maximum height at the same time.'
+            return (main.CommandResult.OTHER_FAILED,
+                    f'Error: you cannot provide the size percentage and maximum height at the same time.')
 
         max_x = 60 if args['size_percent'] is Ellipsis else None
         max_y = (args['max_y'] if args['max_y'] is not Ellipsis else 60) if args['size_percent'] is Ellipsis else None
@@ -600,11 +603,12 @@ class Plugin(main.Plugin):
         if args['url'] is not ...:
             missing_perms = await main.bot.acheck_permissions(msg, ['cancer.braille.url'], enable_local_bypass=False)
             if missing_perms:
-                return f'@{msg.user}, You are missing the "cancer.braille.url" permission to use the url argument.'
+                return (main.CommandResult.OTHER_FAILED,
+                        f'@{msg.user}, You are missing the "cancer.braille.url" permission to use the url argument.')
 
         url = args['url'] if args['url'] is not ... else None
         if url and url.startswith('file://'):
-            return f'@{msg.user}, you can\'t do this BabyRage'
+            return main.CommandResult.OTHER_FAILED, f'@{msg.user}, you can\'t do this BabyRage'
 
         if args['emote'] is not ...:
             channel_id = None
@@ -621,7 +625,7 @@ class Plugin(main.Plugin):
                 else:
                     async with aiohttp.request('get', f'https://api.ivr.fi/twitch/resolve/{channel}') as req:
                         if req.status == 404:
-                            return f'@{msg.user}, {channel}: channel not found'
+                            return main.CommandResult.OTHER_FAILED, f'@{msg.user}, {channel}: channel not found'
                         data = await req.json()
                         channel_id = data['id']
 
@@ -629,7 +633,8 @@ class Plugin(main.Plugin):
             if emote_found:
                 url = emote_found.get_url('3x')
             else:
-                return f'@{msg.user}, Invalid url, couldn\'t find an emote matching this.'
+                return (main.CommandResult.OTHER_FAILED,
+                        f'@{msg.user}, Invalid url, couldn\'t find an emote matching this.')
         # endregion
         img = await braille.download_image(url)
         img: Image.Image
@@ -725,14 +730,14 @@ class Plugin(main.Plugin):
 
     async def c_link_issue(self, msg: main.StandardizedMessage):
         if msg.user not in self.issue_linker_optin:
-            return
+            return main.CommandResult.NOT_WHITELISTED, None
         valid_issue_links = ISSUE_PATTERN.findall(msg.text)
         if not valid_issue_links:
-            return
+            return main.CommandResult.OTHER_FILTERED, None
         links = []
         for repo, issue in valid_issue_links:
             repo = REPO_MAP.get(repo.casefold(), repo)
             if '/' not in repo:
                 continue
             links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
-        return ' '.join(links)
+        return (main.CommandResult.OK, ' '.join(links)) if links else (main.CommandResult.OTHER_FILTERED, None)
