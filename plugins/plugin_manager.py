@@ -86,6 +86,7 @@ class CommandBlacklistMiddleware(twitchirc.AbstractMiddleware):
             log('info', f'User {message.user} attempted to call command {command.chat_command} in channel '
                         f'{message.channel} where it is blacklisted. (platform {message.platform!r})')
             event.cancel()
+            return
         prefix = main.bot.get_prefix(message.channel, message.platform, message)
         invocation = message.text.split(' ')[0].replace(prefix, '', 1)
         log('warn', repr(invocation))
