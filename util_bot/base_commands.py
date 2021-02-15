@@ -13,6 +13,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import typing
+
 import twitchirc
 
 import util_bot
@@ -30,10 +32,25 @@ async def command_perm(msg: StandardizedMessage):
     g.add_argument('-l', '--list', metavar='USER', const=msg.user, default=None, nargs='?', dest='list')
     g.add_argument('-f', '--flush', action='store_true', dest='flush')
     g.add_argument('-h', '--help', action='store_true', dest='help')
+
+    p.add_argument('-c', '--command', action='store_true', nargs=2, dest='update_for_command')
     args = p.parse_args(args=msg.text.split(' ')[1:])
     if args is None or args.help:
         usage = f'@{msg.user} {p.format_usage()}'
         return usage
+    if args.update_for_command:
+        cmd_name = (args.add and args.add[1]) or (args.remove and args.remove[1])
+        cmd: typing.Optional[util_bot.Command] = None
+        for command in util_bot.bot.commands:
+            if command.chat_command == cmd_name or cmd_name in command.aliases:
+                cmd = command
+                break
+        if cmd:
+            args.add = args.add and (args.add[0], ','.join(cmd.permissions_required))
+            args.remove = args.remove and (args.remove[0], ','.join(cmd.permissions_required))
+        else:
+            return f'@{msg.user}, {cmd_name!r}: command not found.'
+
     if args.add:
         return await _perm_add(args, msg)
     elif args.remove:
