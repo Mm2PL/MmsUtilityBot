@@ -33,7 +33,7 @@ async def command_perm(msg: StandardizedMessage):
     g.add_argument('-f', '--flush', action='store_true', dest='flush')
     g.add_argument('-h', '--help', action='store_true', dest='help')
 
-    p.add_argument('-c', '--command', action='store_true', nargs=2, dest='update_for_command')
+    p.add_argument('-c', '--command', action='store_true', dest='update_for_command')
     args = p.parse_args(args=msg.text.split(' ')[1:])
     if args is None or args.help:
         usage = f'@{msg.user} {p.format_usage()}'
