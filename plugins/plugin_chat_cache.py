@@ -51,7 +51,7 @@ class Plugin(main.Plugin):
         # self.max_cache_length = {
         #     # 'channel': 300
         # }
-        self.max_cache_length = defaultdict(lambda: 500)
+        self.max_cache_length = defaultdict(lambda: 10_000)
         self.cache = {
             # 'channel': [
             #     # [message, time.time()]  # message, timestamp
