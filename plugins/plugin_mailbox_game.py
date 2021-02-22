@@ -238,8 +238,6 @@ class Plugin(main.Plugin):
                    f'why bother with it then? FeelsBadMan'
         action_args['start_time'] = time.time()
         self.mailbox_games[msg.channel] = action_args
-        action_args['old_cache_length'] = plugin_chat_cache.max_cache_length[msg.channel]
-        plugin_chat_cache.max_cache_length[msg.channel] *= 10
         return f'Minigame starts now! Settings: {self._nice_minigame_settings(action_args)}'
 
     def _mailbox_draw(self, argv, msg):
@@ -250,7 +248,6 @@ class Plugin(main.Plugin):
 
         show_closed = False
         if 'end_time' not in settings:
-            plugin_chat_cache.max_cache_length[msg.channel] = settings['old_cache_length']
             settings['end_time'] = time.time()
             show_closed = True
 
@@ -305,7 +302,6 @@ class Plugin(main.Plugin):
             return f'@{msg.user}, Cannot stop the mailbox minigame, there is none running. FeelsBadMan'
         else:
             game = self.mailbox_games[msg.channel]
-            plugin_chat_cache.max_cache_length[msg.channel] = game['old_cache_length']
             if 'end_time' not in game:
                 game['end_time'] = time.time()
                 return 'Entries are now closed!'
