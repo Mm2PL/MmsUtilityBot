@@ -16,7 +16,7 @@
 import datetime
 import typing
 import unicodedata
-from typing import Dict, List, Any, Callable, Coroutine, Union, Generator
+from typing import Dict, List, Union, Generator
 
 import aiohttp
 import regex
@@ -49,8 +49,6 @@ log = util_bot.make_log_function(NAME)
 
 class Plugin(util_bot.Plugin):
     loggers: List['JustLogApi']
-    log_opers: Dict[str, Callable[[StandardizedMessage, List[str]],
-                                  Coroutine[Any, Any, typing.Tuple[util_bot.CommandResult, str]]]]
 
     def __init__(self, module, source):
         super().__init__(module, source)
@@ -87,7 +85,7 @@ class Plugin(util_bot.Plugin):
 
     @property
     def commands(self) -> typing.List[str]:
-        return super().commands
+        return ['logs']
 
     @property
     def on_reload(self):
@@ -208,7 +206,10 @@ class JustLogApi:
         async with aiohttp.request(
                 'get',
                 self.address + f'/channel/{channel}/user{"id" if is_userid else ""}/{user}{date_frag}',
-                params=params
+                params=params,
+                headers={
+                    'User-Agent': util_bot.USER_AGENT
+                }
         ) as req:
             if req.status in (404, 500):
                 return None
@@ -234,7 +235,10 @@ class JustLogApi:
         async with aiohttp.request(
                 'get',
                 self.address + f'/channel/{channel}{date_frag}',
-                params=params
+                params=params,
+                headers={
+                    'User-Agent': util_bot.USER_AGENT
+                }
         ) as req:
             if req.status in (404, 500):
                 return None
