@@ -169,8 +169,7 @@ class Plugin(util_bot.Plugin):
                   f'# Found {len(matched)} messages\n'
                   f'# {"=" * 80}\n')
         for i in matched:
-            badges = i.flags['badges'].split(',')
-            print(badges)
+            badges = i.flags.get('badges', '').split(',')
             chan_badges = ''
             for b in badges:
                 if b.startswith('subscriber'):
