@@ -115,8 +115,8 @@ class Plugin(util_bot.Plugin):
             }, defaults={
                 'user': None,
                 'regex': None,
-                'from': datetime.datetime.now() - datetime.timedelta(days=30.0),
-                'to': datetime.datetime.now(),
+                'from': datetime.datetime.utcnow() - datetime.timedelta(days=30.0),
+                'to': datetime.datetime.utcnow(),
 
                 'max': 100,
                 'channel': msg.channel
