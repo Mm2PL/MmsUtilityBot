@@ -382,7 +382,10 @@ class Plugin(main.Plugin):
         # region Help
         plugin_help.create_topic('braillefy url',
                                  'URL pointing to image you want to convert.',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'ascii url'
+                                 ])
         plugin_help.create_topic('braillefy emote',
                                  'Emote name (current channel or Twitch emote assumed) or '
                                  '#CHANNEL_NAME:EMOTE_NAME to use an emote from another channel.',
@@ -395,7 +398,11 @@ class Plugin(main.Plugin):
                                      'braillefy sensitivity_r',
                                      'braillefy sensitivity_g',
                                      'braillefy sensitivity_b',
-                                     'braillefy sensitivity_a'
+                                     'braillefy sensitivity_a',
+                                     'ascii sensitivity_r',
+                                     'ascii sensitivity_g',
+                                     'ascii sensitivity_b',
+                                     'ascii sensitivity_a',
                                  ])
         plugin_help.create_topic('braillefy reverse',
                                  'Should the output braille be reversed. '
@@ -412,11 +419,18 @@ class Plugin(main.Plugin):
                                      'braillefy max_x',
                                      'braillefy pad_y',
                                      'braillefy resize',
+                                     'ascii size_percent',
+                                     'ascii max_x',
+                                     'ascii pad_y',
+                                     'ascii resize',
                                  ])
         plugin_help.create_topic('braillefy hastebin',
                                  'Should the ascii be put into a hastebin?'
                                  'Usage: +hastebin',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'ascii hastebin'
+                                 ])
         plugin_help.create_topic('braillefy sobel',
                                  'Should a edge detection filter be applied before creating the ascii? '
                                  'See Wikipedia:Sobel. Usage: braillefy (...) +sobel')
