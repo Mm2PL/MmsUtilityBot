@@ -301,6 +301,7 @@ class Plugin(main.Plugin):
             required_permissions=['cancer.braille'],
             cooldown=main.CommandCooldown(15, 0, 0)
         )(self.c_braillefy)
+        self.command_braillefy.aliases = ['ascii']
 
         # region Fake Commands
         self._at_detection = main.bot.add_command(
