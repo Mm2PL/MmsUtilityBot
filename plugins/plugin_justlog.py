@@ -253,6 +253,7 @@ class JustLogApi:
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         days = (end - start).days
         last_date = start
+        utc_offset = datetime.datetime.now() - datetime.datetime.utcnow()
         for day in range(days, 0, -1):
             cdate = start + datetime.timedelta(days=day)
             if cdate.month != last_date.month or day == 0:
@@ -262,7 +263,8 @@ class JustLogApi:
                 if iterator is None:
                     break
                 for msg in iterator:
-                    tmi_sent_ts = datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
+                    tmi_sent_ts = (datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
+                                   - utc_offset)
                     if (start and tmi_sent_ts < start) or tmi_sent_ts > end:
                         continue
 
@@ -274,13 +276,15 @@ class JustLogApi:
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         days = (end - start).days
+        utc_offset = datetime.datetime.now() - datetime.datetime.utcnow()
         for day in range(days, 0, -1):
             cdate = start + datetime.timedelta(days=day)
             iterator = await self.logs_for_channel(channel, year=cdate.year, month=cdate.month, day=cdate.day)
             if iterator is None:
                 break
             for msg in iterator:
-                tmi_sent_ts = datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
+                tmi_sent_ts = (datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
+                               - utc_offset)
                 if (start and tmi_sent_ts < start) or tmi_sent_ts > end:
                     continue
 
