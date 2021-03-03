@@ -208,15 +208,7 @@ TIMEDELTA_REGEX = regex.compile(r'^(?:(?P<years>\d+)y(?:ears?)?)?'
 
 def _time_converter(converter, options, value):
     if converter == datetime.datetime:
-        if 'format' not in options:
-            options['format'] = '%Y-%m-%d %H:%M:%S.%f'
-
-        f = options['format']
-        try:
-            return datetime.datetime.strptime(value, f)
-        except Exception as e:
-            raise ParserError(f'Cannot parse {value!r} as {converter} with date string {options["format"]!r}') \
-                from e
+        return _datetime_from_string(options, value)
     elif converter == datetime.timedelta:
         if 'regex' in options:
             match = regex.match(options['regex'], value)
@@ -234,6 +226,65 @@ def _time_converter(converter, options, value):
         seconds += 60 * 60 * 24 * 7 * float(m.get('weeks') if m.get('weeks', None) is not None else 0)
         seconds += 60 * 60 * 24 * 365 * float(m.get('years') if m.get('years', None) is not None else 0)
         return datetime.timedelta(seconds=seconds)
+
+
+def _datetime_from_string(options, data: str) -> datetime.datetime:
+    try:
+        includes_end = options['includes_end']
+    except KeyError as e:
+        raise ValueError('Missing `includes_end` option') from e
+    formats = (
+        *options.get('formats', []),
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S.%fZ',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%Y-%m-%d %H:%M:%S.%fZ',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%m-%d %H:%M:%S',
+        '%Y-%m-%d',
+        '%m-%d',
+        '%m/%d',
+
+        '%d.%m.%Y',
+        '%d.%m.%Y %H:%M:%S',
+        '%x'
+    )
+    now = datetime.datetime.now()
+    for f in formats:
+        try:
+            o = datetime.datetime.strptime(data, f)
+            if o.year == 1900 and '%Y' not in f:
+                o = o.replace(year=now.year)
+            if o.month == 1 and '%m' not in f:
+                o = o.replace(month=now.month)
+            if o.day == 1 and '%d' not in f:
+                if includes_end:
+                    if o.month == 2:
+                        if (o.year % 4 == 0 and o.year % 100 != 0) or o.year % 400 == 0:
+                            o = o.replace(day=29)
+                        else:
+                            o = o.replace(day=28)
+                    else:
+                        if o.month in (1, 3, 5, 7, 8, 10, 12):
+                            o = o.replace(day=31)
+                        else:
+                            o = o.replace(day=30)
+                else:
+                    o = o.replace(day=1)
+
+            if o.hour == 0 and '%H' not in f:
+                o = o.replace(hour=23 if includes_end else 0)
+            if o.minute == 0 and '%M' not in f:
+                o = o.replace(minute=59 if includes_end else 0)
+            if o.second == 0 and '%S' not in f:
+                o = o.replace(second=59 if includes_end else 0)
+
+            return o
+        except ValueError:
+            continue
+
+    raise ParserError(f'Cannot parse {data!r} as a datetime.')
 
 
 def _regex_converter(converter, options, value):
