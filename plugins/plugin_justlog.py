@@ -36,7 +36,12 @@ except ImportError:
 
     plugin_hastebin: plugin_hastebin_module.Plugin
     exit(1)
+try:
+    import plugin_plugin_help as plugin_help
+except ImportError:
+    import plugins.plugin_help as plugin_help
 
+    exit()
 NAME = 'justlog'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
@@ -66,6 +71,65 @@ class Plugin(util_bot.Plugin):
             write_defaults=True,
             on_load=self._load_loggers,
             help_='List of JustLog instances'
+        )
+        plugin_help.add_manual_help_using_command(
+            'Searches known JustLog instances. '
+            'Usage: _logs regex:"REGULAR EXPRESSION" [user:USERNAME|#USERID] [from:DATETIME] [to:DATETIME] [max:COUNT] '
+            '[channel:USERNAME]',
+            aliases=[
+                'mb.logs'
+            ]
+        )(self.command_logs)
+
+        plugin_help.create_topic(
+            'logs regex',
+            'Regular expression to filter messages by. Required.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs regex'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs user',
+            'Filter logs by user. Can be an id prefixed with a "#" or a username.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs user'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs from',
+            'Beginning date for the search. Must be before `logs to`. '
+            'Default: current datetime - 30 days.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs from'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs to',
+            'Ending date for the search. Must be after `logs from`. '
+            'Default: current datetime',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs to'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs max',
+            'Maximum count of messages returned',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs max'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs channel',
+            'Channel to pull the logs from.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs channel'
+            ]
         )
         self.loggers = []
 
