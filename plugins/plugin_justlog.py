@@ -170,8 +170,8 @@ class Plugin(util_bot.Plugin):
                 # filter criteria
                 'user': str,
                 'regex': str,
-                'from': datetime.datetime,
-                'to': datetime.datetime,
+                'from': (datetime.datetime, {'includes_end': False}),
+                'to': (datetime.datetime, {'includes_end': True}),
 
                 # other settings
                 'max': int,  # max results
