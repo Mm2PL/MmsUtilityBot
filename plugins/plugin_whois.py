@@ -65,7 +65,6 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         args = arg_parser.parse_args(util_bot.delete_spammer_chrs(msg.text), {
             'id': int,
             'name': str,
-            'bans': bool,
             'channels': str,
 
             'verbose': bool,
@@ -75,7 +74,6 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             'id': None,
             'name': None,
 
-            'bans': False,
             'channels': '',
 
             'verbose': False,
@@ -103,8 +101,8 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             name = name.lstrip('#')
 
     else:
-        return (f'@{msg.user} {msg.text.split(" ")[0]} (name:TWITCH_USERNAME|id:TWITCH_ID) [+verbose] '
-                f'[channels:CHANNELS]. OR {msg.text.split(" ")[0]} TWITCH_USERNAME [+verbose] [channels:CHANNELS]')
+        return (f'@{msg.user} {msg.text.split(" ")[0]} (name:TWITCH_USERNAME|id:TWITCH_ID) [+verbose] OR '
+                f'{msg.text.split(" ")[0]} TWITCH_USERNAME [+verbose]')
 
     async with aiohttp.request('get', f'https://api.ivr.fi/twitch/resolve/{name}',
                                params=({'id': 1}) if id_ else {},
@@ -160,50 +158,6 @@ async def command_whois(msg: util_bot.StandardizedMessage):
                          f'Language: {bot["language"] if bot["language"] is not None else "<unknown>"}'
                          f'{last_active}')
 
-        banned_in = []
-
-        if args['channels']:
-            if args['channels'] == 'no':
-                banned_check_channels = []
-            else:
-                banned_check_channels = args['channels'].split(',')
-        else:
-            if args['verbose']:
-                banned_check_channels = util_bot.bot.channels_connected.copy()
-            else:
-                banned_check_channels = []
-
-        for ch in banned_check_channels.copy():
-            if ch == 'joined':
-                banned_check_channels.extend(util_bot.bot.channels_connected)
-                break
-
-        for ch in banned_check_channels:
-            ch = ch.strip('# ')
-
-            async with aiohttp.request('get', f'https://api.ivr.fi/twitch/banlookup/{data["login"]}/{ch}',
-                                       headers={
-                                           'User-Agent': 'Mm\'sUtilityBot/v1.0 (by Mm2PL), Twitch chat bot'
-                                       }) as req:
-                banned_data = await req.json()
-                print(banned_data)
-            if 'banned' in banned_data and banned_data['banned']:
-                if banned_data['isPermanent']:
-                    expiration_note = 'perma-ban'
-                else:
-                    expiration_note = f'lasts until {banned_data["expiresAt"].replace("T", " ").replace("Z", " UTC")}'
-                banned_in.append(ch + f'(since {banned_data["createdAt"].replace("T", " ").replace("Z", " UTC")},'
-                                      f'{expiration_note})')
-
-        print(banned_in)
-        if banned_in:
-            banned_str = 'They are banned in ' + ('#' + ', #'.join(banned_in))
-        elif banned_check_channels:
-            banned_str = 'They are banned in no known channels'
-        elif args['verbose']:
-            banned_str = 'Didn\'t check for channel bans'
-        else:
-            banned_str = ''
         info = (
             f'user {data["displayName"]}{login}',
             logo_warning,
@@ -212,7 +166,6 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             f'roles: {roles}',
             f'id: {data["id"]}',
             f'bio: {data["bio"].rstrip(" ,.") if data["bio"] is not None else "<blank>"}',
-            banned_str,
             bot_notes
         )
 
