@@ -391,6 +391,6 @@ class Plugin(main.Plugin):
         output = []
         for i in best:
             is_sub = any([i.startswith('subscriber') for i in i['msg'].flags['badges']])
-            output.append(f'{i["msg"].user}{"(S)" if is_sub else ""} ({i["quality"]}/3)')
+            output.append(f'@{i["msg"].user} {"(Sub)" if is_sub else ""} ({i["quality"]}/3)')
         return ', '.join(output)
     # endregion
