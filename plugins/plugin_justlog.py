@@ -222,7 +222,7 @@ class Plugin(util_bot.Plugin):
             if len(matched) >= count:
                 break
 
-            if regular_expr.match(i.text):
+            if regular_expr.search(i.text):
                 matched.append(i)
         return matched
 
