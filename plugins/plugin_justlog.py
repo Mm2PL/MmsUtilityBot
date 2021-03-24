@@ -227,11 +227,12 @@ class Plugin(util_bot.Plugin):
         return matched
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args):
-        output = (f'# {"=" * 80}\n'
+        output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
-                  f'# start date/time: {args["from"]}, end date/time: {args["to"]}\n'
-                  f'# {"=" * 80}\n')
+                  f'# start date/time: {args["from"]},'
+                  f'# end date/time: {args["to"]}\n'
+                  f'# {"=" * 78}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
             chan_badges = ''
