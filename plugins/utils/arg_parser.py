@@ -250,7 +250,7 @@ def _datetime_from_string(options, data: str) -> datetime.datetime:
         '%d.%m.%Y %H:%M:%S',
         '%x'
     )
-    now = datetime.datetime.now()
+    now = datetime.datetime.utcnow()
     for f in formats:
         try:
             o = datetime.datetime.strptime(data, f)
