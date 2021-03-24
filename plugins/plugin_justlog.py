@@ -206,7 +206,7 @@ class Plugin(util_bot.Plugin):
             end=args['to'],
             count=args['max']
         )
-        hastebin_link = await self._hastebin_result(matched)
+        hastebin_link = await self._hastebin_result(matched, args)
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
@@ -226,9 +226,11 @@ class Plugin(util_bot.Plugin):
                 matched.append(i)
         return matched
 
-    async def _hastebin_result(self, matched: List[StandardizedMessage]):
+    async def _hastebin_result(self, matched: List[StandardizedMessage], args):
         output = (f'# {"=" * 80}\n'
-                  f'# Found {len(matched)} messages\n'
+                  f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
+                  f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
+                  f'# start date/time: {args["from"]}, end date/time: {args["to"]}\n'
                   f'# {"=" * 80}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
