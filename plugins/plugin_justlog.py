@@ -164,7 +164,7 @@ class Plugin(util_bot.Plugin):
     async def command_logs(self, msg: util_bot.StandardizedMessage):
         if msg.platform != util_bot.Platform.TWITCH:
             return (util_bot.CommandResult.OTHER_FILTERED,
-                    f'{msg.user_mention} This command only works on Twitch!')
+                    f'{msg.user_mention} This command only works on Twitch! Use whispers if needed.')
         try:
             args = arg_parser.parse_args(msg.text, {
                 # filter criteria
@@ -187,7 +187,7 @@ class Plugin(util_bot.Plugin):
             })
         except arg_parser.ParserError as e:
             return (util_bot.CommandResult.OTHER_FAILED,
-                    f'{msg.user_mention} {e.message}')
+                    f'@{msg.user} {e.message}')
 
         logger = await self._justlog_for_channel(args['channel'])
         if not logger:
