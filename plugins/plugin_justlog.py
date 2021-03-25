@@ -271,10 +271,10 @@ class Plugin(util_bot.Plugin):
 
     def _pretty_badges(self, badges) -> str:
         return (
-            ((unicodedata.lookup("CROSSED SWORDS") + " ") if "moderator/1" in badges else "")
-            + ((unicodedata.lookup("GEM STONE") + " ") if "vip/1" in badges else "")
-            + ((unicodedata.lookup("CINEMA") + " ") if "broadcaster/1" in badges else "")
-            + ((unicodedata.lookup("WRENCH") + " ") if "staff/1" in badges else "")
+                ((unicodedata.lookup("CROSSED SWORDS") + " ") if "moderator/1" in badges else "")
+                + ((unicodedata.lookup("GEM STONE") + " ") if "vip/1" in badges else "")
+                + ((unicodedata.lookup("CINEMA") + " ") if "broadcaster/1" in badges else "")
+                + ((unicodedata.lookup("WRENCH") + " ") if "staff/1" in badges else "")
         )
 
 
