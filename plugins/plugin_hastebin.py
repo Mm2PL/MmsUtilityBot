@@ -13,7 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import queue
+import datetime
 import typing
 
 import aiohttp
@@ -70,8 +70,17 @@ class Plugin(main.Plugin):
     def hastebin_addr(self):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.hastebin_addr_setting)
 
-    async def upload(self, data: str):
-        async with aiohttp.request('post', f'{self.hastebin_addr}documents', data=data.encode('utf-8')) as r:
+    async def upload(self, data: str, expire_date: typing.Optional[datetime.datetime] = None):
+        params = {}
+        if expire_date:
+            params['expire_time'] = expire_date.isoformat()
+
+        async with aiohttp.request(
+                'post',
+                f'{self.hastebin_addr}documents',
+                data=data.encode('utf-8'),
+                params=params
+        ) as r:
             response = await r.json()
             return response['key']
 
