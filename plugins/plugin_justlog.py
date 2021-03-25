@@ -170,28 +170,33 @@ class Plugin(util_bot.Plugin):
             return (util_bot.CommandResult.OTHER_FILTERED,
                     f'{msg.user_mention} This command only works on Twitch! Use whispers if needed.')
         try:
-            args = arg_parser.parse_args(msg.text, {
-                # filter criteria
-                'user': str,
-                'regex': str,
-                'from': (datetime.datetime, {'includes_end': False}),
-                'to': (datetime.datetime, {'includes_end': True}),
+            args = arg_parser.parse_args(
+                msg.text,
+                {
+                    # filter criteria
+                    'user': str,
+                    'regex': str,
+                    'from': (datetime.datetime, {'includes_end': False}),
+                    'to': (datetime.datetime, {'includes_end': True}),
 
-                # other settings
-                'max': int,  # max results
-                'channel': str,
+                    # other settings
+                    'max': int,  # max results
+                    'channel': str,
 
-                'simple': bool
-            }, defaults={
-                'user': None,
-                'regex': None,
-                'from': datetime.datetime.utcnow() - datetime.timedelta(days=30.0),
-                'to': datetime.datetime.utcnow(),
+                    'simple': bool
+                },
+                defaults={
+                    'user': None,
+                    'regex': None,
+                    'from': datetime.datetime.utcnow() - datetime.timedelta(days=30.0),
+                    'to': datetime.datetime.utcnow(),
 
-                'max': 100,
-                'channel': msg.channel,
-                'simple': False
-            })
+                    'max': 100,
+                    'channel': msg.channel,
+                    'simple': False
+                },
+                strict_escapes=False
+            )
         except arg_parser.ParserError as e:
             return (util_bot.CommandResult.OTHER_FAILED,
                     f'@{msg.user} {e.message}')
