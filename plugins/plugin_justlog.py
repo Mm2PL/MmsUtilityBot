@@ -183,7 +183,8 @@ class Plugin(util_bot.Plugin):
                     'max': int,  # max results
                     'channel': str,
 
-                    'simple': bool
+                    'simple': bool,
+                    'expire': datetime.timedelta
                 },
                 defaults={
                     'user': None,
@@ -193,7 +194,8 @@ class Plugin(util_bot.Plugin):
 
                     'max': 100,
                     'channel': msg.channel,
-                    'simple': False
+                    'simple': False,
+                    'expire': datetime.timedelta(days=7)
                 },
                 strict_escapes=False
             )
@@ -217,7 +219,7 @@ class Plugin(util_bot.Plugin):
             end=args['to'],
             count=args['max']
         )
-        hastebin_link = await self._hastebin_result(matched, args)
+        hastebin_link = await self._hastebin_result(matched, args, datetime.datetime.utcnow() + args['expire'])
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
@@ -244,9 +246,9 @@ class Plugin(util_bot.Plugin):
             output += f'[{dt}] #{msg.channel} {msg.user}: {msg.text}\n'
         return output
 
-    async def _hastebin_result(self, matched: List[StandardizedMessage], args):
+    async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on):
         if args['simple']:
-            return await plugin_hastebin.upload(self._convert_to_simple_text(matched))
+            return await plugin_hastebin.upload(self._convert_to_simple_text(matched), expire_on)
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]},\n'
@@ -254,6 +256,7 @@ class Plugin(util_bot.Plugin):
                   f'# Start date/time: {args["from"]},\n'
                   f'# End date/time: {args["to"]},\n'
                   f'# Search regex: {args["regex"].pattern}\n'
+                  f'# This paste expires on: {expire_on} or in {args["expire"]}\n'
                   f'# {"=" * 78}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
@@ -268,7 +271,7 @@ class Plugin(util_bot.Plugin):
                        f'{self._pretty_badges(badges)}'
                        f'{chan_badges}'
                        f'<{i.user}> {i.text}\n')
-        return await plugin_hastebin.upload(output)
+        return await plugin_hastebin.upload(output, expire_on)
 
     def _pretty_badges(self, badges) -> str:
         return (
