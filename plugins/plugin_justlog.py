@@ -131,6 +131,10 @@ class Plugin(util_bot.Plugin):
                 'mb.logs channel'
             ]
         )
+        plugin_help.create_topic(
+            'logs simple',
+            'Use JustLog\'s simple text format.'
+        )
         self.loggers = []
 
     def _load_loggers(self, settings: plugin_manager.ChannelSettings):
@@ -175,7 +179,9 @@ class Plugin(util_bot.Plugin):
 
                 # other settings
                 'max': int,  # max results
-                'channel': str
+                'channel': str,
+
+                'simple': bool
             }, defaults={
                 'user': None,
                 'regex': None,
@@ -183,7 +189,8 @@ class Plugin(util_bot.Plugin):
                 'to': datetime.datetime.utcnow(),
 
                 'max': 100,
-                'channel': msg.channel
+                'channel': msg.channel,
+                'simple': False
             })
         except arg_parser.ParserError as e:
             return (util_bot.CommandResult.OTHER_FAILED,
@@ -226,7 +233,16 @@ class Plugin(util_bot.Plugin):
                 matched.append(i)
         return matched
 
+    def _convert_to_simple_text(self, matched: List[StandardizedMessage]) -> str:
+        output = ''
+        for msg in matched:
+            dt = datetime.datetime.utcfromtimestamp(int(msg.flags["tmi-sent-ts"]) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            output += f'[{dt}] #{msg.channel} {msg.user}: {msg.text}'
+        return output
+
     async def _hastebin_result(self, matched: List[StandardizedMessage], args):
+        if args['simple']:
+            return await plugin_hastebin.upload(self._convert_to_simple_text(matched))
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
@@ -237,17 +253,24 @@ class Plugin(util_bot.Plugin):
             badges = i.flags.get('badges', '').split(',')
             chan_badges = ''
             for b in badges:
-                if b.startswith('subscriber'):
+                if b.startswith('subscriber/'):
                     chan_badges += b.replace('subscriber/', '') + unicodedata.lookup('GLOWING STAR')
-                elif b.startswith('bits'):
+                elif b.startswith('bits/'):
                     chan_badges += b.replace('bits/', '') + unicodedata.lookup('MONEY BAG')
-            output += (f'[{datetime.datetime.fromtimestamp(int(i.flags["tmi-sent-ts"]) / 1000).isoformat()}] '
-                       f'{(unicodedata.lookup("CROSSED SWORDS") + " ") if "moderator/1" in badges else ""}'
-                       f'{(unicodedata.lookup("GEM STONE") + " ") if "vip/1" in badges else ""}'
-                       f'{(unicodedata.lookup("WRENCH") + " ") if "staff/1" in badges else ""}'
+            dt = datetime.datetime.utcfromtimestamp(int(i.flags["tmi-sent-ts"]) / 1000).isoformat(sep=" ")
+            output += (f'[{dt}] '
+                       f'{self._pretty_badges(badges)}'
                        f'{chan_badges}'
                        f'<{i.user}> {i.text}\n')
         return await plugin_hastebin.upload(output)
+
+    def _pretty_badges(self, badges) -> str:
+        return (
+            ((unicodedata.lookup("CROSSED SWORDS") + " ") if "moderator/1" in badges else "")
+            + ((unicodedata.lookup("GEM STONE") + " ") if "vip/1" in badges else "")
+            + ((unicodedata.lookup("CINEMA") + " ") if "broadcaster/1" in badges else "")
+            + ((unicodedata.lookup("WRENCH") + " ") if "staff/1" in badges else "")
+        )
 
 
 class JustLogApi:
