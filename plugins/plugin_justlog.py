@@ -249,10 +249,11 @@ class Plugin(util_bot.Plugin):
             return await plugin_hastebin.upload(self._convert_to_simple_text(matched))
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
-                  f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
-                  f'# start date/time: {args["from"]},\n'
-                  f'# end date/time: {args["to"]},\n'
-                  f'# search regex: {args["regex"].pattern}\n'
+                  f'# Channel: #{args["channel"]},\n'
+                  f'# User: {args["user"] or "[any]"}\n'
+                  f'# Start date/time: {args["from"]},\n'
+                  f'# End date/time: {args["to"]},\n'
+                  f'# Search regex: {args["regex"].pattern}\n'
                   f'# {"=" * 78}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
