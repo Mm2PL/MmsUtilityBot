@@ -175,7 +175,7 @@ class Plugin(util_bot.Plugin):
                 {
                     # filter criteria
                     'user': str,
-                    'regex': str,
+                    'regex': regex.compile,
                     'from': (datetime.datetime, {'includes_end': False}),
                     'to': (datetime.datetime, {'includes_end': True}),
 
@@ -208,12 +208,11 @@ class Plugin(util_bot.Plugin):
         if not args['regex']:
             return (util_bot.CommandResult.OTHER_FAILED,
                     'Missing required argument "regex"')
-        expr = regex.compile(args['regex'])
         matched = await self._filter_messages(
             logger,
             channel=args['channel'],
             user=args['user'],
-            regular_expr=expr,
+            regular_expr=args['regex'],
             start=args['from'],
             end=args['to'],
             count=args['max']
@@ -253,7 +252,7 @@ class Plugin(util_bot.Plugin):
                   f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
                   f'# start date/time: {args["from"]},\n'
                   f'# end date/time: {args["to"]},\n'
-                  f'# search regex: {args["regex"]}\n'
+                  f'# search regex: {args["regex"].pattern}\n'
                   f'# {"=" * 78}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
