@@ -237,7 +237,7 @@ class Plugin(util_bot.Plugin):
         output = ''
         for msg in matched:
             dt = datetime.datetime.utcfromtimestamp(int(msg.flags["tmi-sent-ts"]) / 1000).strftime("%Y-%m-%d %H:%M:%S")
-            output += f'[{dt}] #{msg.channel} {msg.user}: {msg.text}'
+            output += f'[{dt}] #{msg.channel} {msg.user}: {msg.text}\n'
         return output
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args):
