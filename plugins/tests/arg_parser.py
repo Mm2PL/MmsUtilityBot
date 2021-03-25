@@ -18,6 +18,8 @@ import re
 import unittest
 from unittest import TestCase
 
+import regex
+
 try:
     from ..utils import arg_parser
 except ImportError:
@@ -265,6 +267,7 @@ class ConverterTests(TestCase):
             self.fail()
 
     # endregion
+
     # region regex
     def test_converter_regex(self):
         test_string = 'this is a test'
@@ -308,6 +311,21 @@ class ConverterTests(TestCase):
         except arg_parser.ParserError:
             return
         self.fail()
+
+    # endregion
+
+    # region regular expression
+    def test_regular_expression(self):
+        self.assertEqual(arg_parser._regular_expression_converter(re.compile, {}, 'test').pattern, 'test')
+
+        python_flags = arg_parser._regular_expression_converter(re.compile, {}, '(?i)test')
+        self.assertEqual(python_flags.pattern, '(?i)test')
+        self.assertEqual(python_flags.flags, regex.I | regex.U | regex.V0)
+
+    def test_regular_expression_slash_syntax_flags(self):
+        slash_syntax_flags = arg_parser._regular_expression_converter(re.compile, {}, '/test/i')
+        self.assertEqual(slash_syntax_flags.pattern, '(?i)test')
+        self.assertEqual(slash_syntax_flags.flags, regex.I | regex.U | regex.V0)
 
     # endregion
 

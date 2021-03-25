@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
+import re
 import typing
 
 import regex
@@ -312,10 +313,24 @@ def _regex_converter(converter, options, value):
         raise ParserError(f'Cannot parse {value!r} as {converter} without a regular expression.')
 
 
+def _regular_expression_converter(converter, options, pattern):
+    if pattern.startswith('/') and pattern.count('/') >= 2:
+        pattern = pattern.lstrip('/')
+        flags, p = pattern[::-1].split('/', 1)
+
+        pattern = f'(?{flags}){p[::-1]}'
+    try:
+        return regex.compile(pattern)
+    except Exception as e:
+        raise ParserError(f'Cannot parse {pattern!r} as a regular expression.') from e
+
+
 known_converters: typing.Dict[typing.Union[typing.Type, str], typing.Callable] = {
     datetime.timedelta: _time_converter,
     datetime.datetime: _time_converter,
     'regex': _regex_converter,
+    regex.compile: _regular_expression_converter,
+    re.compile: _regular_expression_converter
 }
 
 
