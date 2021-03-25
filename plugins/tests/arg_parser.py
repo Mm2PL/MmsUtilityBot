@@ -26,6 +26,7 @@ except ImportError:
 
 class GeneralTests(TestCase):
     """Tests that check the parser behaviour using the public interface."""
+
     def test_parse_args_unknown(self):
         try:
             arg_parser.parse_args('this is a simple test', args_types={})
@@ -101,6 +102,7 @@ class GeneralTests(TestCase):
 
 class ConverterTests(TestCase):
     """Tests that check if converters work"""
+
     def test_parse_args_str(self):
         output = arg_parser.parse_args('test=value', args_types={'test': str})
         self.assertEqual(output, {'test': 'value'})
@@ -230,20 +232,33 @@ class ConverterTests(TestCase):
 
     def test_converter_datetime(self):
         now = datetime.datetime.now()
-        self.assertEqual(arg_parser._time_converter(datetime.datetime, {},
-                                                    now.strftime('%Y-%m-%d %H:%M:%S.%f')),
-                         now)
+        self.assertEqual(
+            arg_parser._time_converter(
+                datetime.datetime,
+                {'includes_end': True},
+                now.strftime('%Y-%m-%d %H:%M:%S.%f')
+            ),
+            now
+        )
 
         now = datetime.datetime.fromtimestamp(round(now.timestamp()))
-        self.assertEqual(arg_parser._time_converter(datetime.datetime, {'format': '%Y-%m-%d %H:%M:%S'},
-                                                    now.strftime('%Y-%m-%d %H:%M:%S')),
-                         now)
+        self.assertEqual(
+            arg_parser._time_converter(
+                datetime.datetime,
+                {'includes_end': True, 'format': '%Y-%m-%d %H:%M:%S'},
+                now.strftime('%Y-%m-%d %H:%M:%S')
+            ),
+            now
+        )
 
     def test_converter_datetime_no_match(self):
         now = datetime.datetime.fromtimestamp(round(datetime.datetime.now().timestamp()))
         try:
-            arg_parser._time_converter(datetime.datetime, {'format': '%H %M %S'},
-                                       now.strftime('%Y-%m-%d %H:%M:%S'))
+            arg_parser._time_converter(
+                datetime.datetime,
+                {'includes_end': True, 'format': '%H %M %S'},
+                now.strftime('%Y-%m-%d %H:%M:%S')
+            )
         except arg_parser.ParserError:
             pass
         else:
@@ -299,6 +314,7 @@ class ConverterTests(TestCase):
 
 class InternalTests(TestCase):
     """Tests that check the internals using the internal interface"""
+
     # region split test
     def test_split_args(self):
         self.assertEqual(arg_parser._split_args('this is a simple test'), ['this', 'is', 'a', 'simple', 'test'])

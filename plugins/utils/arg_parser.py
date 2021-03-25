@@ -229,27 +229,31 @@ def _time_converter(converter, options, value):
 
 
 def _datetime_from_string(options, data: str) -> datetime.datetime:
-    try:
-        includes_end = options['includes_end']
-    except KeyError as e:
-        raise ValueError('Missing `includes_end` option') from e
-    formats = (
-        *options.get('formats', []),
-        '%Y-%m-%dT%H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S.%fZ',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%d %H:%M:%S.%fZ',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%d %H:%M',
-        '%m-%d %H:%M:%S',
-        '%Y-%m-%d',
-        '%m-%d',
-        '%m/%d',
+    includes_end = options.get('includes_end')
+    if includes_end is None:
+        raise ValueError('Missing `includes_end` option')
 
-        '%d.%m.%Y',
-        '%d.%m.%Y %H:%M:%S',
-        '%x'
-    )
+    if 'format' in options:
+        formats = (options['format'],)
+    elif 'formats' in options:
+        formats = options['formats']
+    else:
+        formats = (
+            '%Y-%m-%dT%H:%M:%S.%f',
+            '%Y-%m-%dT%H:%M:%S.%fZ',
+            '%Y-%m-%d %H:%M:%S.%f',
+            '%Y-%m-%d %H:%M:%S.%fZ',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d %H:%M',
+            '%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%m-%d',
+            '%m/%d',
+
+            '%d.%m.%Y',
+            '%d.%m.%Y %H:%M:%S',
+            '%x'
+        )
     now = datetime.datetime.utcnow()
     for f in formats:
         try:
