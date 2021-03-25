@@ -252,7 +252,8 @@ class Plugin(util_bot.Plugin):
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]}, user: {args["user"] or "[any]"}\n'
                   f'# start date/time: {args["from"]},\n'
-                  f'# end date/time: {args["to"]}\n'
+                  f'# end date/time: {args["to"]},\n'
+                  f'# search regex: {args["regex"]}\n'
                   f'# {"=" * 78}\n')
         for i in matched:
             badges = i.flags.get('badges', '').split(',')
