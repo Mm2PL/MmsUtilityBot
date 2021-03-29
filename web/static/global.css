@@ -16,6 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+
+/*region Variables*/
+:root {
+    --highlight-color: #64DD17;
+    /*--background-color: #2C2C2C;*/
+    --background-color: #2C2C2C;
+    --foreground-color: #FFFFFF;
+}
+
+/*endregion*/
+
+/*region Font definitions*/
 @font-face {
     font-family: 'Fira Code';
     src: url(/static/FiraCode-Retina.woff2), url(/static/FiraCode-Regular.woff2);
@@ -26,20 +38,14 @@
     src: url(/static/FiraCode-VF.woff2);
 }
 
+/*endregion*/
+
+/*region Apply Fonts*/
 *,
 ::before,
 ::after {
     box-sizing: border-box;
     -webkit-font-smoothing: antialiased;
-}
-
-:focus {
-    outline: none;
-}
-
-body {
-    margin: 2em;
-    font-family: sans-serif;
 }
 
 code {
@@ -52,11 +58,39 @@ code {
     }
 }
 
-body {
-    color: #FAFAFA;
-    background: #212121;
+/*endregion*/
+
+:focus {
+    outline: none;
 }
 
+body {
+    margin: 2em;
+    font-family: sans-serif;
+}
+
+/*region Colors*/
+body {
+    /*color: #FAFAFA;*/
+    color: var(--foreground-color);
+    /*background: #212121;*/
+    background: var(--background-color);
+}
+
+a {
+    /*color: #64DD17;*/
+    color: var(--highlight-color);
+    text-decoration: none;
+}
+
+thead,
+tfoot {
+    color: #fff;
+}
+
+/*endregion*/
+
+/*region Images */
 .peepoSadDank {
     background: url(https://cdn.frankerfacez.com/dc/5a/dc5ab2633c6bd46cf17d37cd0d31d72f.png) no-repeat;
     background-size: 1rem;
@@ -73,11 +107,9 @@ body {
     display: inline-block;
 }
 
-a {
-    color: #64DD17;
-    text-decoration: none;
-}
+/*endregion*/
 
+/*region Buttons*/
 button.big_button {
     box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
     font-family: sans-serif;
@@ -100,6 +132,8 @@ button.big_button:hover {
     background: #BDBDBD;
 }
 
+/*endregion*/
+
 h1,
 h2,
 h3 {
@@ -117,15 +151,11 @@ li h3 {
     cursor: pointer;
 }
 
-table, td, th{
-    border: 1px solid #fff;
-}
+/*table, td, th {*/
+/*    border: 1px solid #fff;*/
+/*}*/
 
-thead,
-tfoot {
-    color: #fff;
-}
-
+/*region Text areas*/
 textarea, input {
     background-color: #212121;
     color: #ffffff;
@@ -140,6 +170,9 @@ textarea:disabled, input:disabled {
     color: #aaaaaa;
 }
 
+/*endregion*/
+
+/*region Navigation Stuff*/
 .flash_box {
     background-color: #006600;
     border: solid 1vh #00bb00;
@@ -161,3 +194,5 @@ nav {
 .nav_login {
     text-align: right;
 }
+
+/*endregion*/
