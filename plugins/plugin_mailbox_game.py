@@ -294,8 +294,14 @@ class Plugin(main.Plugin):
                     f'No one guessed {"even remotely " if settings["find_best"] else ""}right. {db_notif}')
 
         else:
-            return (f'{"(automatically closed the game)" if show_closed else ""}'
-                    f'Best guesses are {self._nice_best_guesses(best)}. {db_notif}')
+            message = (f'{"(automatically closed the game)" if show_closed else ""}'
+                       f'Best guesses are {self._nice_best_guesses(best)}. {db_notif}')
+            if len(message) > 500:
+                msgs = []
+                for i in range(1, math.ceil(len(message) / 500) + 1):
+                    msgs.append(message[(i - 1) * 500:i * 500])
+                return msgs
+            return message
 
     def _mailbox_stop(self, msg):
         if msg.channel not in self.mailbox_games:
