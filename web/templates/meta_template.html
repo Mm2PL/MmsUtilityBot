@@ -19,12 +19,16 @@
 
 <!doctype html>
 <!--suppress HtmlUnknownTarget -->
-<title>{% block title %}{% endblock %} - Mm's utility bot</title>
-{% if config["DEBUG"] %}
-    <link rel="stylesheet" href="{{ url_for("static", filename="global.css") }}">
-{% else %}
-    <link rel="stylesheet" href="/global.css">
-{% endif %}
+<head>
+    <title>{% block title %}{% endblock %} - Mm's utility bot</title>
+    {% if config["DEBUG"] %}
+        <link rel="stylesheet" href="{{ url_for("static", filename="global.css") }}">
+    {% else %}
+        <link rel="stylesheet" href="/global.css">
+    {% endif %}
+
+    {% block extrahead %}{% endblock %}
+</head>
 <nav class="navigation_block">
     <div>
         <a href="/">Mm's Utility bot</a>
