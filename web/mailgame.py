@@ -111,6 +111,12 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                     Markup('<br>'.join([
                         f"{i['quality']}/3 {escape(i['msg'])}" for i in game.winners
                     ]))
+                ],
+                [
+                    'All guesses',
+                    Markup('<br>'.join([
+                        f"{i['quality']}/3 {escape(i['msg'])}" for i in game.guesses
+                    ]))
                 ]
             ]
         return tables.render_table(
