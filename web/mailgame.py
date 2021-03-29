@@ -18,7 +18,7 @@
 import typing
 
 import twitchirc
-from flask import session, render_template
+from flask import session, render_template, jsonify
 from markupsafe import Markup, escape
 
 if typing.TYPE_CHECKING:
@@ -125,3 +125,28 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 ('value', 'value'),
             ]
         )
+
+    @register_endpoint('/mailgame/export')
+    def list_games_api():
+        """
+        Lists all saved mailgame records. If a guess doesn't match <code>\\d{1,2} \\d{1,2} \\d{1,2}</code>, skip it.
+
+        :return: An Array of Object with 'id', 'channel', 'scores', 'settings', 'best_guesses' and 'all_guesses' \
+        properties
+        """
+        if not check_auth():
+            return render_template('no_perms.html')
+        with session_scope() as sesh:
+            games: typing.List[MailboxGame] = sesh.query(MailboxGame).all()
+            output = [
+                {
+                    'id': i.id,
+                    'channel': i.channel.last_known_username,
+                    'scores': i.scores,
+                    'settings': i.settings,
+                    'best_guesses': i.winners,
+                    'all_guesses': i.guesses if i.guesses_raw else 'Unavailable'
+                }
+                for i in games
+            ]
+        return jsonify(output)
