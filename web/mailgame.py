@@ -108,7 +108,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 [
                     'Best guesses',
                     Markup('<br>'.join([
-                        f"{i['quality']}/3 {i['msg']}" for i in game.winners
+                        f"{i['quality']}/3 {escape(i['msg'])}" for i in game.winners
                     ]))
                 ]
             ]
