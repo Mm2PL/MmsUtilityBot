@@ -70,7 +70,7 @@ __meta_data__ = {
     ]
 }
 log = main.make_log_function(NAME)
-GUESS_PATTERN = re.compile(r'(\d{1,2}[,-]? ?)(\d{1,2}[,-]? ?)(\d{1,2}[,-]? ?)')
+GUESS_PATTERN = re.compile(r'^(\d{1,2}) (\d{1,2}) (\d{1,2})$')
 
 
 class Plugin(main.Plugin):
