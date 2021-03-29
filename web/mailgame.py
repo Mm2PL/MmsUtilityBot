@@ -19,7 +19,7 @@ import typing
 
 import twitchirc
 from flask import session, render_template
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 if typing.TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
@@ -41,7 +41,8 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
     def check_auth() -> bool:
         uid = session.get('user_id', None)
         if uid is not None:
-            user = main_module.User.get_by_twitch_id(uid)
+            with session_scope() as s:
+                user = User._get_by_twitch_id(id_, s)
             if (f'mailgame.view' in user.permissions
                     or twitchirc.GLOBAL_BYPASS_PERMISSION in user.permissions):
                 return True
