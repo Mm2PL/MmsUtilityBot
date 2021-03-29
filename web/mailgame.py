@@ -42,7 +42,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
         uid = session.get('user_id', None)
         if uid is not None:
             with session_scope() as s:
-                user = User._get_by_twitch_id(id_, s)
+                user = User._get_by_twitch_id(uid, s)
             if (f'mailgame.view' in user.permissions
                     or twitchirc.GLOBAL_BYPASS_PERMISSION in user.permissions):
                 return True
