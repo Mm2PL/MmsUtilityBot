@@ -114,7 +114,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 ],
                 [
                     'All guesses',
-                    Markup('<br>'.join(escape(game.guesses)))
+                    Markup('<br>'.join([escape(i) for i in game.guesses])) if game.guesses_raw else 'Unavailable'
                 ]
             ]
         return tables.render_table(
