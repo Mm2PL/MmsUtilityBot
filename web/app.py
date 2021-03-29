@@ -402,11 +402,11 @@ def twitch_logged_in():
         if 'redirect_to' in j_value:
             redirect_to = j_value['redirect_to']
     if redirect_to:
-        flash('Authorized successfully.')
+        flash('Authenticated successfully.')
         return redirect(redirect_to)
     return jsonify({
         'status': 200,
-        'message': 'Authorized successfully.'
+        'message': 'Authenticated successfully.'
     })
 
 
