@@ -74,8 +74,9 @@ class Plugin(util_bot.Plugin):
         )
         plugin_help.add_manual_help_using_command(
             'Searches known JustLog instances. '
-            'Usage: _logs regex:"REGULAR EXPRESSION" [user:USERNAME|#USERID] [from:DATETIME] [to:DATETIME] [max:COUNT] '
-            '[channel:USERNAME]',
+            'Usage: _logs regex:"REGULAR EXPRESSION" [user:USERNAME|#USERID] '
+            '[from:DATETIME|lookback:TIMEDELTA] [to:DATETIME] [max:COUNT] '
+            '[channel:USERNAME] [expire:TIMEDELTA]',
             aliases=[
                 'mb.logs'
             ]
@@ -133,7 +134,29 @@ class Plugin(util_bot.Plugin):
         )
         plugin_help.create_topic(
             'logs simple',
-            'Use JustLog\'s simple text format.'
+            'Use JustLog\'s simple text format.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs simple'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs lookback',
+            'How much time to look through when checking logs. '
+            'Here be dragons: If this value is too big you will experience general slowness and if it is big enough '
+            'you could crash the bot.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs lookback'
+            ]
+        )
+        plugin_help.create_topic(
+            'logs expire',
+            'When should the hastebin expire expressed as a duration of time.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs expire'
+            ]
         )
         self.loggers = []
 
