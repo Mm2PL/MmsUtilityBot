@@ -178,6 +178,7 @@ class Plugin(util_bot.Plugin):
                     'regex': regex.compile,
                     'from': (datetime.datetime, {'includes_end': False}),
                     'to': (datetime.datetime, {'includes_end': True}),
+                    'lookback': datetime.timedelta,
 
                     # other settings
                     'max': int,  # max results
@@ -191,6 +192,7 @@ class Plugin(util_bot.Plugin):
                     'regex': None,
                     'from': datetime.datetime.utcnow() - datetime.timedelta(days=30.0),
                     'to': datetime.datetime.utcnow(),
+                    'lookback': None
 
                     'max': 100,
                     'channel': msg.channel,
@@ -210,6 +212,9 @@ class Plugin(util_bot.Plugin):
         if not args['regex']:
             return (util_bot.CommandResult.OTHER_FAILED,
                     'Missing required argument "regex"')
+        if args['lookback']:
+            args['from'] = args['to'] - args['lookback']
+
         matched = await self._filter_messages(
             logger,
             channel=args['channel'],
