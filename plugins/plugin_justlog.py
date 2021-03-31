@@ -192,7 +192,7 @@ class Plugin(util_bot.Plugin):
                     'regex': None,
                     'from': datetime.datetime.utcnow() - datetime.timedelta(days=30.0),
                     'to': datetime.datetime.utcnow(),
-                    'lookback': None
+                    'lookback': None,
 
                     'max': 100,
                     'channel': msg.channel,
