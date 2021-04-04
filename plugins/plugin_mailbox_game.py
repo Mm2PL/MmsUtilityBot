@@ -314,6 +314,7 @@ class Plugin(main.Plugin):
             else:
                 return (f'@{msg.user}, This game has closed '
                         f'({datetime.timedelta(seconds=round(time.time() - game["end_time"]))} ago). ')
+
     # endregion
 
     # region mailbox draw helpers
