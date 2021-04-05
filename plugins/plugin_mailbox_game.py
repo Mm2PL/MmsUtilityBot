@@ -91,14 +91,28 @@ class Plugin(main.Plugin):
             on_load=self._load_from_settings,
             help_='Toggles whether or not the mailbox guessing game is enabled in the channel.'
         )
+
+        self.after_game_timeout_length = plugin_manager.Setting(
+            self,
+            'mailbox_game.timeout_after',
+            default_value=-1,
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True,
+            help_='Sets how big is the timeout for guessing after the mail minigame has stopped accepting guesses.'
+        )
         self.mailbox_games = {}
         self.command_mailbox = main.bot.add_command('mailbox', limit_to_channels=[], available_in_whispers=False,
                                                     required_permissions=['mailbox.manage'],
                                                     enable_local_bypass=True)(self.command_mailbox)
+        self.command_mailbox.aliases.append('mailgame')
 
-        self.command_mailbox_alias = main.bot.add_command('mailgame', limit_to_channels=[], available_in_whispers=False,
-                                                          required_permissions=['mailbox.manage'],
-                                                          enable_local_bypass=True)(self.command_mailbox.function)
+        self.command_delete_guesses_after_stop = main.bot.add_command(
+            '[plugin_mailboxgame:remove_guesses_after_stop]',
+            available_in_whispers=False,
+            cooldown=main.CommandCooldown(0, 0, 0, True)  # no cooldowns,
+        )(self.command_delete_guesses_after_stop)
+        self.command_delete_guesses_after_stop.limit_to_channels = []
+        self.command_delete_guesses_after_stop.matcher_function = self._delete_guesses_matcher
 
         main.reloadables['mailbox_channels'] = self._reload_channels
 
@@ -168,12 +182,37 @@ class Plugin(main.Plugin):
         if is_enabled:
             if username not in self.command_mailbox.limit_to_channels:
                 self.command_mailbox.limit_to_channels.append(username)
-                self.command_mailbox_alias.limit_to_channels.append(username)
+                self.command_delete_guesses_after_stop.limit_to_channels.append(username)
         else:
             if username in self.command_mailbox.limit_to_channels:
                 self.command_mailbox.limit_to_channels.remove(username)
-                self.command_mailbox_alias.limit_to_channels.remove(username)
+                self.command_delete_guesses_after_stop.limit_to_channels.remove(username)
 
+    # region delete extraneous guesses
+    def _delete_guesses_matcher(self, msg: main.StandardizedMessage, _):
+        return bool(GUESS_PATTERN.match(msg.text))
+
+    async def command_delete_guesses_after_stop(self, msg: main.StandardizedMessage):
+        game = self.mailbox_games.get(msg.channel)
+        if not game:
+            return None  # don't return any message as this 'command' triggers on any message
+
+        if game.get('end_time'):
+            to_len = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_length)
+            if to_len > 0:
+                # make sure to send the timeout properly
+
+                # bypass rate-limitting
+                main.bot.clients[main.Platform.TWITCH].connection.force_send(
+                    msg.moderate().format_timeout(
+                        str(to_len) + 's',
+                        'Your guess was late. To prevent spam you have been timed out.'
+                    )
+                )
+
+    # endregion
+
+    # region _mailgame/_mailbox
     def _nice_minigame_settings(self, settings: typing.Dict[str, typing.Union[int, bool]]):
         can_take_part = []
         for i in ('plebs', 'subs', 'mods', 'vips'):
@@ -401,4 +440,5 @@ class Plugin(main.Plugin):
             is_sub = any([i.startswith('subscriber') for i in i['msg'].flags['badges']])
             output.append(f'@{i["msg"].user} {"(Sub)" if is_sub else ""} ({i["quality"]}/3)')
         return ', '.join(output)
+    # endregion
     # endregion
