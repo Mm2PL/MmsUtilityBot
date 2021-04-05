@@ -100,6 +100,15 @@ class Plugin(main.Plugin):
             write_defaults=True,
             help_='Sets how big is the timeout for guessing after the mail minigame has stopped accepting guesses.'
         )
+
+        self.after_game_timeout_message = plugin_manager.Setting(
+            self,
+            'mailbox_game.timeout_message',
+            default_value='Your guess was late. To prevent spam you have been timed out.',
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True,
+            help_='Sets the timeout message for timeouts after the mail minigame has stopped accepting guesses.'
+        )
         self.mailbox_games = {}
         self.command_mailbox = main.bot.add_command('mailbox', limit_to_channels=[], available_in_whispers=False,
                                                     required_permissions=['mailbox.manage'],
@@ -199,6 +208,7 @@ class Plugin(main.Plugin):
 
         if game.get('end_time'):
             to_len = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_length)
+            to_msg = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_message)
             if to_len > 0:
                 # make sure to send the timeout properly
 
@@ -206,7 +216,7 @@ class Plugin(main.Plugin):
                 main.bot.clients[main.Platform.TWITCH].connection.force_send(
                     msg.moderate().format_timeout(
                         str(to_len) + 's',
-                        'Your guess was late. To prevent spam you have been timed out.'
+                        to_msg
                     )
                 )
 
