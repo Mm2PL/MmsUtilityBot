@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 import datetime
 import typing
 import unicodedata
@@ -53,6 +54,7 @@ log = util_bot.make_log_function(NAME)
 
 
 class Plugin(util_bot.Plugin):
+    _current_log_fetch: typing.Optional[asyncio.Task]
     loggers: List['JustLogApi']
 
     def __init__(self, module, source):
@@ -158,7 +160,14 @@ class Plugin(util_bot.Plugin):
                 'mb.logs expire'
             ]
         )
+        plugin_help.create_topic(
+            'logs cancel',
+            'Cancel a running log fetch. You cannot cancel another person\'s log fetch unless you have the '
+            '`util.logs.cancel_other` permission.'
+        )
         self.loggers = []
+        self._current_log_fetch = None
+        self._current_log_owner = None
 
     def _load_loggers(self, settings: plugin_manager.ChannelSettings):
         val: list = settings.get(self.logger_setting)
@@ -208,7 +217,9 @@ class Plugin(util_bot.Plugin):
                     'channel': str,
 
                     'simple': bool,
-                    'expire': datetime.timedelta
+                    'expire': datetime.timedelta,
+
+                    'cancel': bool
                 },
                 defaults={
                     'user': None,
@@ -220,14 +231,29 @@ class Plugin(util_bot.Plugin):
                     'max': 100,
                     'channel': msg.channel,
                     'simple': False,
-                    'expire': datetime.timedelta(days=7)
+                    'expire': datetime.timedelta(days=7),
+
+                    'cancel': False
                 },
                 strict_escapes=False
             )
         except arg_parser.ParserError as e:
             return (util_bot.CommandResult.OTHER_FAILED,
                     f'@{msg.user} {e.message}')
-
+        if args['cancel']:
+            if self._current_log_fetch:
+                missing_permissions = await util_bot.bot.acheck_permissions(msg, ['util.logs.cancel_other'])
+                if self._current_log_owner == msg.user or not missing_permissions:
+                    print('Cancelling log fetch!')
+                    self._current_log_fetch.cancel()
+                    return None
+                else:
+                    await util_bot.bot.send(
+                        msg.reply_directly(f'You don\'t have permissions to cancel this log fetch.'))
+                    await util_bot.bot.flush_queue()
+                    return None
+            else:
+                return f"@{msg.user}, There's nothing to cancel!"
         logger = await self._justlog_for_channel(args['channel'])
         if not logger:
             return (util_bot.CommandResult.OTHER_FAILED,
@@ -238,7 +264,7 @@ class Plugin(util_bot.Plugin):
         if args['lookback']:
             args['from'] = args['to'] - args['lookback']
 
-        matched = await self._filter_messages(
+        filter_task = asyncio.create_task(self._filter_messages(
             logger,
             channel=args['channel'],
             user=args['user'],
@@ -246,7 +272,26 @@ class Plugin(util_bot.Plugin):
             start=args['from'],
             end=args['to'],
             count=args['max']
-        )
+        ))
+        self._current_log_fetch = asyncio.current_task()
+        self._current_log_owner = msg.user
+        try:
+            try:
+                matched = await asyncio.wait_for(asyncio.shield(filter_task), timeout=5)
+            except asyncio.TimeoutError:
+                await util_bot.bot.send(msg.reply(f'@{msg.user}, Looks like this log fetch will take a while, '
+                                                  f'do `_logs --cancel` to abort.'))
+                matched = None
+            if not filter_task.done():
+                matched = await filter_task
+        except asyncio.CancelledError:
+            self._current_log_fetch = None
+            self._current_log_owner = None
+            filter_task.cancel()
+            return f'@{msg.user} The log fetch was cancelled.'
+
+        self._current_log_fetch = None
+        self._current_log_owner = None
         hastebin_link = await self._hastebin_result(matched, args, datetime.datetime.utcnow() + args['expire'])
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
