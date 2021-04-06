@@ -16,6 +16,9 @@
 import typing
 
 from flask import render_template, session, jsonify
+from markupsafe import Markup
+
+import tables
 
 if typing.TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
@@ -76,4 +79,15 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             if i.id == -2 and i.last_known_username == 'whispers':
                 channels.remove(i)
 
-        return render_template('channels_list.html', channels=channels)
+        data = [
+            [
+                '#' + i.last_known_username, Markup(f'<a href="/settings/{i.twitch_id}">Settings</a>')
+            ]
+            if i.id != -1 else
+            [
+                'Global', Markup('<a href="/settings/global">Settings</a>')
+            ]
+            for i in channels
+        ]
+        data.sort(key=lambda entry: entry[0])
+        return tables.render_table('List of channels', data, [('Name', 'name'), ('Edit Settings', 'edit_settings')])
