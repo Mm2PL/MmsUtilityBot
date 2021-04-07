@@ -209,16 +209,19 @@ class Plugin(main.Plugin):
         if game.get('end_time'):
             to_len = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_length)
             to_msg = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_message)
-            if to_len > 0:
+            if to_len >= 0:
                 # make sure to send the timeout properly
 
-                # bypass rate-limitting
-                main.bot.clients[main.Platform.TWITCH].connection.force_send(
-                    msg.moderate().format_timeout(
+                if to_len == 0:
+                    send_msg = msg.moderate().format_delete()
+                else:
+                    send_msg = msg.moderate().format_timeout(
                         str(to_len) + 's',
                         to_msg
                     )
-                )
+
+                # bypass rate-limitting
+                main.bot.clients[main.Platform.TWITCH].connection.force_send(send_msg)
 
     # endregion
 
