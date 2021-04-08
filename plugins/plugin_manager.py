@@ -90,7 +90,11 @@ class CommandBlacklistMiddleware(twitchirc.AbstractMiddleware):
         prefix = main.bot.get_prefix(message.channel, message.platform, message)
         invocation = message.text.split(' ')[0].replace(prefix, '', 1)
         log('warn', repr(invocation))
-        if message.channel in whitelist and invocation not in whitelist[message.channel]:
+        if message.channel in whitelist:
+            if invocation in whitelist[message.channel]:
+                return
+            if command.chat_command in whitelist[message.channel]:
+                return
             log('warn', f'User {message.user} attempted to call command {command.chat_command} in channel '
                         f'{message.channel} where it is not whitelisted. (platform {message.platform!r})')
             event.cancel()
