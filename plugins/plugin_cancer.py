@@ -134,10 +134,12 @@ ISSUE_PATTERN = regex.compile(
     + r')'
 )
 REPO_MAP = {
+    'c1': 'fourtf/Chatterino',
+    'c2': 'Chatterino/Chatterino2',
+    'c2a': 'Chatterino/api',
+    'c2api': 'Chatterino/api',
     'ch2': 'Chatterino/Chatterino2',
     'ch1': 'fourtf/Chatterino',
-    'c2': 'Chatterino/Chatterino2',
-    'c1': 'fourtf/Chatterino',
     'pb': 'pajbot/pajbot',
     'pb2': 'pajbot/pajbot2',
     'pb1': 'pajbot/pajbot',
