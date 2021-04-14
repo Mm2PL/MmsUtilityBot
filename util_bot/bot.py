@@ -272,6 +272,7 @@ class Bot(twitchirc.Bot):
                     missing_permissions.append(p)
 
         if missing_permissions and not disable_handlers:
+            twitchirc.log('warn', f'Missing permissions: {missing_permissions} for message {message}')
             self.call_handlers('permission_error', message, None, missing_permissions)
             await self.acall_middleware(
                 'permission_error',
