@@ -74,7 +74,6 @@ def get(Base, session_scope, blacklists, expire_queue):
             return command.chat_command.lower().rstrip(' ') == self.command.lower().rstrip(' ')
 
         def check(self, message: twitchirc.ChannelMessage, cmd: twitchirc.Command):
-            print(self.is_active)
             if self.is_active is False:
                 return False
             # if self._validate() is False:
