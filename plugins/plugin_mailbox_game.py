@@ -126,10 +126,11 @@ class Plugin(main.Plugin):
         main.reloadables['mailbox_channels'] = self._reload_channels
 
         plugin_help.create_topic('mailbox', 'Manage the mailbox game. Subcommands: mailbox start, '
-                                            'mailbox stop, mailbox draw.', section=plugin_help.SECTION_COMMANDS)
+                                            'mailbox stop, mailbox draw, mailbox cancel.',
+                                 section=plugin_help.SECTION_COMMANDS)
 
         plugin_help.create_topic('mailbox stop',
-                                 'Stop accepting new guesses into the minigame',
+                                 'Stop accepting new guesses into the minigame. This subcommand takes no arguments.',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('mailbox draw',
@@ -142,6 +143,9 @@ class Plugin(main.Plugin):
                                  'Start the mailbox minigame. Possible arguments are guesses, '
                                  'plebs, subs, mods, vips, '
                                  'find_best, winners. Help for these is at "mailbox start ARGUMENT"',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox cancel',
+                                 'Cancels the ongoing mailbox minigame. This subcommand takes no arguments.',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('mailbox start plebs',
@@ -247,6 +251,8 @@ class Plugin(main.Plugin):
             return self._mailbox_draw(argv, msg)
         elif action == 'stop':
             return self._mailbox_stop(msg)
+        elif action == 'cancel':
+            return self._mailbox_cancel(msg)
         else:
             return f'@{msg.user}, Unknown action: {action!r}'
 
@@ -367,6 +373,14 @@ class Plugin(main.Plugin):
             else:
                 return (f'@{msg.user}, This game has closed '
                         f'({datetime.timedelta(seconds=round(time.time() - game["end_time"]))} ago). ')
+
+    def _mailbox_cancel(self, msg):
+        game = self.mailbox_games.get(msg.channel)
+        if game:
+            del self.mailbox_games[msg.channel]
+            return f'@{msg.user}, Canceled the ongoing game.'
+        else:
+            return f'@{msg.user}, There is no game to cancel.'
 
     # endregion
 
