@@ -43,6 +43,8 @@ class Plugin(util_bot.Plugin):
         super().__init__(module, source)
         self.ed_process = None
         self.ed_chat = None
+        self.ed_command = util_bot.bot.add_command('STANDARDEDITOR', available_in_whispers=False,
+                                                   required_permissions=['memes.ed'])
 
     @property
     def no_reload(self):
