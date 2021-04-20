@@ -45,6 +45,8 @@ class Plugin(util_bot.Plugin):
         self.ed_chat = None
         self.ed_command = util_bot.bot.add_command('STANDARDEDITOR', available_in_whispers=False,
                                                    required_permissions=['memes.ed'])
+        self.middleware = EditorMiddleware(self)
+        util_bot.bot.middleware.append(self.middleware)
 
     @property
     def no_reload(self):
