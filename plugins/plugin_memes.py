@@ -71,6 +71,7 @@ class Plugin(util_bot.Plugin):
             self.command_insert_into_ed.limit_to_channels = [msg.channel]
             while 1:
                 line = await self.ed_process.stdout.readline()
+                log('warn', 'ed -> ' + repr(line))
                 line = line.decode()
                 line = line.strip('\n\r\t ')
                 await util_bot.bot.send(msg.reply(line))
@@ -79,4 +80,5 @@ class Plugin(util_bot.Plugin):
             return 'already running nam'
 
     async def ed_meme(self, msg):
+        log('warn', 'ed <- ' + msg.text)
         await self.ed_process.stdin.write(msg.text.encode())
