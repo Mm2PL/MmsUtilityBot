@@ -44,7 +44,7 @@ class Plugin(util_bot.Plugin):
         self.ed_process = None
         self.ed_chat = None
         self.ed_command = util_bot.bot.add_command('STANDARDEDITOR', available_in_whispers=False,
-                                                   required_permissions=['memes.ed'])
+                                                   required_permissions=['memes.ed'])(self.ed_command)
         self.middleware = EditorMiddleware(self)
         util_bot.bot.middleware.append(self.middleware)
 
@@ -74,6 +74,8 @@ class Plugin(util_bot.Plugin):
                 line = line.decode()
                 line = line.strip('\n\r\t ')
                 await util_bot.bot.send(msg.reply(line))
+        else:
+            return 'already running nam'
 
 
 class EditorMiddleware(twitchirc.AbstractMiddleware):
