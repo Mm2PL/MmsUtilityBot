@@ -45,8 +45,7 @@ class Plugin(util_bot.Plugin):
         self.ed_chat = None
         self.ed_command = util_bot.bot.add_command('STANDARDEDITOR', available_in_whispers=False,
                                                    required_permissions=['memes.ed'])(self.ed_command)
-        self.middleware = EditorMiddleware(self)
-        util_bot.bot.middleware.append(self.middleware)
+        self.command_insert_into_ed = util_bot.bot.add_command('[ed]', available_in_whispers=False)(self.ed_meme)
 
     @property
     def no_reload(self):
@@ -69,6 +68,7 @@ class Plugin(util_bot.Plugin):
             self.ed_process = await asyncio.subprocess.create_subprocess_exec('./ed_meme.sh', stdin=-1, stdout=-1,
                                                                               stderr=-1)
             self.ed_chat = msg.channel
+            self.command_insert_into_ed.limit_to_channels = [msg.channel]
             while 1:
                 line = await self.ed_process.stdout.readline()
                 line = line.decode()
@@ -78,15 +78,5 @@ class Plugin(util_bot.Plugin):
         else:
             return 'already running nam'
 
-
-class EditorMiddleware(twitchirc.AbstractMiddleware):
-    def __init__(self, parent: Plugin):
-        super().__init__()
-        self.parent = parent
-
-    async def aon_action(self, event: twitchirc.Event):
-        if event.name == 'receive':
-            msg = event.data['message']
-            print(msg)
-            if msg.channel == self.parent.ed_chat:
-                await self.parent.ed_process.stdin.write(msg.text.encode())
+    async def ed_meme(self, msg):
+        await self.ed_process.stdin.write(msg.text.encode())
