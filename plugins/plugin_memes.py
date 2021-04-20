@@ -74,6 +74,7 @@ class Plugin(util_bot.Plugin):
                 line = line.decode()
                 line = line.strip('\n\r\t ')
                 await util_bot.bot.send(msg.reply(line))
+                await util_bot.bot.flush_queue()
         else:
             return 'already running nam'
 
@@ -86,5 +87,6 @@ class EditorMiddleware(twitchirc.AbstractMiddleware):
     async def aon_action(self, event: twitchirc.Event):
         if event.name == 'receive':
             msg = event.data['message']
+            print(msg)
             if msg.channel == self.parent.ed_chat:
                 await self.parent.ed_process.stdin.write(msg.text.encode())
