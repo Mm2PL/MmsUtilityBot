@@ -66,7 +66,7 @@ class Plugin(util_bot.Plugin):
 
     async def ed_command(self, msg):
         if not self.ed_process:
-            self.ed_process = await asyncio.subprocess.create_subprocess_exec('ed_meme.sh', stdin=-1, stdout=-1,
+            self.ed_process = await asyncio.subprocess.create_subprocess_exec('./ed_meme.sh', stdin=-1, stdout=-1,
                                                                               stderr=-1)
             self.ed_chat = msg.channel
             while 1:
