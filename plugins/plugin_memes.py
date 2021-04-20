@@ -47,6 +47,7 @@ class Plugin(util_bot.Plugin):
                                                    required_permissions=['memes.ed'])(self.ed_command)
         self.command_insert_into_ed = util_bot.bot.add_command('[ed]', available_in_whispers=False)(self.ed_meme)
         self.command_insert_into_ed.matcher_function = lambda *_: True
+        self.command_insert_into_ed.limit_to_channels = []
 
     @property
     def no_reload(self):
@@ -82,4 +83,5 @@ class Plugin(util_bot.Plugin):
 
     async def ed_meme(self, msg):
         log('warn', 'ed <- ' + msg.text)
-        await self.ed_process.stdin.write(msg.text.encode())
+        if self.ed_process:
+            await self.ed_process.stdin.write(msg.text.encode())
