@@ -46,6 +46,7 @@ class Plugin(util_bot.Plugin):
         self.ed_command = util_bot.bot.add_command('STANDARDEDITOR', available_in_whispers=False,
                                                    required_permissions=['memes.ed'])(self.ed_command)
         self.command_insert_into_ed = util_bot.bot.add_command('[ed]', available_in_whispers=False)(self.ed_meme)
+        self.command_insert_into_ed.matcher_function = lambda *_: True
 
     @property
     def no_reload(self):
