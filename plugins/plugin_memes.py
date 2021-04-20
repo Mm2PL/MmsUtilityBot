@@ -84,4 +84,4 @@ class Plugin(util_bot.Plugin):
     async def ed_meme(self, msg):
         log('warn', 'ed <- ' + msg.text)
         if self.ed_process:
-            self.ed_process.stdin.write(msg.text.encode())
+            self.ed_process.stdin.write((msg.text + '\n').encode())
