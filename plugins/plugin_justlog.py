@@ -358,10 +358,10 @@ class Plugin(util_bot.Plugin):
     def _convert_to_raw_irc(self, args, expire_on, matched):
         output = ''
         for i in (f'Found {len(matched)} (out of maximum {args["max"]}) messages',
-                  f'Channel: #{args["channel"]},',
+                  f'Channel: #{args["channel"]}',
                   f'User: {args["user"] or "[any]"}',
-                  f'Start date/time: {args["from"]},',
-                  f'End date/time: {args["to"]},',
+                  f'Start date/time: {args["from"]}',
+                  f'End date/time: {args["to"]}',
                   f'Search regex: {args["regex"].pattern}',
                   f'This paste expires on: {expire_on} or in {args["expire"]}'):
             output += f'@msg-id=log_info :tmi.twitch.tv NOTICE * :{i}\n'
@@ -373,10 +373,10 @@ class Plugin(util_bot.Plugin):
     def _convert_to_pretty_text(self, args, expire_on, matched):
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
-                  f'# Channel: #{args["channel"]},\n'
+                  f'# Channel: #{args["channel"]}\n'
                   f'# User: {args["user"] or "[any]"}\n'
-                  f'# Start date/time: {args["from"]},\n'
-                  f'# End date/time: {args["to"]},\n'
+                  f'# Start date/time: {args["from"]}\n'
+                  f'# End date/time: {args["to"]}\n'
                   f'# Search regex: {args["regex"].pattern}\n'
                   f'# This paste expires on: {expire_on} or in {args["expire"]}\n'
                   f'# {"=" * 78}\n')
