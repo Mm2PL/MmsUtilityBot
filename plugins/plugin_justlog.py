@@ -220,7 +220,8 @@ class Plugin(util_bot.Plugin):
                     'expire': datetime.timedelta,
 
                     'cancel': bool,
-                    'logviewer': bool
+                    'logviewer': bool,
+                    'text': bool
                 },
                 defaults={
                     'user': None,
@@ -235,7 +236,8 @@ class Plugin(util_bot.Plugin):
                     'expire': datetime.timedelta(days=7),
 
                     'cancel': False,
-                    'logviewer': True
+                    'logviewer': True,
+                    'text': False
                 },
                 strict_escapes=False
             )
@@ -265,10 +267,20 @@ class Plugin(util_bot.Plugin):
                     'Missing required argument "regex"')
         if args['lookback']:
             args['from'] = args['to'] - args['lookback']
-        log_format = 'simple' if args['simple'] else (
-            'raw' if args['logviewer'] else
-            'pretty'
-        )
+
+        if args['simple']:
+            log_format = 'simple'
+            args['text'] = False
+            args['logviewer'] = False
+        elif args['text']:
+            log_format = 'pretty'
+            args['simple'] = False
+            args['logviewer'] = False
+        else:
+            log_format = 'raw'
+            args['simple'] = False
+            args['text'] = False
+
         filter_task = asyncio.create_task(self._filter_messages(
             logger,
             channel=args['channel'],
