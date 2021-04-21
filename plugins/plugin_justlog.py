@@ -345,16 +345,16 @@ class Plugin(util_bot.Plugin):
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on, log_format):
         if log_format == 'simple':
-            output = await plugin_hastebin.upload(self._convert_to_simple_text(matched), expire_on)
+            output = self._convert_to_simple_text(matched), expire_on
         elif log_format == 'pretty':
-            output = await self._convert_to_pretty_text(args, expire_on, matched)
+            output = self._convert_to_pretty_text(args, expire_on, matched)
         elif log_format == 'raw':
-            output = await self._convert_to_raw_irc(args, expire_on, matched)
+            output = self._convert_to_raw_irc(args, expire_on, matched)
         else:
             raise RuntimeError('Invalid log format.')
         return await plugin_hastebin.upload(output, expire_on)
 
-    async def _convert_to_raw_irc(self, args, expire_on, matched):
+    def _convert_to_raw_irc(self, args, expire_on, matched):
         output = ''
         for i in (f'Found {len(matched)} (out of maximum {args["max"]}) messages',
                   f'Channel: #{args["channel"]},',
@@ -369,7 +369,7 @@ class Plugin(util_bot.Plugin):
             output += msg.raw_data + '\r\n'
         return output
 
-    async def _convert_to_pretty_text(self, args, expire_on, matched):
+    def _convert_to_pretty_text(self, args, expire_on, matched):
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]},\n'
