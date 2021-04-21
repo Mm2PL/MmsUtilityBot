@@ -518,9 +518,14 @@ class JustLogApi:
 
     async def _query_channels(self):
         log('warn', f'JustLog at {self.address}: query channels')
-        async with aiohttp.request('get', self.address + f'/channels') as r:
-            # r.raise_for_status()
-            self.channels = [JustlogChannel(i['name'], i['userID']) for i in (await r.json()).get('channels', [])]
+        try:
+            async with aiohttp.request('get', self.address + f'/channels') as r:
+                # r.raise_for_status()
+                self.channels = [JustlogChannel(i['name'], i['userID']) for i in (await r.json()).get('channels', [])]
+        except aiohttp.client_exceptions.ContentTypeError:
+            self.channels = []
+            log('warn', f'@{self.address}, You promised me JSON and sent XML.')
+
 
 
 class JustlogChannel:
