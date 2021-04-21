@@ -315,7 +315,8 @@ class Plugin(util_bot.Plugin):
             channel_id = list(filter(lambda o: o.name == args['channel'], logger.channels))[0].id
 
             return (util_bot.CommandResult.OK,
-                    f'Uploaded {len(matched)} filtered messages to hastebin. Log viewer link: '
+                    f'Uploaded {len(matched)} filtered messages to hastebin. Use --text for plaintext, '
+                    f'--simple for justlog format. Log viewer link: '
                     f'https://logviewer.kotmisia.pl/?h={hastebin_link}&c={args["channel"]}&cid={channel_id}')
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
