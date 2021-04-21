@@ -345,7 +345,7 @@ class Plugin(util_bot.Plugin):
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on, log_format):
         if log_format == 'simple':
-            output = self._convert_to_simple_text(matched), expire_on
+            output = self._convert_to_simple_text(matched)
         elif log_format == 'pretty':
             output = self._convert_to_pretty_text(args, expire_on, matched)
         elif log_format == 'raw':
