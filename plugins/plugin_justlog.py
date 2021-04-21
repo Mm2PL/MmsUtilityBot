@@ -219,7 +219,8 @@ class Plugin(util_bot.Plugin):
                     'simple': bool,
                     'expire': datetime.timedelta,
 
-                    'cancel': bool
+                    'cancel': bool,
+                    'logviewer': bool
                 },
                 defaults={
                     'user': None,
@@ -233,7 +234,8 @@ class Plugin(util_bot.Plugin):
                     'simple': False,
                     'expire': datetime.timedelta(days=7),
 
-                    'cancel': False
+                    'cancel': False,
+                    'logviewer': True
                 },
                 strict_escapes=False
             )
@@ -263,7 +265,10 @@ class Plugin(util_bot.Plugin):
                     'Missing required argument "regex"')
         if args['lookback']:
             args['from'] = args['to'] - args['lookback']
-
+        log_format = 'simple' if args['simple'] else (
+            'raw' if args['logviewer'] else
+            'pretty'
+        )
         filter_task = asyncio.create_task(self._filter_messages(
             logger,
             channel=args['channel'],
@@ -292,7 +297,14 @@ class Plugin(util_bot.Plugin):
 
         self._current_log_fetch = None
         self._current_log_owner = None
-        hastebin_link = await self._hastebin_result(matched, args, datetime.datetime.utcnow() + args['expire'])
+        hastebin_link = await self._hastebin_result(matched, args, datetime.datetime.utcnow() + args['expire'],
+                                                    log_format)
+        if args['logviewer']:
+            channel_id = list(filter(lambda o: o.name == args['channel'], logger.channels))[0].id
+
+            return (util_bot.CommandResult.OK,
+                    f'Uploaded {len(matched)} filtered messages to hastebin. Log viewer link: '
+                    f'https://logviewer.kotmisia.pl/?h={hastebin_link}&c={args["channel"]}&cid={channel_id}')
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
@@ -319,9 +331,33 @@ class Plugin(util_bot.Plugin):
             output += f'[{dt}] #{msg.channel} {msg.user}: {msg.text}\n'
         return output
 
-    async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on):
-        if args['simple']:
-            return await plugin_hastebin.upload(self._convert_to_simple_text(matched), expire_on)
+    async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on, log_format):
+        if log_format == 'simple':
+            output = await plugin_hastebin.upload(self._convert_to_simple_text(matched), expire_on)
+        elif log_format == 'pretty':
+            output = await self._convert_to_pretty_text(args, expire_on, matched)
+        elif log_format == 'raw':
+            output = await self._convert_to_raw_irc(args, expire_on, matched)
+        else:
+            raise RuntimeError('Invalid log format.')
+        return await plugin_hastebin.upload(output, expire_on)
+
+    async def _convert_to_raw_irc(self, args, expire_on, matched):
+        output = ''
+        for i in (f'Found {len(matched)} (out of maximum {args["max"]}) messages',
+                  f'Channel: #{args["channel"]},',
+                  f'User: {args["user"] or "[any]"}',
+                  f'Start date/time: {args["from"]},',
+                  f'End date/time: {args["to"]},',
+                  f'Search regex: {args["regex"].pattern}',
+                  f'This paste expires on: {expire_on} or in {args["expire"]}'):
+            output += f'@msg-id=log_info :tmi.twitch.tv NOTICE * :{i}\n'
+
+        for msg in matched:
+            output += msg.raw_data + '\r\n'
+        return output
+
+    async def _convert_to_pretty_text(self, args, expire_on, matched):
         output = (f'# {"=" * 78}\n'
                   f'# Found {len(matched)} (out of maximum {args["max"]}) messages\n'
                   f'# Channel: #{args["channel"]},\n'
@@ -344,7 +380,7 @@ class Plugin(util_bot.Plugin):
                        f'{self._pretty_badges(badges)}'
                        f'{chan_badges}'
                        f'<{i.user}> {i.text}\n')
-        return await plugin_hastebin.upload(output, expire_on)
+        return output
 
     def _pretty_badges(self, badges) -> str:
         return (
@@ -356,6 +392,8 @@ class Plugin(util_bot.Plugin):
 
 
 class JustLogApi:
+    channels: List['JustlogChannel']
+
     def __init__(self, address: str):
         self.address = address
         self.channels = []
@@ -473,13 +511,24 @@ class JustLogApi:
     async def has_channel(self, channel: str):
         if not self.channels:
             await self._query_channels()
-        return channel in self.channels
+        for i in self.channels:
+            if i.name == channel:
+                return True
+        return False
 
     async def _query_channels(self):
         log('warn', f'JustLog at {self.address}: query channels')
         async with aiohttp.request('get', self.address + f'/channels') as r:
             # r.raise_for_status()
-            self.channels = [i['name'] for i in (await r.json()).get('channels', [])]
+            self.channels = [JustlogChannel(i['name'], i['userID']) for i in (await r.json()).get('channels', [])]
+
+
+class JustlogChannel:
+    name: str
+    id: str
+    def __init__(self, name, id_):
+        self.name = name
+        self.id = id_
 
 
 def convert_messages(raw_messages) -> Generator[util_bot.StandardizedMessage, None, None]:
