@@ -62,6 +62,11 @@ def command_say(msg: twitchirc.ChannelMessage):
     return msg.text.split(' ', 1)[1]
 
 
+@main.bot.add_command('fsay', required_permissions=['util.admin.say.force'], enable_local_bypass=False)
+def command_say(msg: twitchirc.ChannelMessage):
+    return msg.reply(msg.text.split(' ', 1)[1], True)
+
+
 def do_eval(code: str, msg: twitchirc.ChannelMessage):
     log('warn', f'Eval from {msg.user}({msg.flags["user-id"]}): {code!r}')
     glob = {name: getattr(builtins, name) for name in dir(builtins)}
