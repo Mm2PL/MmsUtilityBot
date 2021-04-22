@@ -35,12 +35,11 @@ from sqlalchemy import create_engine
 from twitchirc import Command, Event
 
 from apis.pubsub import PubsubClient
-from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, user_model, Platform, do_cooldown,
-                      show_counter_status, init_twitch_auth, UserStateCapturingMiddleware)
+from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, user_model, Platform, init_twitch_auth,
+                      UserStateCapturingMiddleware)
 import util_bot
 from util_bot.msg import StandardizedMessage
 from util_bot.pubsub import init_pubsub, PubsubMiddleware
-from util_bot.utils import counter_difference
 
 
 @dataclass
@@ -107,30 +106,6 @@ session_scope = util_bot.session_scope_local_thread
 log = util_bot.make_log_function('main')
 _print = print
 print = lambda *args, **kwargs: log('info', *args, **kwargs)
-
-
-def new_echo_command(command_name: str, echo_data: str,
-                     limit_to_channel: typing.Optional[str] = None,
-                     command_source='hard-coded') \
-        -> typing.Callable[[twitchirc.ChannelMessage], None]:
-    @bot.add_command(command_name)
-    def echo_command(msg: twitchirc.ChannelMessage):
-        cd_state = do_cooldown(cmd=command_name, msg=msg)
-        if cd_state:
-            return
-        data = (echo_data.replace('{user}', msg.user)
-                .replace('{cmd}', command_name))
-        for num, i in enumerate(msg.text.replace(bot.prefix + command_name, '', 1).split(' ')):
-            data = data.replace(f'{{{num}}}', i)
-            data = data.replace('{+}', i + ' {+}')
-        data = data.replace('{+}', '')
-        bot.send(msg.reply(data))
-
-    echo_command: Command
-    echo_command.limit_to_channels = limit_to_channel
-    echo_command.source = command_source
-
-    return echo_command
 
 
 class UserLoadingMiddleware(twitchirc.AbstractMiddleware):
@@ -333,42 +308,12 @@ async def command_reload(msg: twitchirc.ChannelMessage):
         return f"@{msg.user} Couldn't reload {argv[1]}: no such target."
 
 
-def new_command_from_command_entry(entry: typing.Dict[str, str]):
-    if 'name' in entry and 'message' in entry:
-        if 'channel' in entry:
-            if entry['type'] == 'echo':
-                new_echo_command(entry['name'], entry['message'], entry['channel'], command_source='commands.json')
-            elif entry['type'] == 'counter':
-                print(entry)
-                new_counter_command(entry['name'], entry['message'], entry['channel'], command_source='commands.json')
-        else:
-            if entry['type'] == 'echo':
-                new_echo_command(entry['name'], entry['message'], command_source='commands.json')
-            elif entry['type'] == 'counter':
-                new_counter_command(entry['name'], entry['message'], command_source='commands.json')
-
-
-def load_commands():
-    with open('commands.json', 'r') as file:
-        for i in json.load(file):
-            if not isinstance(i, dict):
-                print(f'Bad command entry: {i!r}')
-                continue
-            print(f'Processing entry {i!r}')
-            new_command_from_command_entry(i)
-
-
 plugins: Dict[str, Plugin] = {}
 
 with open('supibot_auth.json', 'r') as f:
     supibot_auth = json.load(f)
 
 util_bot.init_supibot_api(supibot_auth)
-try:
-    load_commands()
-except FileNotFoundError:
-    with open('commands.json', 'w') as f:
-        json.dump({}, f)
 
 # make sure that the plugin manager loads before everything else.
 load_file('plugins/plugin_manager.py')

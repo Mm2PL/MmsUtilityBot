@@ -357,17 +357,6 @@ def check_spamming_allowed(channel: str, enable_online_spam=False):
         return False
 
 
-def show_counter_status(old_val, val, counter_name, counter_message, msg):
-    if val < 0:
-        val = 'a lot of'
-    print(val)
-    if old_val != val:
-        return msg.reply(counter_message['true'].format(name=counter_name, old_val=old_val,
-                                                        new_val=val))
-    else:
-        return msg.reply(counter_message['false'].format(name=counter_name, val=val))
-
-
 twitch_auth = None
 
 

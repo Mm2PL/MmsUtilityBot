@@ -31,31 +31,6 @@ class Reconnect(RuntimeError):
         self.platform = platform
 
 
-def counter_difference(text, counter):
-    if text.startswith('-'):
-        text = text[1:]
-        print(text)
-        if text.isnumeric():
-            return counter - int(text)
-        else:
-            return None
-    elif text.startswith('+'):
-        text = text[1:]
-        print(text)
-        if text.isnumeric():
-            return counter + int(text)
-        else:
-            return None
-    elif text.startswith('='):
-        text = text[1:]
-        print(text)
-        if text.isnumeric() or text[0].startswith('-') and text[1:].isnumeric():
-            return int(text)
-        else:
-            return None
-    return counter
-
-
 def deprecated(alternative=None):
     """
     Marks a function as deprecated. This is a decorator.
