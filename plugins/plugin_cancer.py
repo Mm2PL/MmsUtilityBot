@@ -379,15 +379,6 @@ class Plugin(main.Plugin):
             )
         )
 
-        self._dollar = main.bot.add_command(
-            '[supibot\'s down]',
-            cooldown=main.CommandCooldown(30, 15, 0, False)
-        )(lambda msg: (
-            'Supibot is down :( The owner knows already and can do nothing about it.'
-        ))
-        self._dollar.matcher_function = lambda msg, cmd: (
-            msg.text.startswith('$')
-        )
         # endregion
         # endregion
 
