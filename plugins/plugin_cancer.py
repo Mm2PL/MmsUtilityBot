@@ -378,6 +378,16 @@ class Plugin(main.Plugin):
                 msg.text.startswith('asd')
             )
         )
+
+        self._dollar = main.bot.add_command(
+            '[supibot\'s down]',
+            cooldown=main.CommandCooldown(30, 15, 0)
+        )(lambda msg: (
+            'Supibot is down :('
+        ))
+        self._dollar.matcher_function = lambda msg, cmd: (
+            msg.text.startswith('$')
+        )
         # endregion
         # endregion
 
