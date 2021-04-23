@@ -381,7 +381,7 @@ class Plugin(main.Plugin):
 
         self._dollar = main.bot.add_command(
             '[supibot\'s down]',
-            cooldown=main.CommandCooldown(30, 15, 0)
+            cooldown=main.CommandCooldown(30, 15, 0, False)
         )(lambda msg: (
             'Supibot is down :('
         ))
