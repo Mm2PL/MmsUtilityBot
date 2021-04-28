@@ -317,7 +317,7 @@ class Plugin(util_bot.Plugin):
             return (util_bot.CommandResult.OK,
                     f'Uploaded {len(matched)} filtered messages to hastebin. Use --text for plaintext, '
                     f'--simple for justlog format. Log viewer link: '
-                    f'https://logviewer.kotmisia.pl/?h={hastebin_link}&c={args["channel"]}&cid={channel_id}')
+                    f'https://logviewer.kotmisia.pl/?url=/h/{hastebin_link}&c={args["channel"]}&cid={channel_id}')
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
