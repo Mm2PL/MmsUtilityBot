@@ -195,9 +195,9 @@ class Plugin(main.Plugin):
         is_enabled = channel_settings.get(self.issuelinker_enabled_setting)
         username = channel_settings.channel.last_known_username
         if is_enabled and username not in self._issue_linker_channels:
-            self._issue_linker_channels.limit_to_channels.append(username)
+            self._issue_linker_channels.append(username)
         elif not is_enabled and username in self._issue_linker_channels:
-            self._issue_linker_channels.limit_to_channels.remove(username)
+            self._issue_linker_channels.remove(username)
 
     async def _at_detection(self, msg: main.StandardizedMessage):
         if msg.text.startswith(('!vanish', '$vanish')):
