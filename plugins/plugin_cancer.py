@@ -305,83 +305,6 @@ class Plugin(main.Plugin):
         )(self.c_braillefy)
         self.command_braillefy.aliases = ['ascii']
 
-        # region Fake Commands
-        self._at_detection = main.bot.add_command(
-            '[at detection]',
-            cooldown=main.CommandCooldown(30, 30, 0)
-        )(self._at_detection)
-
-        self._at_detection.limit_to_channels = ['pajlada', 'supinic']
-        # @formatter:off
-        # whitespace gets fucked here
-        self._at_detection.matcher_function = (
-            lambda msg, cmd: (
-                msg.platform == main.Platform.TWITCH and (
-                    # implicit return here ↓
-                    main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
-                ) or msg.platform == main.Platform.DISCORD and (
-                    [i for i in msg.source_message.mentions
-                     if i == main.bot.clients[main.Platform.DISCORD].connection.user]
-                )
-            )
-        )
-        # @formatter:on
-
-        self._honeydetected = main.bot.add_command(
-            'honydetected reconnected',
-            cooldown=main.CommandCooldown(0, 120, 0)
-        )(self._honeydetected)
-        self._honeydetected.limit_to_channels = ['supinic', 'mm2pl']
-        self._honeydetected.matcher_function = (
-            lambda msg, cmd: (
-                    msg.user in ['supibot', 'mm2pl']
-                    and (msg.text == 'ppCircle'
-                         or msg.text == 'HONEYDETECTED RECONNECTED')
-            )
-        )
-
-        self._cookie = main.bot.add_command(
-            'cookie detection',
-            cooldown=main.CommandCooldown(0, 0, 0)
-        )(self._cookie)
-        self._cookie.matcher_function = (
-            lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
-                              and msg.user in ['thepositivebot', 'mm2pl']
-                              and msg.text.startswith('\x01ACTION [Cookies]'))
-        )
-        self.c_link_issue = main.bot.add_command(
-            'issue link detection',
-            cooldown=main.CommandCooldown(5, 1, 0)  # 1s channel cooldown to avoid bots triggering it
-        )(self.c_link_issue)
-        self.c_link_issue.limit_to_channels = []
-        self.c_link_issue.matcher_function = (
-            lambda msg, cmd: (('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text))
-        )
-        self._ps_sneeze = main.bot.add_command(
-            '[ps sneeze integration]',
-            cooldown=main.CommandCooldown(30, 0, 0)
-        )(self._ps_sneeze)
-        self._ps_sneeze.limit_to_channels = ['supinic', 'mm2pl']
-        self._ps_sneeze.matcher_function = (
-            lambda msg, cmd: (
-                    msg.user in ('supibot', 'mm2pl')
-                    and msg.text.endswith('Playsound has been played correctly on stream.')
-            )
-        )
-        self.c_asd = main.bot.add_command(
-            'asd',
-            cooldown=main.CommandCooldown(15, 5, 0)
-        )(self.c_asd)
-        self.c_asd.limit_to_channels = ['simon36']
-        self.c_asd.matcher_function = (
-            lambda msg, cmd: (
-                msg.text.startswith('asd')
-            )
-        )
-
-        # endregion
-        # endregion
-
         # region Help
         plugin_help.create_topic('braillefy url',
                                  'URL pointing to image you want to convert.',
@@ -461,6 +384,87 @@ class Plugin(main.Plugin):
             None
         )(self.command_braillefy)
         # endregion
+
+    def _add_fake_commands(self):
+        # region Fake Commands
+        self._at_detection = main.bot.add_command(
+            '[at detection]',
+            cooldown=main.CommandCooldown(30, 30, 0)
+        )(self._at_detection)
+
+        self._at_detection.limit_to_channels = ['pajlada', 'supinic']
+        # @formatter:off
+        # whitespace gets fucked here
+        self._at_detection.matcher_function = (
+            lambda msg, cmd: (
+                msg.platform == main.Platform.TWITCH and (
+                    # implicit return here ↓
+                    main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
+                ) or msg.platform == main.Platform.DISCORD and (
+                    [i for i in msg.source_message.mentions
+                     if i == main.bot.clients[main.Platform.DISCORD].connection.user]
+                )
+            )
+        )
+        # @formatter:on
+
+        self._honeydetected = main.bot.add_command(
+            'honydetected reconnected',
+            cooldown=main.CommandCooldown(0, 120, 0)
+        )(self._honeydetected)
+        self._honeydetected.limit_to_channels = ['supinic', 'mm2pl']
+        self._honeydetected.matcher_function = (
+            lambda msg, cmd: (
+                    msg.user in ['supibot', 'mm2pl']
+                    and (msg.text == 'ppCircle'
+                         or msg.text == 'HONEYDETECTED RECONNECTED')
+            )
+        )
+
+        self._cookie = main.bot.add_command(
+            'cookie detection',
+            cooldown=main.CommandCooldown(0, 0, 0)
+        )(self._cookie)
+        self._cookie.matcher_function = (
+            lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
+                              and msg.user in ['thepositivebot', 'mm2pl']
+                              and msg.text.startswith('\x01ACTION [Cookies]'))
+        )
+        self.c_link_issue = main.bot.add_command(
+            'issue link detection',
+            cooldown=main.CommandCooldown(5, 1, 0)  # 1s channel cooldown to avoid bots triggering it
+        )(self.c_link_issue)
+        self.c_link_issue.limit_to_channels = []
+        self.c_link_issue.matcher_function = (
+            lambda msg, cmd: (('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text))
+        )
+        self._ps_sneeze = main.bot.add_command(
+            '[ps sneeze integration]',
+            cooldown=main.CommandCooldown(30, 0, 0)
+        )(self._ps_sneeze)
+        self._ps_sneeze.limit_to_channels = ['supinic', 'mm2pl']
+        self._ps_sneeze.matcher_function = (
+            lambda msg, cmd: (
+                    msg.user in ('supibot', 'mm2pl')
+                    and msg.text.endswith('Playsound has been played correctly on stream.')
+            )
+        )
+        self.c_asd = main.bot.add_command(
+            'asd',
+            cooldown=main.CommandCooldown(15, 5, 0)
+        )(self.c_asd)
+        self.c_asd.limit_to_channels = ['simon36']
+        self.c_asd.matcher_function = (
+            lambda msg, cmd: (
+                msg.text.startswith('asd')
+            )
+        )
+
+        # endregion
+        # endregion
+
+    async def async_init(self):
+        self._add_fake_commands()  # async init should be called later than __init__s of other plugins
 
     async def _ps_sneeze(self, msg: main.StandardizedMessage):
         # don't respond if the playsound didn't play
