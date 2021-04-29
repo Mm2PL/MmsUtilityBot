@@ -191,14 +191,13 @@ class Plugin(main.Plugin):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
     def _issuelinker_enabled_setting_on_load(self, channel_settings: plugin_manager.ChannelSettings):
+
         is_enabled = channel_settings.get(self.issuelinker_enabled_setting)
         username = channel_settings.channel.last_known_username
-        if is_enabled and username not in self.c_link_issue.limit_to_channels:
-            self.c_link_issue.limit_to_channels.append(username)
-            self.c_issue_optin.limit_to_channels.append(username)
-        elif not is_enabled and username in self.c_link_issue.limit_to_channels:
-            self.c_link_issue.limit_to_channels.remove(username)
-            self.c_issue_optin.limit_to_channels.remove(username)
+        if is_enabled and username not in self._issue_linker_channels:
+            self._issue_linker_channels.limit_to_channels.append(username)
+        elif not is_enabled and username in self._issue_linker_channels:
+            self._issue_linker_channels.limit_to_channels.remove(username)
 
     async def _at_detection(self, msg: main.StandardizedMessage):
         if msg.text.startswith(('!vanish', '$vanish')):
@@ -212,6 +211,7 @@ class Plugin(main.Plugin):
 
         self._sneeze_cooldown = time.time()
         self.storage = main.PluginStorage(self, main.bot.storage)
+        self._issue_linker_channels = []
 
         # region Settings
         self.timeout_setting = plugin_manager.Setting(
@@ -289,7 +289,7 @@ class Plugin(main.Plugin):
             'issuelinker',
             cooldown=main.CommandCooldown(10, 5, 0)
         )(self.c_issue_optin)
-        self.c_issue_optin.limit_to_channels = []
+        self.c_issue_optin.limit_to_channels = self._issue_linker_channels  # ref
         self.command_pyramid = main.bot.add_command(
             'mb.pyramid',
             required_permissions=['cancer.pyramid'],
@@ -434,7 +434,7 @@ class Plugin(main.Plugin):
             'issue link detection',
             cooldown=main.CommandCooldown(5, 1, 0)  # 1s channel cooldown to avoid bots triggering it
         )(self.c_link_issue)
-        self.c_link_issue.limit_to_channels = []
+        self.c_link_issue.limit_to_channels = self._issue_linker_channels  # ref
         self.c_link_issue.matcher_function = (
             lambda msg, cmd: (('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text))
         )
