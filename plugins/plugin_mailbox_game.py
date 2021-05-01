@@ -109,6 +109,14 @@ class Plugin(main.Plugin):
             write_defaults=True,
             help_='Sets the timeout message for timeouts after the mail minigame has stopped accepting guesses.'
         )
+        self.default_no_game_timeout_reason = plugin_manager.Setting(
+            self,
+            'mailbox_game.no_game_timeout_message',
+            default_value='There is no mail minigame running. Please don\'t spam.',
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True,
+            help_='Sets the timeout message for semi-manual timeouts. See help for "mailgame timeout"'
+        )
         self.mailbox_games = {}
         self.command_mailbox = main.bot.add_command('mailbox', limit_to_channels=[], available_in_whispers=False,
                                                     required_permissions=['mailbox.manage'],
@@ -146,6 +154,10 @@ class Plugin(main.Plugin):
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox cancel',
                                  'Cancels the ongoing mailbox minigame. This subcommand takes no arguments.',
+                                 section=plugin_help.SECTION_ARGS)
+        plugin_help.create_topic('mailbox timeout',
+                                 'Sets up manual timeouts for guesses. This subcommand takes one optional argument: '
+                                 'the timeout reason, a multi-word string.',
                                  section=plugin_help.SECTION_ARGS)
 
         plugin_help.create_topic('mailbox start plebs',
@@ -212,7 +224,10 @@ class Plugin(main.Plugin):
 
         if game.get('end_time'):
             to_len = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_length)
-            to_msg = plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_message)
+            to_msg = (
+                    game.get('timeout_reason')
+                    or plugin_manager.channel_settings[msg.channel].get(self.after_game_timeout_message)
+            )
             if to_len >= 0:
                 # make sure to send the timeout properly
 
@@ -253,6 +268,8 @@ class Plugin(main.Plugin):
             return self._mailbox_stop(msg)
         elif action == 'cancel':
             return self._mailbox_cancel(msg)
+        elif action == 'timeout':
+            return self._mailbox_timeout(argv, msg)
         else:
             return f'@{msg.user}, Unknown action: {action!r}'
 
@@ -274,7 +291,7 @@ class Plugin(main.Plugin):
             return f'@{msg.user}, Unexpected error when processing arguments: {e.message}'
         if msg.channel in self.mailbox_games:
             return (f'@{msg.user}, Game is already running in this channel. '
-                    f'If you want to override the game use "{argv[0]} stop", then "{msg.text}"')
+                    f'If you want to override the game use "{argv[0]} cancel", then "{msg.text}"')
         if action_args['guesses'] is ...:
             action_args['guesses'] = 1
 
@@ -303,6 +320,9 @@ class Plugin(main.Plugin):
         if msg.channel not in self.mailbox_games:
             return f'@{msg.user}, Cannot draw a winner from mailbox minigame, there is none running. FeelsBadMan'
         settings = self.mailbox_games[msg.channel]
+        if settings.get('timeout_reason'):
+            return (f'@{msg.user}, There is no minigame running, however there are automatic timeouts set up. '
+                    f'Use "{argv[0]} cancel" to stop timing out.')
         action_argv = ' '.join(argv[2:])
 
         show_closed = False
@@ -367,6 +387,9 @@ class Plugin(main.Plugin):
             return f'@{msg.user}, Cannot stop the mailbox minigame, there is none running. FeelsBadMan'
         else:
             game = self.mailbox_games[msg.channel]
+            if game.get('timeout_reason'):
+                return f'@{msg.user}, Stopped automatic timeouts.'
+
             if 'end_time' not in game:
                 game['end_time'] = time.time()
                 return 'Entries are now closed!'
@@ -381,6 +404,21 @@ class Plugin(main.Plugin):
             return f'@{msg.user}, Canceled the ongoing game.'
         else:
             return f'@{msg.user}, There is no game to cancel.'
+
+    def _mailbox_timeout(self, argv, msg):
+        action_argv = ' '.join(argv[2:])
+        if msg.channel in self.mailbox_games:
+            return (f'@{msg.user}, Game is already running in this channel. '
+                    f'If you want to override the game use "{argv[0]} cancel", then "{msg.text}"')
+        reason = (action_argv
+                  or plugin_manager.channel_settings[msg.channel].get(self.default_no_game_timeout_reason))
+        self.mailbox_games[msg.channel] = {
+            'timeout_reason': reason,
+            'end_time': time.time()
+        }
+        return (
+            f'@{msg.user}, Will now time out mailbox game guesses with the reason {action_argv!r}. '
+            f'Use "{argv[0]} cancel" to stop timing out guesses.')
 
     # endregion
 
