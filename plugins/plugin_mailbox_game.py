@@ -20,6 +20,8 @@ import time
 import traceback
 import typing
 
+import sqlalchemy.exc
+
 from plugins.models import mailbox_game
 
 try:
@@ -270,6 +272,8 @@ class Plugin(main.Plugin):
             return self._mailbox_cancel(msg)
         elif action == 'timeout':
             return self._mailbox_timeout(argv, msg)
+        elif action == 'whatif':
+            return self._mailbox_whatif(argv, msg)
         else:
             return f'@{msg.user}, Unknown action: {action!r}'
 
@@ -420,6 +424,56 @@ class Plugin(main.Plugin):
             f'@{msg.user}, Will now time out mailbox game guesses with the reason {action_argv!r}. '
             f'Use "{argv[0]} cancel" to stop timing out guesses.')
 
+    def _mailbox_whatif(self, argv, msg):
+        # "!mailbox" "whatif" "ID SCORE SCORE SCORE"
+        #                 [2:]
+        args = argv[-1].split(' ', 1)
+        if len(args) != 2:
+            return f'@{msg.user}, Usage: {argv[0]} {argv[1]} ID SCORE SCORE SCORE'
+        id_ = args[0]
+        matches = args[1]
+        if not id_.isnumeric():
+            return f'@{msg.user}, Game ID must be a number.'
+
+        with main.session_scope() as session:
+            try:
+                game = session.query(self.MailboxGame).filter(self.MailboxGame.id == int(id_)).one()
+            except sqlalchemy.exc.NoResultFound:
+                return f'@{msg.user}, Unable to fetch game ID {int(id_)!r}'
+
+        match = GUESS_PATTERN.match(matches)
+        if not match:
+            return (f'@{msg.user}, Could not extract scores from your message. '
+                    f'Usage: {argv[0]} {argv[1]} ID SCORE SCORE SCORE')
+
+        good_value = [int(i.rstrip(', -')) for i in match.groups()]
+
+        settings = game.settings
+        msgs = []
+        for i in game.guesses:
+            platform, channel, user, guess = i.split(' ', 3)
+            msg = main.StandardizedMessage(guess, user.strip('<>'), channel, main.Platform[platform.strip('[]')])
+            msgs.append(msg)
+        possible_guesses = msgs
+        print('possible', possible_guesses)
+        good_guesses = self._find_good_guesses(possible_guesses, good_value, settings)
+        print('good', good_guesses)
+        best = self._best_guess(settings, good_guesses)
+        print('best', best)
+        print(settings)
+
+        if len(best) == 0:
+            return f'No matching guesses.'
+
+        else:
+            message = f'Best guesses would be {self._nice_best_guesses(best)}.'
+            if len(message) > 500:
+                msgs = []
+                for i in range(1, math.ceil(len(message) / 500) + 1):
+                    msgs.append(message[(i - 1) * 500:i * 500])
+                return msgs
+            return message
+
     # endregion
 
     # region mailbox draw helpers
@@ -502,7 +556,7 @@ class Plugin(main.Plugin):
     def _nice_best_guesses(self, best):
         output = []
         for i in best:
-            is_sub = any([i.startswith('subscriber') for i in i['msg'].flags['badges']])
+            is_sub = any([i.startswith('subscriber') for i in i['msg'].flags.get('badges', [])])
             output.append(f'@{i["msg"].user} {"(Sub)" if is_sub else ""} ({i["quality"]}/3)')
         return ', '.join(output)
     # endregion
