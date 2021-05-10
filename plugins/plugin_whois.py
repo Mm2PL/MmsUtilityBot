@@ -114,13 +114,14 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             return f'@{msg.user} No such user found.'
 
         roles = ''
-        if data['roles']['isAffiliate']:
+        data_roles = data.get('roles', {})
+        if data_roles.get('isAffiliate', False):
             roles += 'affiliate, '
-        if data['roles']['isPartner']:
+        if data_roles.get('isPartner', False):
             roles += 'partner, '
-        if data['roles']['isSiteAdmin']:
+        if data_roles.get('isSiteAdmin', False):
             roles += 'site admin, '
-        if data['roles']['isStaff']:
+        if data_roles.get('isStaff', False):
             roles += 'staff, '
         if roles == '':
             roles = 'none'
