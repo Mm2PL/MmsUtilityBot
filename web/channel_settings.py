@@ -328,7 +328,8 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 return render_template('no_perms.html')
 
             def _(setting):
-                return ('[default]' if setting.name not in settings._settings else '') + repr(settings.get(setting))
+                return (('[default]' if setting.name not in settings._settings else '')
+                        + json.dumps(settings.get(setting)))
 
             return render_template(
                 'settings_list.html',
@@ -370,7 +371,8 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
                 return render_template('no_perms.html')
 
             def _(setting):
-                return ('[default]' if setting.name not in settings._settings else '') + repr(settings.get(setting))
+                return (('[default]' if setting.name not in settings._settings else '')
+                        + json.dumps(settings.get(setting)))
 
             setting = all_settings.get(setting)
             if setting is None:
