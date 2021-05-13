@@ -334,9 +334,10 @@ class Plugin(main.Plugin):
 
         match = GUESS_PATTERN.match(action_argv)
         if not match:
-            return (f'@{msg.user}, Bad winning value, should be in format of "00-99 00-99 00-99" '
-                    f'(/{GUESS_PATTERN.pattern}/).'
-                    f'{" The game has been automatically closed." if show_closed else ""}')
+            return (
+                f'@{msg.user}, Bad winning value, it should be formatted like "30 32 29" '
+                f'{"The game has been automatically closed and is waiting for valid scores." if show_closed else ""}'
+            )
 
         good_value = [int(i.rstrip(', -')) for i in match.groups()]
 
@@ -351,7 +352,6 @@ class Plugin(main.Plugin):
         best = self._best_guess(settings, good_guesses)
         print('best', best)
         print(settings)
-        save_start_time = time.monotonic()
         failed_save = False
 
         # noinspection PyBroadException
@@ -363,12 +363,10 @@ class Plugin(main.Plugin):
         except Exception:
             failed_save = True
             traceback.print_exc()
-        save_end_time = time.monotonic()
 
         del self.mailbox_games[msg.channel]
         db_notif = (
-            f'{"Failed to save to database." if failed_save else "Saved winners to database."} '
-            f'Time taken: {save_end_time - save_start_time:.2f}s. ID: {game_obj.id if not failed_save else "n/a"}'
+            f'{"Failed to save to database. " if failed_save else ""}ID: {game_obj.id if not failed_save else "n/a"}'
         )
         if len(best) == 0:
             return (f'{"(automatically closed the game)" if show_closed else ""}'
