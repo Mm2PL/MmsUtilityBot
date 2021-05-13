@@ -189,7 +189,7 @@ class Plugin(main.Plugin):
                                  'Should the best matches be shown. If false only shows full matches. '
                                  'Use -find_best to disable that behaviour. Default: true',
                                  section=plugin_help.SECTION_ARGS,
-                                 links = [
+                                 links=[
                                      'mailgame start find_best'
                                  ])
         plugin_help.create_topic('mailbox start winners',
