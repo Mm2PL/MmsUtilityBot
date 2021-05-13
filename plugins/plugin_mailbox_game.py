@@ -505,10 +505,8 @@ class Plugin(main.Plugin):
         for i in guesses:
             match = GUESS_PATTERN.match(i.text)
             guess = [int(i.rstrip(', -')) for i in match.groups()]
-            points = 0
-            for num, g in enumerate(guess):
-                if g == good[num]:
-                    points += 1
+            point_values = [g == good[num] for num, g in enumerate(guess)]
+            points = sum(point_values)
 
             if i.user in good_guesses:  # check if user had a better guess before
                 if guess != good_guesses[i.user]['parsed']:
@@ -524,12 +522,14 @@ class Plugin(main.Plugin):
                     good_guesses[i.user]['quality'] = points
                     good_guesses[i.user]['msg'] = i
                     good_guesses[i.user]['parsed'] = guess
+                    good_guesses[i.user]['guessed'] = point_values
             else:
                 good_guesses[i.user] = {
                     'quality': points,
                     'msg': i,
                     'parsed': guess,
-                    'count': 1
+                    'count': 1,
+                    'guessed': point_values
                 }
 
         return good_guesses
@@ -537,8 +537,9 @@ class Plugin(main.Plugin):
     def _nice_best_guesses(self, best):
         output = []
         for i in best:
+            good_indicators = "".join("+" if v else "-" for v in i["guessed"])
             is_sub = any([i.startswith('subscriber') for i in i['msg'].flags.get('badges', [])])
-            output.append(f'@{i["msg"].user} {"(Sub)" if is_sub else ""} ({i["quality"]}/3)')
+            output.append(f'@{i["msg"].user} {"(Sub)" if is_sub else ""} ({i["quality"]}/3 {good_indicators})')
         return ', '.join(output)
     # endregion
     # endregion
