@@ -137,46 +137,78 @@ class Plugin(main.Plugin):
 
         plugin_help.create_topic('mailbox', 'Manage the mailbox game. Subcommands: mailbox start, '
                                             'mailbox stop, mailbox draw, mailbox cancel.',
-                                 section=plugin_help.SECTION_COMMANDS)
+                                 section=plugin_help.SECTION_COMMANDS,
+                                 links=[
+                                     'mailgame'
+                                 ])
 
         plugin_help.create_topic('mailbox stop',
                                  'Stop accepting new guesses into the minigame. This subcommand takes no arguments.',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame stop'
+                                 ])
 
         plugin_help.create_topic('mailbox draw',
                                  'Draw winner(s) of the minigame. Syntax: mailbox draw NN NN NN, '
                                  'where NN is a number, numbers need to be separated by spaces, '
                                  'they don\'t need leading zeros',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame draw'
+                                 ])
 
         plugin_help.create_topic('mailbox start',
                                  'Start the mailbox minigame. Possible arguments are guesses, '
-                                 'find_best, winners. Help for these is at "mailbox start ARGUMENT"',
-                                 section=plugin_help.SECTION_ARGS)
+                                 'find_best, winners. Help for these is at "mailbox start ARGUMENT_NAME"',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame start'
+                                 ])
         plugin_help.create_topic('mailbox cancel',
                                  'Cancels the ongoing mailbox minigame. This subcommand takes no arguments.',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame cancel'
+                                 ])
         plugin_help.create_topic('mailbox timeout',
                                  'Sets up manual timeouts for guesses. This subcommand takes one optional argument: '
                                  'the timeout reason, a multi-word string.',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame timeout'
+                                 ])
 
         plugin_help.create_topic('mailbox start guesses',
                                  'How many guesses should people have. Use guesses:NUMBER to change. Default: 1.',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame start guesses'
+                                 ])
         plugin_help.create_topic('mailbox start find_best',
                                  'Should the best matches be shown. If false only shows full matches. '
                                  'Use -find_best to disable that behaviour. Default: true',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links = [
+                                     'mailgame start find_best'
+                                 ])
         plugin_help.create_topic('mailbox start winners',
                                  'Highest amount of names shown when drawing winner(s). Full natches are always shown. '
                                  'Use winners:NUMBER to change this number. Default: 3',
-                                 section=plugin_help.SECTION_ARGS)
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame start winners'
+                                 ])
         plugin_help.create_topic('mailbox start punish_more',
                                  'Punish users for guessing more than they are allowed to. '
                                  'This will make the users guesses worth zero points. '
-                                 'Use -punish_more to disable this. Default: true',
-                                 section=plugin_help.SECTION_ARGS)
+                                 'Use -punish_more to disable this. If disabled the first guess will be used. '
+                                 'Duplicating the same guess will never cause disqualification. '
+                                 'Default: true',
+                                 section=plugin_help.SECTION_ARGS,
+                                 links=[
+                                     'mailgame start punish_more'
+                                 ])
 
     def _reload_channels(self):
         self.command_mailbox.limit_to_channels = []
