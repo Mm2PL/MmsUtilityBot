@@ -151,7 +151,6 @@ class Plugin(main.Plugin):
 
         plugin_help.create_topic('mailbox start',
                                  'Start the mailbox minigame. Possible arguments are guesses, '
-                                 'plebs, subs, mods, vips, '
                                  'find_best, winners. Help for these is at "mailbox start ARGUMENT"',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox cancel',
@@ -162,23 +161,8 @@ class Plugin(main.Plugin):
                                  'the timeout reason, a multi-word string.',
                                  section=plugin_help.SECTION_ARGS)
 
-        plugin_help.create_topic('mailbox start plebs',
-                                 'Should plebs (non-subs) be allowed to guess, Use -plebs to disallow plebs to guess. '
-                                 'Default: true',
-                                 section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start guesses',
                                  'How many guesses should people have. Use guesses:NUMBER to change. Default: 1.',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('mailbox start subs',
-                                 'Should subs be allowed to guess. Use -subs to disallow subs to guess. '
-                                 'Broadcaster can vote if this argument or the mods argument is true. Default: true',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('mailbox start mods',
-                                 'Should mods be allowed to guess. Use -mods to disallow mods to guess. '
-                                 'Broadcaster can vote if this argument or the subs argument is true. Default: true',
-                                 section=plugin_help.SECTION_ARGS)
-        plugin_help.create_topic('mailbox start vips',
-                                 'Should vip be allowed to guess. Use -vips to disallow vips to guess. Default: true',
                                  section=plugin_help.SECTION_ARGS)
         plugin_help.create_topic('mailbox start find_best',
                                  'Should the best matches be shown. If false only shows full matches. '
@@ -247,17 +231,8 @@ class Plugin(main.Plugin):
     # endregion
 
     # region _mailgame/_mailbox
-    def _nice_minigame_settings(self, settings: typing.Dict[str, typing.Union[int, bool]]):
-        can_take_part = []
-        for i in ('plebs', 'subs', 'mods', 'vips'):
-            if settings[i] is True:
-                can_take_part.append(i)
 
-        output = f'Number of guesses is {settings["guesses"]}, {", ".join(can_take_part)} can take part'
-
-        return output
-
-    def command_mailbox(self, msg: twitchirc.ChannelMessage):
+    def command_mailbox(self, msg: main.StandardizedMessage):
         argv = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 2)
         if len(argv) == 1:
             return plugin_help.find_topic('mailbox') + ' For full help see the help command.'
@@ -281,44 +256,35 @@ class Plugin(main.Plugin):
     def _mailbox_start(self, argv, msg):
         action_argv = ' '.join(argv[2:])
         try:
-            action_args = arg_parser.parse_args(action_argv, {
-                'guesses': int,
-                'plebs': bool,
-                'subs': bool,
-                'mods': bool,
-                'vips': bool,
-                'winners': int,
-                'find_best': bool,
-                'punish_more': bool
-            }, strict_escapes=False, strict_quotes=True, ignore_arg_zero=False)
+            action_args = arg_parser.parse_args(
+                action_argv,
+                {
+                    'guesses': int,
+                    'winners': int,
+                    'find_best': bool,
+                    'punish_more': bool
+                },
+                defaults={
+                    'find_best': True,
+                    'winners': 3,
+                    'guesses': 1,
+                    'punish_more': True,
+                },
+                ignore_arg_zero=False
+            )
         except arg_parser.ParserError as e:
             return f'@{msg.user}, Unexpected error when processing arguments: {e.message}'
         if msg.channel in self.mailbox_games:
             return (f'@{msg.user}, Game is already running in this channel. '
                     f'If you want to override the game use "{argv[0]} cancel", then "{msg.text}"')
-        if action_args['guesses'] is ...:
-            action_args['guesses'] = 1
-
-        if action_args['punish_more'] is ...:
-            action_args['punish_more'] = True
 
         if action_args['guesses'] < 1:
             return f'@{msg.user}, Number of guesses cannot be less than one.'
 
-        if action_args['find_best'] is ...:
-            action_args['find_best'] = True  # only search for exact best.
-        if action_args['winners'] is ...:
-            action_args['winners'] = 3  # only search for exact best.
-
-        for i in ('plebs', 'subs', 'mods', 'vips'):
-            if action_args[i] is ...:
-                action_args[i] = True
-        if sum([action_args[i] for i in ('plebs', 'subs', 'mods', 'vips')]) == 0:
-            return f'@{msg.user}, Nobody can take part in this mailbox minigame. ' \
-                   f'why bother with it then? FeelsBadMan'
         action_args['start_time'] = time.time()
         self.mailbox_games[msg.channel] = action_args
-        return f'Minigame starts now! Settings: {self._nice_minigame_settings(action_args)}'
+        return (f'Mail minigame starts now! You get {action_args["guesses"]} '
+                f'guess{"es" if action_args["guesses"] != 1 else ""}. Format is 30 32 29.')
 
     def _mailbox_draw(self, argv, msg):
         if msg.channel not in self.mailbox_games:
@@ -345,7 +311,7 @@ class Plugin(main.Plugin):
         msgs = plugin_chat_cache.find_messages(msg.channel, min_timestamp=settings['start_time'],
                                                max_timestamp=settings['end_time'])
 
-        possible_guesses = list(self._filter_messages(msgs, settings))
+        possible_guesses = list(filter(lambda m: bool(GUESS_PATTERN.match(m.text)), msgs))
 
         print('possible', possible_guesses)
         good_guesses = self._find_good_guesses(possible_guesses, good_value, settings)
@@ -421,8 +387,9 @@ class Plugin(main.Plugin):
             'end_time': time.time()
         }
         return (
-            f'@{msg.user}, Will now time out mailbox game guesses with the reason {action_argv!r}. '
-            f'Use "{argv[0]} cancel" to stop timing out guesses.')
+            f'@{msg.user}, Will now time out mailbox game guesses. '
+            f'Use "{argv[0]} cancel" to stop timing out guesses.'
+        )
 
     def _mailbox_whatif(self, argv, msg):
         # "!mailbox" "whatif" "ID SCORE SCORE SCORE"
@@ -477,26 +444,6 @@ class Plugin(main.Plugin):
     # endregion
 
     # region mailbox draw helpers
-    def _filter_messages(self, msgs, settings):
-        def filter_function(m: twitchirc.ChannelMessage):
-            grp = twitchirc.auto_group(m)
-            if grp == 'default':
-                return settings['plebs']
-            elif grp == 'broadcaster':
-                return settings['subs'] or settings['mods']
-            elif grp == 'subscriber':
-                return settings['subs']
-            elif grp in ('moderator', 'staff'):
-                return settings['mods']
-            else:
-                return False
-
-        first_parse = filter(filter_function, msgs)
-        # all of the messages by users not included in the minigame should be gone now.
-
-        possible_guesses = filter(lambda m: bool(GUESS_PATTERN.match(m.text)), first_parse)
-        return possible_guesses
-
     def _best_guess(self, settings,
                     good_guesses: typing.Dict[str, typing.Dict[str, typing.Union[int, twitchirc.ChannelMessage]]]):
         best = []
@@ -533,6 +480,8 @@ class Plugin(main.Plugin):
 
             if i.user in good_guesses:  # check if user had a better guess before
                 if guess != good_guesses[i.user]['parsed']:
+                    # Don't count up duplicate guesses if they are the same,
+                    # they were probably sent by mistake.
                     good_guesses[i.user]['count'] += 1
 
                 if good_guesses[i.user]['count'] > settings['guesses']:
