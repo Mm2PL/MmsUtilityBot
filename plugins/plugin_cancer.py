@@ -125,7 +125,7 @@ COOKIE_PATTERN = regex.compile(
     r'(?!you have already claimed)'
 )
 ISSUE_PATTERN = regex.compile(
-    r'\b([^ #]*)'
+    r'\b([^ #:.]*)'
     r'(?:'
     + (
         r'#(?P<issue>\d+)'
