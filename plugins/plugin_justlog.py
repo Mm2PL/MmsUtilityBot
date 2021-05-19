@@ -62,7 +62,6 @@ class Plugin(util_bot.Plugin):
         self.command_logs = util_bot.bot.add_command(
             'logs',
             enable_local_bypass=False,
-            required_permissions=['util.logs'],
             cooldown=util_bot.CommandCooldown(5, 0, 0, False)
         )(self.command_logs)
         self.logger_setting = plugin_manager.Setting(
@@ -198,6 +197,10 @@ class Plugin(util_bot.Plugin):
         return None
 
     async def command_logs(self, msg: util_bot.StandardizedMessage):
+        missing_perms = await util_bot.bot.acheck_permissions(msg, ['util.logs', 'util.logs.channel.*'])
+        if 'util.logs' in missing_perms:
+            return (util_bot.CommandResult.NO_PERMISSIONS,
+                    f'@{msg.user} You don\'t have the permissions to use this command.')
         if msg.platform != util_bot.Platform.TWITCH:
             return (util_bot.CommandResult.OTHER_FILTERED,
                     f'{msg.user_mention} This command only works on Twitch! Use whispers if needed.')
@@ -258,6 +261,10 @@ class Plugin(util_bot.Plugin):
                     return None
             else:
                 return f"@{msg.user}, There's nothing to cancel!"
+        missing_chan_permissions = await util_bot.bot.acheck_permissions(msg, [f'util.logs.channel.{args["channel"]}'])
+        if missing_chan_permissions and missing_perms:
+            return (util_bot.CommandResult.NO_PERMISSIONS,
+                    f'@{msg.user} You don\'t have the permissions to search for logs in channel {args["channel"]}')
         logger = await self._justlog_for_channel(args['channel'])
         if not logger:
             return (util_bot.CommandResult.OTHER_FAILED,
