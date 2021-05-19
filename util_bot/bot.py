@@ -368,7 +368,7 @@ class Bot(twitchirc.Bot):
         if (isinstance(message, tuple) and len(message) == 2
                 and isinstance(message[0], CommandResult)):
             no_perm_setting = self.no_permissions_message_settings.get(
-                (source_message.channel, source_message.platform), False
+                (source_message.channel, source_message.platform), True
             )
             if ((message[0] == CommandResult.NO_PERMISSIONS and no_perm_setting)
                     or message[0] != CommandResult.NO_PERMISSIONS):
