@@ -359,7 +359,6 @@ class Plugin(util_bot.Plugin):
                     break
                 uid = '#' + i.flags.get('user-id', '')
                 if i.user in not_users or uid in not_users:
-                    print(f'mismatched user: {i.user}/{uid}!')
                     continue
                 if users and i.user not in users and uid not in users:
                     continue
