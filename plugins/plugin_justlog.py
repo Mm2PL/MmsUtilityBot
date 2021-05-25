@@ -287,11 +287,19 @@ class Plugin(util_bot.Plugin):
             log_format = 'raw'
             args['simple'] = False
             args['text'] = False
+        users = []
+        not_users = []
+        for i in args['user'].lower().split(','):
+            if i.startswith('!'):
+                not_users.append(i.lstrip('!'))
+            else:
+                users.append(i)
 
         filter_task = asyncio.create_task(self._filter_messages(
             logger,
             channel=args['channel'],
-            user=args['user'],
+            users=users,
+            not_users=not_users,
             regular_expr=args['regex'],
             start=args['from'],
             end=args['to'],
@@ -329,19 +337,35 @@ class Plugin(util_bot.Plugin):
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
 
-    async def _filter_messages(self, logger: 'JustLogApi', channel, user, regular_expr: typing.Pattern, start, end,
-                               count):
+    async def _filter_messages(self, logger: 'JustLogApi', channel,
+                               users: List[str], not_users: List[str],
+                               regular_expr: typing.Pattern, start, end, count):
         matched = []
-        is_userid = False
-        if user and user.startswith('#'):
-            user = user.lstrip('#')
-            is_userid = True
-        async for i in logger.iterate_logs(channel, user, start, end, is_userid=is_userid):
-            if len(matched) >= count:
-                break
+        if len(users) == 1:
+            is_userid = False
+            user = users[0]
+            if user and user.startswith('#'):
+                user = user.lstrip('#')
+                is_userid = True
+            async for i in logger.iterate_logs_for_user(channel, user, start, end, is_userid=is_userid):
+                if len(matched) >= count:
+                    break
 
-            if regular_expr.search(i.text):
-                matched.append(i)
+                if regular_expr.search(i.text):
+                    matched.append(i)
+        else:
+            async for i in logger.iterate_logs_for_channel(channel, start, end):
+                if len(matched) >= count:
+                    break
+                uid = '#' + i.flags.get('user-id', '')
+                if i.user in not_users or uid in not_users:
+                    print(f'mismatched user: {i.user}/{uid}!')
+                    continue
+                if users and i.user not in users and uid not in users:
+                    continue
+
+                if regular_expr.search(i.text):
+                    matched.append(i)
         return matched
 
     def _convert_to_simple_text(self, matched: List[StandardizedMessage]) -> str:
