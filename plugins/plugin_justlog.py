@@ -289,11 +289,12 @@ class Plugin(util_bot.Plugin):
             args['text'] = False
         users = []
         not_users = []
-        for i in args['user'].lower().split(','):
-            if i.startswith('!'):
-                not_users.append(i.lstrip('!'))
-            else:
-                users.append(i)
+        if args.get('user'):
+            for i in args['user'].lower().split(','):
+                if i.startswith('!'):
+                    not_users.append(i.lstrip('!'))
+                else:
+                    users.append(i)
 
         filter_task = asyncio.create_task(self._filter_messages(
             logger,
