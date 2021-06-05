@@ -311,8 +311,10 @@ class Plugin(util_bot.Plugin):
             try:
                 matched = await asyncio.wait_for(asyncio.shield(filter_task), timeout=5)
             except asyncio.TimeoutError:
+                additional_message = ('Using local user filtering, because you used advanced user searching.'
+                                      if len(users) != 1 or not_users else '')
                 await util_bot.bot.send(msg.reply(f'@{msg.user}, Looks like this log fetch will take a while, '
-                                                  f'do `_logs --cancel` to abort.'))
+                                                  f'do `_logs --cancel` to abort. {additional_message}'))
                 matched = None
             if not filter_task.done():
                 matched = await filter_task
@@ -570,10 +572,10 @@ class JustLogApi:
             log('warn', f'@{self.address}, You promised me JSON and sent XML.')
 
 
-
 class JustlogChannel:
     name: str
     id: str
+
     def __init__(self, name, id_):
         self.name = name
         self.id = id_
