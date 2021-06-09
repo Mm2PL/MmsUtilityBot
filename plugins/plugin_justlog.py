@@ -261,6 +261,10 @@ class Plugin(util_bot.Plugin):
                     return None
             else:
                 return f"@{msg.user}, There's nothing to cancel!"
+        if args['channel'] == 'whispers' and msg.channel == 'whispers':
+            return (util_bot.CommandResult.OTHER_FAILED,
+                    f'@{msg.user}, To use this command in whispers you need to provide a channel, like '
+                    f'"channel:pajlada"')
         missing_chan_permissions = await util_bot.bot.acheck_permissions(msg, [f'util.logs.channel.{args["channel"]}'])
         if missing_chan_permissions and missing_perms:
             return (util_bot.CommandResult.NO_PERMISSIONS,
