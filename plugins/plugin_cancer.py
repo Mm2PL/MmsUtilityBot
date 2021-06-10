@@ -151,7 +151,9 @@ REPO_MAP = {
     'supicore': 'Supinic/supi-core',
     'supibot': 'Supinic/supibot',
     'dankerino': 'Mm2PL/chatterino2',
-    'd2': 'Mm2PL/chatterino2'
+    'd2': 'Mm2PL/chatterino2',
+    'dankchat': 'flex3r/DankChat',
+    'dc': 'flex3r/DankChat',
 }
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 COMMIT_LINK_FORMAT = 'https://github.com/{repo}/commit/{hash}'
