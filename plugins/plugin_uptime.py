@@ -148,7 +148,25 @@ async def command_downtime(msg: twitchirc.ChannelMessage):
     cd_state = main.do_cooldown('downtime', msg, global_cooldown=30, local_cooldown=60)
     if cd_state:
         return
-    data = await _fetch_stream_data(msg.channel)
+    now = time.monotonic()
+    async with cache_data_lock:
+        cache = cached_stream_data.get(msg.channel, {
+            'expire': 0,
+            'data': None
+        })
+
+        cached_stream_data[msg.channel] = cache
+        if cache and cache['expire'] > now:
+            data = cache['data']
+        else:
+            data = await _fetch_stream_data(msg.channel)
+            if data:
+                data = data[0]
+                cache['data'] = data
+                cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
+            else:
+                cache['data'] = None
+
     if data:
         return f'@{msg.user}, {msg.channel} is live.'
 
@@ -243,10 +261,12 @@ class UptimeMiddleware(twitchirc.AbstractMiddleware):
         cache = cached_stream_data.get(channel_name, None)
         if not cache or not cache['data']:
             return  # will have to fetch the start time either way
-
+        now = time.monotonic()
+        if cache['expire'] < now:
+            # cache already expired, let it go
+            return
         cached_stream_data[channel_name] = cache
 
-        now = time.monotonic()
         cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
 
 
