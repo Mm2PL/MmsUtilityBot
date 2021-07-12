@@ -166,7 +166,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             f'account created at {created_on}',
             f'roles: {roles}',
             f'id: {data["id"]}',
-            f'bio: {data["bio"].rstrip(" ,.") if data["bio"] is not None else "<blank>"}',
+            f'bio: {data["bio"]}' if data['bio'] is not None else 'empty bio',
             bot_notes
         )
 
