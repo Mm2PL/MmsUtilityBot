@@ -401,6 +401,8 @@ class Plugin(main.Plugin):
         game = self.mailbox_games.get(msg.channel)
         if game:
             del self.mailbox_games[msg.channel]
+            if game.get('timeout_reason') is not None:
+                return f'@{msg.user}, Stopped timeouts.'
             return f'@{msg.user}, Canceled the ongoing game.'
         else:
             return f'@{msg.user}, There is no game to cancel.'
