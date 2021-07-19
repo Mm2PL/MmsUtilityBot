@@ -139,57 +139,62 @@ class PubsubClient:
         is_reconnect = False
         while 1:
             last_pong = time.time() + 20
-            async with websockets.connect('wss://pubsub-edge.twitch.tv') as ws:
-                self.log_function('Connected to pubsub')
-                sender_task = asyncio.create_task(self._sender(self.send_queue, ws))
-                pinger_task = asyncio.create_task(self._pinger(self.send_queue))
-                if is_reconnect:
-                    topics = self.topics.copy()
-                    self.listen(list(topics))
-                is_reconnect = True
-                try:
-                    while 1:
-                        try:
-                            recved_msg = await asyncio.wait_for(ws.recv(), timeout=5)
-                        except asyncio.TimeoutError:
-                            # haven't received anything for 5 seconds, check if a PONG should have came in.
-                            if last_pong + self.ping_time * 2 < time.time():
-                                # no pong in last 30 seconds, this means either we aren't sending PINGs
-                                # or the connection is dead, reconnect
+            try:
+                async with websockets.connect('wss://pubsub-edge.twitch.tv') as ws:
+                    self.log_function('Connected to pubsub')
+                    sender_task = asyncio.create_task(self._sender(self.send_queue, ws))
+                    pinger_task = asyncio.create_task(self._pinger(self.send_queue))
+                    if is_reconnect:
+                        topics = self.topics.copy()
+                        self.listen(list(topics))
+                    is_reconnect = True
+                    try:
+                        while 1:
+                            try:
+                                recved_msg = await asyncio.wait_for(ws.recv(), timeout=5)
+                            except asyncio.TimeoutError:
+                                # haven't received anything for 5 seconds, check if a PONG should have came in.
+                                if last_pong + self.ping_time * 2 < time.time():
+                                    # no pong in last 30 seconds, this means either we aren't sending PINGs
+                                    # or the connection is dead, reconnect
+                                    break
+                                continue
+
+                            if 'PONG' not in recved_msg:
+                                self.log_function(f'< {recved_msg!r}')
+                            msg = json.loads(recved_msg)
+                            if msg['type'] == 'MESSAGE':
+                                topic = msg['data']['topic']
+                                data = json.loads(msg['data']['message'])
+
+                                for f in self.callbacks[topic]:
+                                    if inspect.iscoroutinefunction(f):
+                                        await f(topic, data)
+                                    else:
+                                        f(topic, data)
+                                if not self.callbacks[topic]:
+                                    warnings.warn(f'UNHANDLED PUBSUB MESSAGE TOPIC {topic}', PubsubWarning)
+                            elif msg['type'] == 'RESPONSE':
+                                if msg['error']:
+                                    warnings.warn(f'PUBSUB ERROR {msg["error"]}', PubsubWarning)
+                            elif msg['type'] == 'PONG':
+                                if last_pong + self.ping_time * 2 < time.time():
+                                    # print('reconnect')
+                                    break  # late pong, possible connections issues, better to just reconnect.
+                                last_pong = time.time()
+                                # print('cancel reconnect')
+                            elif msg['type'] == 'RECONNECT':
                                 break
-                            continue
-
-                        if 'PONG' not in recved_msg:
-                            self.log_function(f'< {recved_msg!r}')
-                        msg = json.loads(recved_msg)
-                        if msg['type'] == 'MESSAGE':
-                            topic = msg['data']['topic']
-                            data = json.loads(msg['data']['message'])
-
-                            for f in self.callbacks[topic]:
-                                if inspect.iscoroutinefunction(f):
-                                    await f(topic, data)
-                                else:
-                                    f(topic, data)
-                            if not self.callbacks[topic]:
-                                warnings.warn(f'UNHANDLED PUBSUB MESSAGE TOPIC {topic}', PubsubWarning)
-                        elif msg['type'] == 'RESPONSE':
-                            if msg['error']:
-                                warnings.warn(f'PUBSUB ERROR {msg["error"]}', PubsubWarning)
-                        elif msg['type'] == 'PONG':
-                            if last_pong + self.ping_time * 2 < time.time():
-                                # print('reconnect')
-                                break  # late pong, possible connections issues, better to just reconnect.
-                            last_pong = time.time()
-                            # print('cancel reconnect')
-                        elif msg['type'] == 'RECONNECT':
-                            break
-                        else:
-                            warnings.warn(f'UNHANDLED PUBSUB MESSAGE TYPE {msg["type"]!r}, msg => {msg}', PubsubWarning)
-                except (websockets.InvalidMessage, websockets.ConnectionClosedError):
-                    pass
-                sender_task.cancel()
-                await sender_task
-                pinger_task.cancel()
-                await pinger_task
-                await ws.close()
+                            else:
+                                warnings.warn(f'UNHANDLED PUBSUB MESSAGE TYPE {msg["type"]!r}, msg => {msg}',
+                                              PubsubWarning)
+                    except (websockets.InvalidMessage, websockets.ConnectionClosedError):
+                        pass
+                    sender_task.cancel()
+                    await sender_task
+                    pinger_task.cancel()
+                    await pinger_task
+                    await ws.close()
+            except ConnectionAbortedError as e:
+                warnings.warn(f'PUBSUB SSL SHIT AGAIN {e}', PubsubWarning)
+                await asyncio.sleep(5)
