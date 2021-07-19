@@ -32,7 +32,7 @@ import yasdu
 import twitchirc
 import json5 as json
 from sqlalchemy import create_engine
-from twitchirc import Command, Event
+from twitchirc import Event
 
 from apis.pubsub import PubsubClient
 from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, user_model, Platform, init_twitch_auth,
@@ -159,41 +159,6 @@ class UserLoadingMiddleware(twitchirc.AbstractMiddleware):
 bot.middleware.append(UserLoadingMiddleware())
 
 counters = {}
-
-
-def new_counter_command(counter_name, counter_message, limit_to_channel: typing.Optional[str] = None,
-                        command_source='hard-coded'):
-    global counters
-    counters[counter_name] = {}
-
-    @bot.add_command(counter_name)
-    def command(msg: twitchirc.ChannelMessage):
-        global counters
-        if isinstance(limit_to_channel, (str, list)):
-            if isinstance(limit_to_channel, list) and msg.channel not in limit_to_channel:
-                return
-            if isinstance(limit_to_channel, str) and msg.channel != limit_to_channel:
-                return
-
-        cd_state = do_cooldown(counter_name, msg, global_cooldown=30, local_cooldown=0)
-        if cd_state:
-            return
-        c = counters[counter_name]
-        if msg.channel not in c:
-            c[msg.channel] = 0
-        text = msg.text[len(bot.prefix):].replace(counter_name + ' ', '')
-        old_val = c[msg.channel]
-        print(repr(text), msg.text)
-        new_counter_value = counter_difference(text, c[msg.channel])
-        if new_counter_value is None:
-            return f'Not a number: {text}'
-        else:
-            c[msg.channel] = new_counter_value
-        val = c[msg.channel]
-        return show_counter_status(val, old_val, counter_name, counter_message, msg)
-
-    command.source = command_source
-    return command
 
 
 def chat_msg_handler(event: str, msg: StandardizedMessage, *args):
