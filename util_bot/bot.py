@@ -523,11 +523,15 @@ class Bot(twitchirc.Bot):
                     await self.clients[Platform.TWITCH].send(i.reply())
                 elif isinstance(i, twitchirc.ReconnectMessage):
                     await self.reconnect_client(Platform.TWITCH)
-                elif isinstance(i, StandardizedMessage):
-                    self.call_handlers('chat_msg', i)
-                    await self._acall_command_handlers(i)
-                elif isinstance(i, StandardizedWhisperMessage):
-                    print('whisper', i)
+                elif isinstance(i, (StandardizedMessage, StandardizedWhisperMessage)):
+                    should_cont = await self.acall_middleware('receive', {
+                        'message': i
+                    }, True)
+                    if not should_cont:
+                        continue
+
+                    if isinstance(i, StandardizedMessage):
+                        self.call_handlers('chat_msg', i)
                     await self._acall_command_handlers(i)
                 await self.flush_queue(3)
 
