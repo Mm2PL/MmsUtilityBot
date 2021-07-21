@@ -96,10 +96,15 @@ def convert_twitchirc_to_standarized(l: typing.List[typing.Union[twitchirc.Chann
     output = []
     for i in l:
         if isinstance(i, twitchirc.ChannelMessage):
-            new = StandardizedMessage(i.text, i.user, i.channel, Platform.TWITCH, False, parent=message_parent)
-            new.flags = i.flags
+            new = StandardizedMessage(i.text, i.user, i.channel, Platform.TWITCH, False, parent=message_parent,
+                                      source_message=i)
+            # noinspection PyProtectedMember
+            new._copy_from(i)
         elif isinstance(i, twitchirc.WhisperMessage):
-            new = StandardizedWhisperMessage(i.user_from, i.user_to, i.text, Platform.TWITCH, i.flags, False)
+            new = StandardizedWhisperMessage(i.user_from, i.user_to, i.text, Platform.TWITCH, i.flags, False,
+                                             source_message=i)
+            # noinspection PyProtectedMember
+            new._copy_from(i)
         else:
             new = i
         output.append(new)
