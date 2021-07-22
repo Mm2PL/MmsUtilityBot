@@ -33,14 +33,22 @@ class StandardizedMessage(twitchirc.ChannelMessage):
             raise NotImplementedError('moderate() is not implemented outside of twitch, yet')
         return super().moderate()
 
-    def reply(self, text: str, force_slash=False):
-        if not force_slash and text.startswith(('.', '/')):
-            text = '/ ' + text
+    def reply(self, text: str, force_slash=False, use_threads: typing.Union[typing.Literal['auto'], bool] = 'auto'):
+        use_native_replies = False
         if self.platform == Platform.DISCORD:
             text = re.sub(r'@(<@\d+>)', r'\1', text)
+        elif self.platform == Platform.TWITCH:
+            if not force_slash and text.startswith(('.', '/')):
+                text = '/ ' + text
+
+            new_text = self._apply_auto_thread_reply(text, use_threads)
+            if new_text is not None:
+                text = new_text
+                use_native_replies = True
         new = StandardizedMessage(text=text, user='OUTGOING', channel=self.channel, platform=self.platform)
         new.outgoing = True
         new.flags['in_reply_to'] = self
+        new.flags['use_native_replies'] = use_native_replies
         return new
 
     def reply_directly(self, text: str):

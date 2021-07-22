@@ -50,7 +50,8 @@ class TwitchClient(AbstractClient):
         except ssl.SSLZeroReturnError as e:
             return  # connection is dead eShrug
 
-    async def send(self, msg):
+    async def send(self, msg: typing.Union[StandardizedMessage, StandardizedWhisperMessage]):
+        msg = convert_standarized_to_twitchirc(msg)
         try:
             self.connection.send(msg)
         except ssl.SSLZeroReturnError as e:
@@ -87,6 +88,18 @@ class TwitchClient(AbstractClient):
         util_bot.twitch_auth.save()
         self.auth = (self.auth[0], 'oauth:' + util_bot.twitch_auth.json_data['access_token'])
         await self.connect()
+
+
+def convert_standarized_to_twitchirc(msg: typing.Union[StandardizedMessage, StandardizedWhisperMessage]) \
+        -> typing.Union[twitchirc.ChannelMessage, twitchirc.WhisperMessage]:
+    if isinstance(msg, StandardizedMessage):
+        in_reply_to: StandardizedMessage = msg.flags.get('in_reply_to')
+        if msg.flags.get('use_native_replies') and in_reply_to:
+            return twitchirc.ChannelMessage.reply_to_thread(in_reply_to, msg.text)
+
+    # either in whispers or not using native replies, Standardized(Whisper)?Message are compatible with twitchirc,
+    # leave them alone
+    return msg
 
 
 def convert_twitchirc_to_standarized(l: typing.List[typing.Union[twitchirc.ChannelMessage, twitchirc.WhisperMessage,
