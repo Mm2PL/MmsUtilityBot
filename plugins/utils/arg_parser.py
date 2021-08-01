@@ -340,10 +340,10 @@ def handle_typed_argument(value: str, type_) -> typing.Any:
     if isinstance(type_, tuple):
         converter, options = type_
     if converter == int:
-        if value.isdecimal():
+        try:
             return int(value)
-        else:
-            raise ParserError(f'Cannot parse {value!r} as {type_}')
+        except ValueError as e:
+            raise ParserError(f'Cannot parse {value!r} as {type_}') from e
     elif converter == float:
         try:
             return float(value)
