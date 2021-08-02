@@ -38,6 +38,7 @@ def deprecated(alternative=None):
     :param alternative: The best alternative function name. It will be displayed in the warning.
     :returns: Actual decorator function.
     """
+
     # Taken from Rapptz's discord.py utils module.
     def actual_decorator(func):
         @functools.wraps(func)
