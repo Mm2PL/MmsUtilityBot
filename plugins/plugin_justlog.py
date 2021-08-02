@@ -14,14 +14,18 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import dataclasses
 import datetime
+import time
 import typing
 import unicodedata
-from typing import Dict, List, Union, Generator
+from typing import List, Generator
 
 import aiohttp
 import regex
+import twitchirc
 
+import util_bot.clients.twitch as twitch_client
 import util_bot
 import plugins.utils.arg_parser as arg_parser
 from util_bot import StandardizedMessage
@@ -51,6 +55,14 @@ __meta_data__ = {
     ]
 }
 log = util_bot.make_log_function(NAME)
+
+
+@dataclasses.dataclass
+class Stats:
+    io_wait_time = 0
+    parse_time = 0
+    filter_time = 0
+    messages_processed = 0
 
 
 class Plugin(util_bot.Plugin):
@@ -300,6 +312,7 @@ class Plugin(util_bot.Plugin):
                 else:
                     users.append(i)
 
+        stats = Stats()
         filter_task = asyncio.create_task(self._filter_messages(
             logger,
             channel=args['channel'],
@@ -308,7 +321,8 @@ class Plugin(util_bot.Plugin):
             regular_expr=args['regex'],
             start=args['from'],
             end=args['to'],
-            count=args['max']
+            count=args['max'],
+            stats=stats
         ))
         self._current_log_fetch = asyncio.current_task()
         self._current_log_owner = msg.user
@@ -317,7 +331,7 @@ class Plugin(util_bot.Plugin):
                 matched = await asyncio.wait_for(asyncio.shield(filter_task), timeout=5)
             except asyncio.TimeoutError:
                 additional_message = ('Using local user filtering, because you used advanced user searching.'
-                                      if len(users) != 1 or not_users else '')
+                                      if len(users) > 1 or not_users else '')
                 await util_bot.bot.send(msg.reply(f'@{msg.user}, Looks like this log fetch will take a while, '
                                                   f'do `_logs --cancel` to abort. {additional_message}'))
                 matched = None
@@ -338,7 +352,11 @@ class Plugin(util_bot.Plugin):
 
             return (util_bot.CommandResult.OK,
                     f'Uploaded {len(matched)} filtered messages to hastebin. Use --text for plaintext, '
-                    f'--simple for justlog format. Log viewer link: '
+                    f'--simple for justlog format. '
+                    f'{stats.messages_processed} messages processed, '
+                    f'waited {stats.io_wait_time:.2f}s for downloads, '
+                    f'{stats.parse_time:.2f}s for parsing,'
+                    f'Log viewer link: '
                     f'https://logviewer.kotmisia.pl/?url=/h/{hastebin_link}&c={args["channel"]}&cid={channel_id}')
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
@@ -346,7 +364,7 @@ class Plugin(util_bot.Plugin):
 
     async def _filter_messages(self, logger: 'JustLogApi', channel,
                                users: List[str], not_users: List[str],
-                               regular_expr: typing.Pattern, start, end, count):
+                               regular_expr: typing.Pattern, start, end, count, stats: Stats):
         matched = []
         if len(users) == 1:
             is_userid = False
@@ -354,14 +372,17 @@ class Plugin(util_bot.Plugin):
             if user and user.startswith('#'):
                 user = user.lstrip('#')
                 is_userid = True
-            async for i in logger.iterate_logs_for_user(channel, user, start, end, is_userid=is_userid):
+            async for i in logger.iterate_logs_for_user(channel, user, start, end, is_userid=is_userid, stats=stats):
                 if len(matched) >= count:
                     break
 
+                filter_start = time.monotonic()
                 if regular_expr.search(i.text):
                     matched.append(i)
+                filter_end = time.monotonic()
+                stats.filter_time += filter_end - filter_start
         else:
-            async for i in logger.iterate_logs_for_channel(channel, start, end):
+            async for i in logger.iterate_logs_for_channel(channel, start, end, stats=stats):
                 if len(matched) >= count:
                     break
                 uid = '#' + i.flags.get('user-id', '')
@@ -370,8 +391,11 @@ class Plugin(util_bot.Plugin):
                 if users and i.user not in users and uid not in users:
                     continue
 
+                filter_start = time.monotonic()
                 if regular_expr.search(i.text):
                     matched.append(i)
+                filter_end = time.monotonic()
+                stats.filter_time += filter_end - filter_start
         return matched
 
     def _convert_to_simple_text(self, matched: List[StandardizedMessage]) -> str:
@@ -451,64 +475,48 @@ class JustLogApi:
     async def logs_for_user(self, channel: str, user: str,
                             year: typing.Optional[int] = None,
                             month: typing.Optional[int] = None,
-                            reverse=False, is_userid: bool = False):
+                            reverse=False, is_userid: bool = False, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         date_frag = ''
         if year is not None and month is not None:
             date_frag = f'/{year}/{month}'
 
-        params = {'json': '1'}
+        params = {'raw': '1'}
         if reverse:
             params['reverse'] = '1'
 
         log('warn', f'Fetch logs for {user}@#{channel} for {year} {month}')
-        async with aiohttp.request(
-                'get',
-                self.address + f'/channel/{channel}/user{"id" if is_userid else ""}/{user}{date_frag}',
-                params=params,
-                headers={
-                    'User-Agent': util_bot.USER_AGENT
-                }
-        ) as req:
-            if req.status in (404, 500):
-                return None
-            json_resp: Dict[str, List[Dict[str, Union[str, int, Dict[str, str]]]]] = await req.json()
-            raw_messages = json_resp.get('messages')
-            return convert_messages(raw_messages)
+        return fetch_and_convert_messages(
+            self.address + f'/channel/{channel}/user{"id" if is_userid else ""}/{user}{date_frag}',
+            params,
+            stats
+        )
 
     async def logs_for_channel(self, channel: str,
                                year: typing.Optional[int] = None,
                                month: typing.Optional[int] = None,
                                day: typing.Optional[int] = None,
-                               reverse=False):
+                               reverse=False, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         date_frag = ''
         if year is not None and month is not None and day is not None:
             date_frag = f'/{year}/{month}/{day}'
 
-        params = {'json': '1'}
+        params = {'raw': '1'}
         if reverse:
             params['reverse'] = '1'
         log('warn', f'JustLog at {self.address}: logs for channel {channel} at {date_frag}')
-        async with aiohttp.request(
-                'get',
-                self.address + f'/channel/{channel}{date_frag}',
-                params=params,
-                headers={
-                    'User-Agent': util_bot.USER_AGENT
-                }
-        ) as req:
-            if req.status in (404, 500):
-                return None
-            json_resp: Dict[str, List[Dict[str, Union[str, int, Dict[str, str]]]]] = await req.json()
-            raw_messages = json_resp.get('messages')
-            return convert_messages(raw_messages)
+        return fetch_and_convert_messages(
+            self.address + f'/channel/{channel}{date_frag}',
+            params,
+            stats
+        )
 
     async def iterate_logs_for_user(self, channel: str, user: str,
                                     start: typing.Optional[datetime.datetime],
-                                    end: datetime.datetime, is_userid=False):
+                                    end: datetime.datetime, is_userid=False, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         days = (end - start).days
@@ -519,10 +527,10 @@ class JustLogApi:
             if cdate.month != last_date.month or day == 0:
                 last_date = cdate
                 iterator = await self.logs_for_user(channel, user, year=cdate.year, month=cdate.month,
-                                                    is_userid=is_userid)
+                                                    is_userid=is_userid, stats=stats)
                 if iterator is None:
                     break
-                for msg in iterator:
+                async for msg in iterator:
                     tmi_sent_ts = (datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
                                    - utc_offset)
                     if (start and tmi_sent_ts < start) or tmi_sent_ts > end:
@@ -532,17 +540,18 @@ class JustLogApi:
 
     async def iterate_logs_for_channel(self, channel: str,
                                        start: typing.Optional[datetime.datetime],
-                                       end: datetime.datetime):
+                                       end: datetime.datetime, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         days = (end - start).days
         utc_offset = datetime.datetime.now() - datetime.datetime.utcnow()
         for day in range(days, 0, -1):
             cdate = start + datetime.timedelta(days=day)
-            iterator = await self.logs_for_channel(channel, year=cdate.year, month=cdate.month, day=cdate.day)
+            iterator = await self.logs_for_channel(channel, year=cdate.year, month=cdate.month, day=cdate.day,
+                                                   stats=stats)
             if iterator is None:
                 break
-            for msg in iterator:
+            async for msg in iterator:
                 tmi_sent_ts = (datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
                                - utc_offset)
                 if (start and tmi_sent_ts < start) or tmi_sent_ts > end:
@@ -552,11 +561,11 @@ class JustLogApi:
 
     def iterate_logs(self, channel: str, user: typing.Optional[str],
                      start: typing.Optional[datetime.datetime],
-                     end: datetime.datetime, is_userid=False):
+                     end: datetime.datetime, is_userid=False, stats: typing.Optional[Stats] = None):
         if user:
-            return self.iterate_logs_for_user(channel, user, start, end, is_userid=is_userid)
+            return self.iterate_logs_for_user(channel, user, start, end, is_userid=is_userid, stats=stats)
         else:
-            return self.iterate_logs_for_channel(channel, start, end)
+            return self.iterate_logs_for_channel(channel, start, end, stats=stats)
 
     async def has_channel(self, channel: str):
         if not self.channels:
@@ -586,18 +595,31 @@ class JustlogChannel:
         self.id = id_
 
 
-def convert_messages(raw_messages) -> Generator[util_bot.StandardizedMessage, None, None]:
-    i = raw_messages.pop()
-    while raw_messages:
-        m = StandardizedMessage(
-            text=i['text'],
-            user=i['username'].lower(),
-            channel=i['channel'].lower(),
-            platform=util_bot.Platform.TWITCH,
-            outgoing=False,
-            parent=util_bot.bot
-        )
-        m.flags = i['tags']
-        m.raw_data = i['raw']
-        yield m
-        i = raw_messages.pop()
+async def fetch_and_convert_messages(url, params, stats: Stats) -> Generator[util_bot.StandardizedMessage, None, None]:
+    async with aiohttp.request(
+            'get',
+            url,
+            params=params,
+            headers={
+                'User-Agent': util_bot.USER_AGENT
+            }
+    ) as req:
+        if req.status in (404, 500):
+            return
+
+        reader = req.content
+        while not reader.at_eof():
+            wait_start = time.monotonic()
+            i = await reader.readline()
+            wait_end = time.monotonic()
+            stats.io_wait_time += wait_end - wait_start
+
+            parse_start = time.monotonic()
+            msg = twitchirc.auto_message(i.decode().rstrip('\n'), util_bot.bot)
+            m, = twitch_client.convert_twitchirc_to_standarized([msg], util_bot.bot)
+            parse_end = time.monotonic()
+            stats.messages_processed += 1
+            stats.parse_time += parse_end - parse_start
+
+            if isinstance(m, StandardizedMessage):
+                yield m  # other messages might not get built into StandardizedMessages
