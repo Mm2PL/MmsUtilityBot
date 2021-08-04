@@ -130,7 +130,11 @@ class Plugin(main.Plugin):
         cd_state = main.do_cooldown(cmd='quick_clip', msg=msg, global_cooldown=30, local_cooldown=60)
         if cd_state:
             return
-        clip_url = await self.create_clip(msg.flags['room-id'])
+        try:
+            clip_url = await self.create_clip(msg)
+        except arg_parser.ParserError as e:
+            return f'@{msg.user}, {e}'
+
         if clip_url == 'OFFLINE':
             return f'@{msg.user}, Cannot create a clip of an offline channel'
         else:
@@ -140,7 +144,9 @@ class Plugin(main.Plugin):
             else:
                 return f'@{msg.user}, Created clip FeelsDankMan {chr(0x1f449)} {clip_url}'
 
-    async def create_clip(self, user_id: int, allow_refresh_token=True, force_wait_for_create=False):
+    async def create_clip(self, source_message: twitchirc.ChannelMessage, allow_refresh_token=True,
+                          force_wait_for_create=False):
+        user_id = source_message.flags['room-id']
         # attempt to create the clip
         async with aiohttp.request('post', 'https://api.twitch.tv/helix/clips', params={
             'broadcaster_id': str(user_id)
@@ -153,7 +159,7 @@ class Plugin(main.Plugin):
                 if allow_refresh_token:
                     main.twitch_auth.refresh()
                     main.twitch_auth.save()
-                    return await self.create_clip(user_id, allow_refresh_token=False)
+                    return await self.create_clip(source_message, allow_refresh_token=False)
                 else:
                     r.raise_for_status()
             if r.status == 404 and json['message'] == 'Clipping is not possible for an offline channel.':
@@ -178,9 +184,13 @@ class Plugin(main.Plugin):
     def __init__(self, module, source):
         super().__init__(module, source)
         self.c_replay = main.bot.add_command('replay')(self.c_replay)
-        self.c_clip = main.bot.add_command('quick_clip', required_permissions=['util.clip'],
-                                           available_in_whispers=False)(self.c_clip)
-        main.add_alias(main.bot, 'qc')(self.c_clip)
+        self.c_clip = main.bot.add_command(
+            'quick_clip',
+            required_permissions=['util.clip'],
+            available_in_whispers=False,
+            cooldown=main.CommandCooldown(30, 5, 2),
+        )(self.c_clip)
+        self.c_clip.aliases = ['qc']
 
         plugin_help.add_manual_help_using_command('Create a link to the VOD. '
                                                   'Usage: replay [channel:STR] [time:TIME_DELTA]')(self.c_replay)
