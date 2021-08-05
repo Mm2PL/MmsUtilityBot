@@ -186,7 +186,6 @@ class Plugin(main.Plugin):
         self.c_replay = main.bot.add_command('replay')(self.c_replay)
         self.c_clip = main.bot.add_command(
             'quick_clip',
-            required_permissions=['util.clip'],
             available_in_whispers=False,
             cooldown=main.CommandCooldown(30, 5, 2),
         )(self.c_clip)
