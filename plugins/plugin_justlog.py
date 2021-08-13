@@ -14,6 +14,8 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
+import collections
+import copy
 import dataclasses
 import datetime
 import time
@@ -236,7 +238,11 @@ class Plugin(util_bot.Plugin):
 
                     'cancel': bool,
                     'logviewer': bool,
-                    'text': bool
+                    'text': bool,
+
+                    'before': int,
+                    'after': int,
+                    'context': int
                 },
                 defaults={
                     'user': None,
@@ -252,7 +258,11 @@ class Plugin(util_bot.Plugin):
 
                     'cancel': False,
                     'logviewer': True,
-                    'text': False
+                    'text': False,
+
+                    'before': 0,
+                    'after': 0,
+                    'context': 0
                 },
                 strict_escapes=False
             )
@@ -303,6 +313,10 @@ class Plugin(util_bot.Plugin):
             log_format = 'raw'
             args['simple'] = False
             args['text'] = False
+
+        if args['context']:
+            args['before'] = args['context']
+            args['after'] = args['context']
         users = []
         not_users = []
         if args.get('user'):
@@ -322,7 +336,9 @@ class Plugin(util_bot.Plugin):
             start=args['from'],
             end=args['to'],
             count=args['max'],
-            stats=stats
+            stats=stats,
+            ctx_before=args['before'],
+            ctx_after=args['after']
         ))
         self._current_log_fetch = asyncio.current_task()
         self._current_log_owner = msg.user
@@ -333,7 +349,9 @@ class Plugin(util_bot.Plugin):
                 additional_message = ('Using local user filtering, because you used advanced user searching.'
                                       if len(users) > 1 or not_users else '')
                 await util_bot.bot.send(msg.reply(f'@{msg.user}, Looks like this log fetch will take a while, '
-                                                  f'do `_logs --cancel` to abort. {additional_message}'))
+                                                  f'do `_logs --cancel` to abort. '
+                                                  f'{stats.messages_processed} msgs processed '
+                                                  f'{additional_message}'))
                 matched = None
             if not filter_task.done():
                 matched = await filter_task
@@ -364,8 +382,14 @@ class Plugin(util_bot.Plugin):
 
     async def _filter_messages(self, logger: 'JustLogApi', channel,
                                users: List[str], not_users: List[str],
-                               regular_expr: typing.Pattern, start, end, count, stats: Stats):
+                               regular_expr: typing.Pattern, start, end, count,
+                               ctx_before: int,
+                               ctx_after: int,
+                               stats: Stats):
         matched = []
+        context = collections.deque([], maxlen=ctx_before)
+        spacer = twitchirc.auto_message('@msg-id=log_spacer :tmi.twitch.tv NOTICE * :' + '-' * 80)
+        ctx_after_add = 0
         if len(users) == 1:
             is_userid = False
             user = users[0]
@@ -376,27 +400,65 @@ class Plugin(util_bot.Plugin):
                 if len(matched) >= count:
                     break
 
-                filter_start = time.monotonic()
-                if regular_expr.search(i.text):
-                    matched.append(i)
-                filter_end = time.monotonic()
-                stats.filter_time += filter_end - filter_start
+                context.append(i)
+                did_match, ctx_after_add = await self._filter_message(
+                    context, ctx_after, ctx_after_add, ctx_before, i, matched,
+                    regular_expr,
+                    spacer, stats
+                )
+                if not did_match:
+                    cpy = copy.copy(i)
+                    cpy.flags = copy.copy(i.flags)
+                    cpy.flags['match'] = 'ctxb'
+
+                    context.append(cpy)
         else:
             async for i in logger.iterate_logs_for_channel(channel, start, end, stats=stats):
                 if len(matched) >= count:
                     break
+
                 uid = '#' + i.flags.get('user-id', '')
-                if i.user in not_users or uid in not_users:
-                    continue
-                if users and i.user not in users and uid not in users:
+                if (i.user in not_users or uid in not_users) or (users and i.user not in users and uid not in users):
                     continue
 
-                filter_start = time.monotonic()
-                if regular_expr.search(i.text):
-                    matched.append(i)
-                filter_end = time.monotonic()
-                stats.filter_time += filter_end - filter_start
+                did_match, ctx_after_add = await self._filter_message(
+                    context, ctx_after, ctx_after_add, ctx_before, i, matched,
+                    regular_expr,
+                    spacer, stats
+                )
+                if not did_match:
+                    cpy = copy.copy(i)
+                    cpy.flags = copy.copy(i.flags)
+                    cpy.flags['match'] = 'ctxb'
+
+                    context.append(cpy)
+
         return matched
+
+    async def _filter_message(self, context, ctx_after, ctx_after_add, ctx_before, message, matched, regular_expr,
+                              spacer, stats) -> typing.Tuple[bool, int]:
+        filter_start = time.monotonic()
+        try:
+            if regular_expr.search(message.text):
+                if ctx_before:
+                    if not ctx_after:
+                        matched.append(spacer)
+                    matched.extend(context)
+                    context.clear()
+                matched.append(message)
+                message.flags['match'] = 'y'
+                ctx_after_add = ctx_after
+                return True, ctx_after_add
+            elif ctx_after_add:
+                ctx_after_add -= 1
+                message.flags['match'] = 'ctxa'
+                matched.append(message)
+                if ctx_after_add == 0:
+                    matched.append(spacer)
+        finally:
+            filter_end = time.monotonic()
+            stats.filter_time += filter_end - filter_start
+        return False, ctx_after_add
 
     def _convert_to_simple_text(self, matched: List[StandardizedMessage]) -> str:
         output = ''
@@ -428,7 +490,7 @@ class Plugin(util_bot.Plugin):
             output += f'@msg-id=log_info :tmi.twitch.tv NOTICE * :{i}\n'
 
         for msg in matched:
-            output += msg.raw_data + '\r\n'
+            output += bytes(msg).decode() + '\r\n'
         return output
 
     def _convert_to_pretty_text(self, args, expire_on, matched):
