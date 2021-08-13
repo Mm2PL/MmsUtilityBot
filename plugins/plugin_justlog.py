@@ -174,9 +174,25 @@ class Plugin(util_bot.Plugin):
             ]
         )
         plugin_help.create_topic(
+            'logs context',
+            'How many messages of context to show. Use "before" and "after" to adjust it separately.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs context',
+                'mb.logs before',
+                'mb.logs after',
+                'logs before',
+                'logs after',
+            ]
+        )
+        plugin_help.create_topic(
             'logs cancel',
             'Cancel a running log fetch. You cannot cancel another person\'s log fetch unless you have the '
-            '`util.logs.cancel_other` permission.'
+            '`util.logs.cancel_other` permission.',
+            plugin_help.SECTION_ARGS,
+            links=[
+                'mb.logs cancel'
+            ]
         )
         self.loggers = []
         self._current_log_fetch = None
