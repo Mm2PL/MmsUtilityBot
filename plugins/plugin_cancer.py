@@ -133,6 +133,9 @@ ISSUE_PATTERN = regex.compile(
     )
     + r')'
 )
+CVE_PATTERN = regex.compile(
+    r'(?:\b|^)(?P<cve>CVE)-(?P<year>\d{4})-(?P<number>\d{4,})'
+)
 REPO_MAP = {
     'c1': 'fourtf/Chatterino',
     'c2': 'Chatterino/Chatterino2',
@@ -441,7 +444,10 @@ class Plugin(main.Plugin):
         )(self.c_link_issue)
         self.c_link_issue.limit_to_channels = self._issue_linker_channels  # ref
         self.c_link_issue.matcher_function = (
-            lambda msg, cmd: (('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text))
+            lambda msg, cmd: (
+                    ('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text)
+                    or ('CVE-' and CVE_PATTERN.search(msg.text))
+            )
         )
         self._ps_sneeze = main.bot.add_command(
             '[ps sneeze integration]',
@@ -769,16 +775,21 @@ class Plugin(main.Plugin):
         if msg.user not in self.issue_linker_optin:
             return main.CommandResult.NOT_WHITELISTED, None
         valid_issue_links = ISSUE_PATTERN.findall(msg.text)
+        valid_issue_links.extend(CVE_PATTERN.findall(msg.text))
         if not valid_issue_links:
             return main.CommandResult.OTHER_FILTERED, None
         links = []
         for repo, issue, commit in valid_issue_links:
-            repo = REPO_MAP.get(repo.casefold(), repo)
-            if '/' not in repo:
-                continue
-            if issue:
-                links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
-            elif commit:
-                links.append(COMMIT_LINK_FORMAT.format(repo=repo, hash=commit))
+            if repo == 'CVE':
+                year, number = issue, commit
+                links.append(f'https://nvd.nist.gov/vuln/detail/CVE-{year}-{number}')
+            else:
+                repo = REPO_MAP.get(repo.casefold(), repo)
+                if '/' not in repo:
+                    continue
+                if issue:
+                    links.append(ISSUE_LINK_FORMAT.format(repo=repo, id=issue))
+                elif commit:
+                    links.append(COMMIT_LINK_FORMAT.format(repo=repo, hash=commit))
 
         return (main.CommandResult.OK, ' '.join(links)) if links else (main.CommandResult.OTHER_FILTERED, None)
