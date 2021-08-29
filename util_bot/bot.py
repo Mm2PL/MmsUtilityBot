@@ -553,8 +553,8 @@ class Bot(twitchirc.Bot):
         self.call_handlers('start')
         scheduler_task = asyncio.create_task(self._run_scheduler())
         awaiter_task = asyncio.create_task(self._command_task_awaiter())
-        platform_recv_tasks = [self._platform_recv_loop(platform) for platform in list(Platform)]
-        platform_flush_tasks = [self._platform_message_flush_loop(platform) for platform in list(Platform)]
+        platform_recv_tasks = [self._platform_recv_loop(platform) for platform in self.clients.keys()]
+        platform_flush_tasks = [self._platform_message_flush_loop(platform) for platform in self.clients.keys()]
         await asyncio.wait((scheduler_task, *platform_recv_tasks, *platform_flush_tasks, awaiter_task),
                            return_when=asyncio.FIRST_COMPLETED)
         await self.disconnect()
