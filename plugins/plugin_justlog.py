@@ -597,12 +597,15 @@ class JustLogApi:
                                     end: datetime.datetime, is_userid=False, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
+        log_fetch_start = start
         days = (end - start).days
         if days <= 0:
             days = 1
+            log_fetch_start = start - datetime.timedelta(days=1)
+
         last_date = start
         for day in range(days, 0, -1):
-            cdate = start + datetime.timedelta(days=day)
+            cdate = log_fetch_start + datetime.timedelta(days=day)
             if cdate.month != last_date.month or day == 0:
                 last_date = cdate
                 iterator = await self.logs_for_user(channel, user, year=cdate.year, month=cdate.month,
@@ -621,12 +624,14 @@ class JustLogApi:
                                        end: datetime.datetime, stats: typing.Optional[Stats] = None):
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
+        log_fetch_start = start
         days = (end - start).days
         if days <= 0:
             days = 1
+            log_fetch_start = start - datetime.timedelta(days=1)
 
         for day in range(days, 0, -1):
-            cdate = start + datetime.timedelta(days=day)
+            cdate = log_fetch_start + datetime.timedelta(days=day)
             iterator = await self.logs_for_channel(channel, year=cdate.year, month=cdate.month, day=cdate.day,
                                                    stats=stats)
             if iterator is None:
