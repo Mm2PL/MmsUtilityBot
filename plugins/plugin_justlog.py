@@ -383,18 +383,12 @@ class Plugin(util_bot.Plugin):
                                                     log_format)
         if args['logviewer']:
             channel_id = list(filter(lambda o: o.name == args['channel'], logger.channels))[0].id
-
-            return (util_bot.CommandResult.OK,
-                    f'Uploaded {len(matched)} filtered messages to hastebin. Use --text for plaintext, '
-                    f'--simple for justlog format. '
-                    f'{stats.messages_processed} messages processed, '
-                    f'waited {stats.io_wait_time:.2f}s for downloads, '
-                    f'{stats.parse_time:.2f}s for parsing, '
-                    f'Log viewer link: '
-                    f'https://logviewer.kotmisia.pl/?url=/h/{hastebin_link}&c={args["channel"]}&cid={channel_id}')
+            link = f'https://logviewer.kotmisia.pl/?url=/h/{hastebin_link}&c={args["channel"]}&cid={channel_id}'
+        else:
+            link = f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}'
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
-                f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link} '
+                f'{link} '
                 f'{stats.messages_processed} messages processed, '
                 f'waited {stats.io_wait_time:.2f}s for downloads, '
                 f'{stats.parse_time:.2f}s for parsing.')
