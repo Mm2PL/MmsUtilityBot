@@ -389,12 +389,15 @@ class Plugin(util_bot.Plugin):
                     f'--simple for justlog format. '
                     f'{stats.messages_processed} messages processed, '
                     f'waited {stats.io_wait_time:.2f}s for downloads, '
-                    f'{stats.parse_time:.2f}s for parsing,'
+                    f'{stats.parse_time:.2f}s for parsing, '
                     f'Log viewer link: '
                     f'https://logviewer.kotmisia.pl/?url=/h/{hastebin_link}&c={args["channel"]}&cid={channel_id}')
         return (util_bot.CommandResult.OK,
                 f'Uploaded {len(matched)} filtered messages to hastebin: '
-                f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}')
+                f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link} '
+                f'{stats.messages_processed} messages processed, '
+                f'waited {stats.io_wait_time:.2f}s for downloads, '
+                f'{stats.parse_time:.2f}s for parsing.')
 
     async def _filter_messages(self, logger: 'JustLogApi', channel,
                                users: List[str], not_users: List[str],
