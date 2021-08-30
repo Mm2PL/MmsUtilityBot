@@ -77,11 +77,14 @@ class Plugin(main.Plugin):
 
     async def c_replay(self, msg: twitchirc.ChannelMessage):
         try:
-            args = arg_parser.parse_args(main.delete_spammer_chrs(msg.text),
-                                         {
-                                             'time': datetime.timedelta,
-                                             'channel': str,
-                                         })
+            args = arg_parser.parse_args(
+                main.delete_spammer_chrs(msg.text),
+                {
+                    'time': datetime.timedelta,
+                    'channel': str,
+                    arg_parser.POSITIONAL: str  # ignore
+                }
+            )
         except arg_parser.ParserError as e:
             return f'@{msg.user}, Error: {e}'
 
