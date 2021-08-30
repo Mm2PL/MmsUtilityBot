@@ -623,7 +623,6 @@ class JustLogApi:
         if days <= 0:
             days = 1
 
-        utc_offset = datetime.datetime.now() - datetime.datetime.utcnow()
         for day in range(days, 0, -1):
             cdate = start + datetime.timedelta(days=day)
             iterator = await self.logs_for_channel(channel, year=cdate.year, month=cdate.month, day=cdate.day,
@@ -631,8 +630,7 @@ class JustLogApi:
             if iterator is None:
                 break
             async for msg in iterator:
-                tmi_sent_ts = (datetime.datetime.fromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
-                               - utc_offset)
+                tmi_sent_ts = datetime.datetime.utcfromtimestamp(int(msg.flags.get('tmi-sent-ts', 0)) / 1000)
                 if (start and tmi_sent_ts < start) or tmi_sent_ts > end:
                     continue
 
