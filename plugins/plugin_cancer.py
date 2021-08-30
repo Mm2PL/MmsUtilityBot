@@ -408,9 +408,6 @@ class Plugin(main.Plugin):
                 msg.platform == main.Platform.TWITCH and (
                     # implicit return here ↓
                     main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
-                ) or msg.platform == main.Platform.DISCORD and (
-                    [i for i in msg.source_message.mentions
-                     if i == main.bot.clients[main.Platform.DISCORD].connection.user]
                 )
             )
         )
