@@ -620,6 +620,9 @@ class JustLogApi:
         if not await self.has_channel(channel):
             raise ValueError(f'Channel {channel!r} is not available on this JustLog instance')
         days = (end - start).days
+        if days <= 0:
+            days = 1
+
         utc_offset = datetime.datetime.now() - datetime.datetime.utcnow()
         for day in range(days, 0, -1):
             cdate = start + datetime.timedelta(days=day)
