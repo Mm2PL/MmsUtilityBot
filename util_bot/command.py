@@ -155,16 +155,22 @@ class Command(twitchirc.Command):
         return CommandResult.OK, val
 
     def default_matcher(self, msg, prefix, aliases=None):
-        if msg.text.startswith(prefix + self.ef_command):
+        temp_txt = msg.text.casefold()
+        prefix = prefix.casefold()
+        ef_command = self.ef_command.casefold()
+
+        if temp_txt.startswith(prefix + ef_command):
             return prefix + self.ef_command
 
         for al in self.aliases + (aliases or []):
-            if msg.text.startswith(prefix + al + ' '):
+            if temp_txt.startswith(prefix + al + ' '):
                 return prefix + al + ' '
 
         return False
 
     def subprefix_matcher(self, msg, prefix):
+        prefix = prefix.casefold()
+        temp_txt = msg.text.casefold()
         can_use_no_subprefix = (
                 (msg.channel, msg.platform) in util_bot.bot.prefixes or
 
@@ -178,9 +184,9 @@ class Command(twitchirc.Command):
             if has_match_no_prefix:
                 return has_match_no_prefix
 
-        if msg.text.startswith(prefix + COMMAND_SUBPREFIX):
+        if temp_txt.startswith(prefix + COMMAND_SUBPREFIX):
             old_text = msg.text
-            msg.text = msg.text.replace(prefix + COMMAND_SUBPREFIX, prefix)
+            msg.text = temp_txt.replace(prefix + COMMAND_SUBPREFIX, prefix)
             ret_val = self.default_matcher(msg, prefix)
 
             msg.text = old_text
