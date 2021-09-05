@@ -217,12 +217,14 @@ async def command_reload(msg: twitchirc.ChannelMessage):
 
             # unload commands and settings from the plugin
             plugin_manager = util_bot.plugins['plugin_manager'].module
+            uses_settings = False
 
             for target_obj in (plugin, plugin.module):
                 for key in dir(target_obj):
                     value = getattr(target_obj, key)
                     if isinstance(value, plugin_manager.Setting):
                         value.unregister()
+                        uses_settings = True
                     if isinstance(value, twitchirc.Command):
                         util_bot.bot.commands.remove(value)
 
@@ -242,35 +244,47 @@ async def command_reload(msg: twitchirc.ChannelMessage):
             # insert new plugin into old refs
             for obj, ref_name in refs:
                 setattr(obj, ref_name, new_plugin)
-
+            # reload settings if needed
+            notices = []
+            if uses_settings:
+                await _reload_reloadable('channel_settings')
+                notices.append('reloaded settings')
             if id(new_plugin) == id_of_plugin or id(new_plugin.module) == id_of_plugin_module:
-                return f'@{msg.user}, done with warning: ID of plugin is the same. Reloaded plugin {plugin_name}.'
-            return f'@{msg.user}, done. Reloaded plugin {plugin_name}.'
+                notices.append('warn: ID of plugin is the same')
+
+            return f'@{msg.user}, done. Reloaded plugin {plugin_name}. {", ".join(notices)}'
         else:
-            for name, func in reloadables.items():
-                if name.lower() == argv[1].lower():
-                    reload_start = time.time()
-                    if inspect.iscoroutinefunction(func):
-                        try:
-                            o = await func()
-                        except Exception as e:
-                            message = (f'@{msg.user}, async reload failed. Error: {e} '
-                                       f'(Time taken: {time.time() - reload_start}s)')
-                        else:
-                            message = (f'@{msg.user}, async reload done. Output: {o} '
-                                       f'(Time taken: {time.time() - reload_start}s)')
-                    else:
-                        try:
-                            o = func()
-                        except Exception as e:
-                            message = (f'@{msg.user}, sync reload failed. Error: {e} '
-                                       f'(Time taken: {time.time() - reload_start}s)')
-                        else:
-                            message = (f'@{msg.user}, sync reload done. Output: {o} '
-                                       f'(Time taken: {time.time() - reload_start}s)')
-                    return message
+            output = await _reload_reloadable(argv[1])
+            if output:
+                return f'{msg.user}, {output}'
 
         return f"@{msg.user} Couldn't reload {argv[1]}: no such target."
+
+
+async def _reload_reloadable(what: str):
+    for name, func in reloadables.items():
+        if name.lower() == what.lower():
+            reload_start = time.time()
+            if inspect.iscoroutinefunction(func):
+                try:
+                    o = await func()
+                except Exception as e:
+                    message = (f'async reload failed. Error: {e} '
+                               f'(Time taken: {time.time() - reload_start}s)')
+                else:
+                    message = (f'async reload done. Output: {o} '
+                               f'(Time taken: {time.time() - reload_start}s)')
+            else:
+                try:
+                    o = func()
+                except Exception as e:
+                    message = (f'sync reload failed. Error: {e} '
+                               f'(Time taken: {time.time() - reload_start}s)')
+                else:
+                    message = (f'sync reload done. Output: {o} '
+                               f'(Time taken: {time.time() - reload_start}s)')
+            return message
+    return None
 
 
 plugins: Dict[str, Plugin] = {}
