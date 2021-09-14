@@ -260,9 +260,9 @@ class Plugin(main.Plugin):
 
         if redir_target == '/dev/null':
             return 0, ''
-
-        if redir_target.startswith('/dev/ttyIRC'):
-            channel = redir_target.replace('/dev/ttyIRC', '').lstrip('/')
+        redir_target = redir_target.replace('/dev/', '')
+        if redir_target.startswith('ttyIRC') or redir_target.startswith('#'):
+            channel = redir_target.replace('ttyIRC', '').lstrip('/#')
             do_it_anyway = False
             if channel == '':
                 return 1, is_a_directory
@@ -302,8 +302,8 @@ class Plugin(main.Plugin):
                             platform=main.Platform.TWITCH
                         ))
             return 0, ''
-        elif redir_target.startswith('/dev/ttyWS'):
-            user = redir_target.replace('/dev/ttyWS', '')
+        elif redir_target.startswith('ttyWS'):
+            user = redir_target.replace('ttyWS', '')
             missing_perms = await main.bot.acheck_permissions(new_msg, ['pipe.redirect.whispers'],
                                                               enable_local_bypass=False)
             if missing_perms:
@@ -319,10 +319,10 @@ class Plugin(main.Plugin):
                     platform=new_msg.platform
                 ))
             return 0, ''
-        elif redir_target.startswith('/dev/ttyUSB'):
+        elif redir_target.startswith('ttyUSB'):
             return 1, permission_denied
-        elif redir_target.startswith('/dev/supibot'):
-            target = redir_target.replace('/dev/supibot', '')
+        elif redir_target.startswith('supibot'):
+            target = redir_target.replace('supibot', '')
             if target in ['', '/']:
                 return 1, is_a_directory
             elif target.startswith('/remind/'):
@@ -337,7 +337,7 @@ class Plugin(main.Plugin):
                 return 1, is_a_directory
             else:
                 return 1, permission_denied
-        elif redir_target.startswith(('/dev/sd', '/dev/hd', '/dev/nvme', '/dev/mmcblk')):
+        elif redir_target.startswith(('sd', 'hd', 'nvme', 'mmcblk')):
             return 1, f'{permission_denied}. Why do you think writing to my drives is a good idea?'
         else:
             # bad path
