@@ -14,8 +14,11 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
+import json
 import time
 import typing
+import urllib.parse
+import types
 
 import aiohttp
 # noinspection PyUnresolvedReferences
@@ -50,6 +53,64 @@ __meta_data__ = {
     ]
 }
 log = util_bot.make_log_function('whois')
+
+
+class SimpleNamespace(types.SimpleNamespace):
+    def __init__(self, **kwargs):
+        data = {
+            self.RENAMES.get(k, k): v for k, v in kwargs.items()
+        }
+
+        super().__init__(**data)
+
+
+class IVRRoles(SimpleNamespace):
+    affiliate: bool
+    partner: bool
+    staff: bool
+
+    RENAMES = {
+        'isAffiliate': 'affiliate',
+        'isPartner': 'partner',
+        'isStaff': 'staff',
+    }
+
+
+class IVRUser(SimpleNamespace):
+    banned: bool
+    display_name: str
+    login: str
+    id: str
+    bio: str
+    follows: int
+    followers: int
+    profile_view_count: int
+    chat_color: str
+    logo: str
+    verified_bot: bool
+    created_at: str
+    updated_at: str
+    emote_prefix: str
+    roles: IVRRoles
+
+    RENAMES = {
+        'displayName': 'display_name',
+        'profileViewCount': 'profile_view_count',
+        'chatColor': 'chat_color',
+        'verifiedBot': 'verified_bot',
+        'createdAt': 'created_at',
+        'updatedAt': 'updated_at',
+        'emotePrefix': 'emote_prefix',
+    }
+
+
+def _object_hook(json_obj):
+    if 'displayName' in json_obj and 'id' in json_obj and 'login' in json_obj:
+        return IVRUser(**json_obj)
+    elif 'isAffiliate' in json_obj:
+        return IVRRoles(**json_obj)
+    else:
+        return json_obj
 
 
 @util_bot.bot.add_command('mb.whois')
@@ -104,50 +165,54 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         return (f'@{msg.user} {msg.text.split(" ")[0]} (name:TWITCH_USERNAME|id:TWITCH_ID) [+verbose] OR '
                 f'{msg.text.split(" ")[0]} TWITCH_USERNAME [+verbose]')
 
-    async with aiohttp.request('get', f'https://api.ivr.fi/twitch/resolve/{name}',
+    async with aiohttp.request('get', f'https://api.ivr.fi/v2/twitch/user/{urllib.parse.quote(name.lower())}',
                                params=({'id': 1}) if id_ else {},
                                headers={
                                    'User-Agent': util_bot.constants.USER_AGENT
                                }) as request:
-        data = await request.json()
-        if data['status'] == 404:
+        print(request)
+        if request.status == 404:
             return f'@{msg.user} No such user found.'
+        data: IVRUser = await request.json(
+            loads=lambda *largs, **kwargs: json.loads(*largs, **kwargs, object_hook=_object_hook)
+        )
 
         roles = ''
-        data_roles = data.get('roles', {})
-        if data_roles.get('isAffiliate', False):
+        if data.roles.affiliate:
             roles += 'affiliate, '
-        if data_roles.get('isPartner', False):
+        if data.roles.partner:
             roles += 'partner, '
-        if data_roles.get('isSiteAdmin', False):
-            roles += 'site admin, '
-        if data_roles.get('isStaff', False):
+        # rip site admin flag
+        # if data.roles.get('isSiteAdmin', False):
+        #     roles += 'site admin, '
+        if data.roles.staff:
             roles += 'staff, '
+
         if roles == '':
             roles = 'none'
 
         roles = (roles[::-1].replace(', '[::-1], '', 1))[::-1]
         # replace last ", " with "".
 
-        if data['displayName'].casefold() != data['login'].casefold():
-            login = f'({data["login"]})'
+        if data.display_name.casefold() != data.login.casefold():
+            login = f'({data.login})'
         else:
             login = ''
         print(data)
 
         created_at_str = ''
-        for i in data['createdAt']:
+        for i in data.created_at:
             if i == '.':
                 break
             created_at_str += i
 
         created_on = datetime.datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%S')
         logo_warning = ''
-        if data['logo'].startswith('https://static-cdn.jtvnw.net/user-default-pictures'):
+        if data.logo.startswith('https://static-cdn.jtvnw.net/user-default-pictures'):
             logo_warning = 'avatar: DEFAULT, '
 
         bot_notes = ''
-        bot = _find_bot(data['login'])
+        bot = _find_bot(data.login)
         if bot is not None:
             if args['verbose']:
                 last_active = f', Last active: {bot["lastSeen"][:-4]}' if bot['lastSeen'] is not None else ''
@@ -160,13 +225,13 @@ async def command_whois(msg: util_bot.StandardizedMessage):
                          f'{last_active}')
 
         info = (
-            f'user {data["displayName"]}{login}',
+            f'user {data.display_name}{login}',
             logo_warning,
-            f'chat color: {data["chatColor"] if data["chatColor"] else "GRAY-NAME"}',
+            f'chat color: {data.chat_color if data.chat_color else "never set"}',
             f'account created at {created_on}',
             f'roles: {roles}',
-            f'id: {data["id"]}',
-            f'bio: {data["bio"]}' if data['bio'] is not None else 'empty bio',
+            f'id: {data.id}',
+            f'bio: {data.bio}' if data.bio is not None else 'empty bio',
             bot_notes
         )
 
@@ -176,7 +241,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             info_text += f'{elem.strip(",. ")}, ' if elem else ''
             long_text += f' - {elem.strip(",. ")}\n' if elem else ''
 
-        ret_val = (f'@{msg.user}, {"BANNED " if data["banned"] else ""}{"bot " if data["bot"] else ""}'
+        ret_val = (f'@{msg.user}, {"BANNED " if data.banned else ""}{"bot " if data.verified_bot else ""}'
                    + info_text.rstrip('., '))
         if len(ret_val) > 500:
             url = plugin_hastebin.hastebin_addr + await plugin_hastebin.upload(
