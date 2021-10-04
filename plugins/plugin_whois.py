@@ -210,6 +210,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             if i == '.':
                 break
             created_at_str += i
+        created_at_str = created_at_str.rstrip('Z')
 
         created_on = datetime.datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%S')
         logo_warning = ''
