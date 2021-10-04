@@ -24,6 +24,7 @@ import ast
 import os
 import random
 import shlex
+import shutil
 import subprocess
 import sys
 import traceback
@@ -699,7 +700,7 @@ class Plugin(util_bot.Plugin):
             text = await self.upload_image(data)
         except FileNotFoundError:
             return f'@{msg.user}, Error while rendering, sorry no leaking things.'
-        os.unlink(prefix)
+        shutil.rmtree(prefix)
         if target_user:
             return f'@{msg.user}, @{target_user}, {text}'
         else:
