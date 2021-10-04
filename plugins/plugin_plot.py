@@ -21,7 +21,10 @@ import math
 import operator
 import ast
 # noinspection PyUnresolvedReferences
+import os
 import random
+import shlex
+import subprocess
 import sys
 import traceback
 import typing
@@ -29,6 +32,7 @@ import typing
 import aiohttp
 import matplotlib
 
+from plugins.utils import arg_parser
 from util_bot.msg import StandardizedMessage
 
 RESULT_TOO_BIG = 'result might be too big.'
@@ -48,6 +52,15 @@ try:
 except ImportError:
     if typing.TYPE_CHECKING:
         import plugins.plugin_help as plugin_help
+    else:
+        raise
+try:
+    import plugin_chat_cache
+except ImportError:
+    if typing.TYPE_CHECKING:
+        import plugins.plugin_chat_cache as _plugin_chat_cache
+
+        plugin_chat_cache: _plugin_chat_cache.Plugin
     else:
         raise
 NAME = 'plot'
@@ -564,12 +577,42 @@ class Plugin(util_bot.Plugin):
             'math',
             cooldown=util_bot.CommandCooldown(5, 0, 0, True)
         )(self.command_math)
+        self.command_render_latex = util_bot.bot.add_command(
+            'latex',
+            cooldown=util_bot.CommandCooldown(5, 0, 0, True)
+        )(self.command_render_latex)
         plugin_help.create_topic('math', self.math_help,
                                  section=plugin_help.SECTION_COMMANDS,
                                  links=[
                                      'plot',
                                      'dankeval'
                                  ])
+
+    async def upload_image(self, image):
+        headers = {
+            'User-Agent': util_bot.USER_AGENT
+        }
+        with aiohttp.MultipartWriter() as mpwriter:
+            part = mpwriter.append(image)
+            part.headers['Content-Disposition'] = f'form-data; name="attachment"; filename="plot.png"'
+            part.headers['Content-Type'] = f'image/png'
+
+        headers['Content-Type'] = f'multipart/form-data; boundary={mpwriter.boundary}'
+
+        async with aiohttp.request(
+                'post',
+                (
+                        'https://i.nuuls.com/upload' if not util_bot.debug
+                        else 'http://localhost:7494/upload'
+                ),
+                params={
+                    'password': 'ayylmao'
+                },
+                data=mpwriter,
+                headers=headers
+        ) as r:
+            text = await r.text()
+            return text
 
     async def do_math(self, msg, code):
         ctx = Context()
@@ -587,31 +630,8 @@ class Plugin(util_bot.Plugin):
                 raise
 
         if isinstance(result, Plot):
-            headers = {
-                'User-Agent': util_bot.USER_AGENT
-            }
-            with aiohttp.MultipartWriter() as mpwriter:
-                part = mpwriter.append(result.image)
-                part.headers['Content-Disposition'] = f'form-data; name="attachment"; filename="plot.png"'
-                part.headers['Content-Type'] = f'image/png'
-
-            headers['Content-Type'] = f'multipart/form-data; boundary={mpwriter.boundary}'
-
-            async with aiohttp.request(
-                    'post',
-                    (
-                            'https://i.nuuls.com/upload' if not util_bot.debug
-                            else 'http://localhost:7494/upload'
-                    ),
-                    params={
-                        'password': 'ayylmao'
-                    },
-                    data=mpwriter,
-                    headers=headers
-            ) as r:
-                text = await r.text()
-                print(r, text)
-                return f'@{msg.user}, Taken {result.steps_taken} steps to render. {text} '
+            text = await self.upload_image(result.image)
+            return f'@{msg.user}, Taken {result.steps_taken} steps to render. {text}'
         else:
             result = result.replace('\n', ' ').replace('\r', '')
             return f'@{msg.user}, {result}'
@@ -624,6 +644,67 @@ class Plugin(util_bot.Plugin):
         print(repr(code))
         return await self.do_math(msg, code)
 
+    async def command_render_latex(self, msg: StandardizedMessage):
+
+        target_user = msg.flags.get('reply-parent-user-login')  # original message text (reply route)
+        target_text = msg.flags.get('reply-parent-msg-body')
+
+        if not target_text:
+            # not a reply, use given text
+            args = msg.text.split(' ', 1)
+            if len(args) != 2:
+                return (util_bot.CommandResult.OTHER_FAILED,
+                        f'@{msg.user}, {args[0] if args else "_tex"} command needs LaTeX source to render, a '
+                        f'message (reply to one) or @username for someone\'s last message.')
+            if args[1].startswith('@'):
+                target_user = args[1].split(' ', 1)[0].strip('@,').lower()
+                last_messages = plugin_chat_cache.find_messages(msg.channel, target_user)
+                if len(last_messages) == 0:
+                    return (util_bot.CommandResult.OTHER_FAILED,
+                            f'@{msg.user}, User has no known recent messages.')
+                last_msg = last_messages[-1]
+                target_text = last_msg.text
+            else:
+                target_text = args[1]
+
+        txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
+
+        prefix = f'/run/user/{os.getuid()}/penis123_{msg.user}'
+        try:
+            os.mkdir(prefix)
+        except FileExistsError:
+            pass
+
+        temp_file = os.path.join(prefix, 'render_latex.tex')
+        pdf_output_file = os.path.join(prefix, f'render_latex.pdf')
+
+        with open(temp_file, 'w') as f:
+            f.write(txt)
+        print(repr(f'render_latex.tex -output-directory {shlex.quote(prefix)}'))
+        await (
+            await asyncio.create_subprocess_shell(
+                f'pdflatex -output-directory {shlex.quote(prefix)} render_latex.tex',
+                stdin=subprocess.DEVNULL
+            )
+        ).wait()
+        data = b''
+        proc = await asyncio.create_subprocess_shell(f'pdftoppm -png {shlex.quote(pdf_output_file)} -r 600',
+                                                     stdout=subprocess.PIPE)
+        while 1:
+            chunk = await proc.stdout.read(1024)
+            if not chunk:
+                break
+            data += chunk
+        try:
+            text = await self.upload_image(data)
+        except FileNotFoundError:
+            return f'@{msg.user}, Error while rendering, sorry no leaking things.'
+        os.unlink(prefix)
+        if target_user:
+            return f'@{msg.user}, @{target_user}, {text}'
+        else:
+            return f'@{msg.user}, {text}'
+
     @property
     def no_reload(self):
         return False
@@ -634,3 +715,15 @@ class Plugin(util_bot.Plugin):
 
     def on_reload(self):
         return None
+
+
+LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
+% thanks, Reddit
+\usepackage{xcolor}
+\pagecolor[rgb]{0,0,0} %black
+\color[rgb]{0.5,0.5,0.5} %grey
+
+\begin{document}
+    %REPLACE THIS WITH MESSAGE, PLS THX
+\end{document}
+'''
