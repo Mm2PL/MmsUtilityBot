@@ -27,10 +27,8 @@ import traceback
 import typing
 
 import aiohttp
-import discord
 import matplotlib
 
-from util_bot import Platform
 from util_bot.msg import StandardizedMessage
 
 RESULT_TOO_BIG = 'result might be too big.'
@@ -584,86 +582,45 @@ class Plugin(util_bot.Plugin):
             result = await asyncio.get_event_loop().run_in_executor(None, Math.eval_expr, source, ctx)
         except Exception as e:
             if hasattr(e, 'from_eval') and e.from_eval:
-                if msg.platform == Platform.DISCORD:
-                    return f'{msg.user}, `{e}`'
-                else:
-                    return f'@{msg.user}, {e}'
+                return f'@{msg.user}, {e}'
             else:
                 raise
 
         if isinstance(result, Plot):
-            if msg.platform == Platform.DISCORD:
-                reply = msg.reply(f'{msg.user}, Here\'s the result. Taken {result.steps_taken} steps to render.')
-                reply.flags['file'] = discord.File(result.image, 'plot.png')
-                return reply
-            else:
-                headers = {
-                    'User-Agent': util_bot.USER_AGENT
-                }
-                with aiohttp.MultipartWriter() as mpwriter:
-                    part = mpwriter.append(result.image)
-                    part.headers['Content-Disposition'] = f'form-data; name="attachment"; filename="plot.png"'
-                    part.headers['Content-Type'] = f'image/png'
+            headers = {
+                'User-Agent': util_bot.USER_AGENT
+            }
+            with aiohttp.MultipartWriter() as mpwriter:
+                part = mpwriter.append(result.image)
+                part.headers['Content-Disposition'] = f'form-data; name="attachment"; filename="plot.png"'
+                part.headers['Content-Type'] = f'image/png'
 
-                headers['Content-Type'] = f'multipart/form-data; boundary={mpwriter.boundary}'
+            headers['Content-Type'] = f'multipart/form-data; boundary={mpwriter.boundary}'
 
-                async with aiohttp.request(
-                        'post',
-                        (
-                                'https://i.nuuls.com/upload' if not util_bot.debug
-                                else 'http://localhost:7494/upload'
-                        ),
-                        params={
-                            'password': 'ayylmao'
-                        },
-                        data=mpwriter,
-                        headers=headers
-                ) as r:
-                    text = await r.text()
-                    print(r, text)
-                    return f'@{msg.user}, Taken {result.steps_taken} steps to render. {text} '
+            async with aiohttp.request(
+                    'post',
+                    (
+                            'https://i.nuuls.com/upload' if not util_bot.debug
+                            else 'http://localhost:7494/upload'
+                    ),
+                    params={
+                        'password': 'ayylmao'
+                    },
+                    data=mpwriter,
+                    headers=headers
+            ) as r:
+                text = await r.text()
+                print(r, text)
+                return f'@{msg.user}, Taken {result.steps_taken} steps to render. {text} '
         else:
-            if msg.platform == Platform.DISCORD:
-                if '\n' in result:
-                    return (f'{msg.user}, ```\n'
-                            f'{result}\n'
-                            f'```')
-                else:
-                    return f'{msg.user}, `{result}`'
-            else:
-                result = result.replace('\n', ' ').replace('\r', '')
-                return f'@{msg.user}, {result}'
+            result = result.replace('\n', ' ').replace('\r', '')
+            return f'@{msg.user}, {result}'
 
     async def command_math(self, msg: StandardizedMessage):
         argv = msg.text.split(' ', 1)
         if len(argv) == 1:
             return self.math_help
-        if msg.platform == Platform.DISCORD:
-            # argv[0]  argv[1]
-            # !math   ```(python)?
-            # code
-            # code
-            # ```
-            code = ''
-            if argv[1].startswith('```'):
-                for i, elem in enumerate(argv[1].split(' ')):
-                    if elem.startswith('```'):
-                        if i == 0:
-                            elem = elem.replace('```', '', 1)
-                        else:
-                            break
-
-                    if elem.endswith('```'):
-                        elem = (elem[::-1].replace('```', '', 1))[::-1]  # replace one '```' from the end
-
-                    code += elem + ' '
-                code = '\n'.join(code.split('\n')).strip(' ')
-            elif argv[1].startswith('`'):
-                code = ' '.join(argv[1:]).strip('`')
-            else:
-                code = ' '.join(argv[1:])
-        else:
-            code = ' '.join(argv[1:])
+        code = ' '.join(argv[1:])
         print(repr(code))
         return await self.do_math(msg, code)
 

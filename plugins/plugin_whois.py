@@ -164,9 +164,14 @@ async def command_whois(msg: util_bot.StandardizedMessage):
     else:
         return (f'@{msg.user} {msg.text.split(" ")[0]} (name:TWITCH_USERNAME|id:TWITCH_ID) [+verbose] OR '
                 f'{msg.text.split(" ")[0]} TWITCH_USERNAME [+verbose]')
+    params = {}
+    if id_:
+        params['id'] = name.lower()
+    else:
+        params['login'] = name.lower()
 
-    async with aiohttp.request('get', f'https://api.ivr.fi/v2/twitch/user/{urllib.parse.quote(name.lower())}',
-                               params=({'id': 1}) if id_ else {},
+    async with aiohttp.request('get', f'https://api.ivr.fi/v2/twitch/user',
+                               params=params,
                                headers={
                                    'User-Agent': util_bot.constants.USER_AGENT
                                }) as request:
