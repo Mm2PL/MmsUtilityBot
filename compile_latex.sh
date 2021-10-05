@@ -22,6 +22,8 @@ OUTPUT="$PREFIX"/input.pdf
 PNG_PATH="$PREFIX/output.png"
 
 echo "$PREFIX"
+chmod 777 "$PREFIX"
+umask 777
 
 cat > "$INPUT"
 
