@@ -106,7 +106,6 @@ def session_scope_local_thread():
     """Provide a transactional scope around a series of operations."""
     session = Session()
     session.expire_on_commit = False
-    log('debug', 'Create local session.')
     try:
         yield session
         session.commit()
@@ -115,7 +114,6 @@ def session_scope_local_thread():
         session.rollback()
         raise
     finally:
-        log('debug', 'LS: Expunge all and close')
         session.expunge_all()
         session.close()
 
