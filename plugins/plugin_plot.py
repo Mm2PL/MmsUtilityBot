@@ -724,7 +724,7 @@ class Plugin(util_bot.Plugin):
 
         with open(os.path.join(prefix, 'output.png'), 'rb') as f:
             data = f.read()
-        await (await asyncio.create_subprocess_shell(f'sudo -u nobody bash rm -rf {shlex.quote(prefix)}')).wait()
+        await (await asyncio.create_subprocess_shell(f'sudo -u nobody /bin/rm -rf {shlex.quote(prefix)}')).wait()
 
         try:
             text = await self.upload_image(data)
