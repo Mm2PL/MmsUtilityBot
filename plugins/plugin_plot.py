@@ -727,19 +727,6 @@ LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
 \pagecolor[rgb]{0,0,0} %black
 \color[rgb]{0.5,0.5,0.5} %grey
 % dankly block stupid attackers
-\newcommand {read} {}
-\newcommand {newread} {}
-
-\newcommand {newwrite} {}
-\newcommand {write} {}
-
-\newcommand {openin} {}
-\newcommand {openout} {}
-
-\newcommand {input} {}
-\newcommand {include} {}
-
-\newcommand {immediate} {}
 
 \begin{document}
     %REPLACE THIS WITH MESSAGE, PLS THX
