@@ -749,11 +749,7 @@ class Plugin(util_bot.Plugin):
 
 
 LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
-% thanks, Reddit
-\usepackage{xcolor}
-\pagecolor[rgb]{0,0,0} %black
-\color[rgb]{0.5,0.5,0.5} %grey
-% dankly block stupid attackers
+\usepackage[utf8]{inputenc}
 
 \begin{document}
     %REPLACE THIS WITH MESSAGE, PLS THX
