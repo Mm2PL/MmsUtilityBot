@@ -694,8 +694,10 @@ class Plugin(util_bot.Plugin):
                 target_text = last_msg.text
             else:
                 target_text = args[1]
-
-        txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
+        if r'\begin{document}' not in target_text:
+            txt = LATEX_MINIMAL_DOC_FORMAT + target_text
+        else:
+            txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
         proc = await asyncio.create_subprocess_shell('sudo -u nobody bash compile_latex.sh', stdin=subprocess.PIPE,
                                                      stdout=subprocess.PIPE)
         prefix = (await proc.stdout.readline()).decode().strip()
@@ -755,4 +757,11 @@ LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
 \begin{document}
     %REPLACE THIS WITH MESSAGE, PLS THX
 \end{document}
+'''
+
+LATEX_MINIMAL_DOC_FORMAT = r'''\documentclass[preview]{standalone}
+\usepackage[utf8x]{inputenc}
+\usepackage{ucs}
+\usepackage{fontspec}
+
 '''
