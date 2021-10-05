@@ -694,7 +694,7 @@ class Plugin(util_bot.Plugin):
                 target_text = last_msg.text
             else:
                 target_text = args[1]
-        if r'\begin{document}' not in target_text:
+        if r'\begin{document}' in target_text:
             txt = LATEX_MINIMAL_DOC_FORMAT + target_text
         else:
             txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
