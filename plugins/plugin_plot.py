@@ -64,6 +64,12 @@ except ImportError:
         plugin_chat_cache: _plugin_chat_cache.Plugin
     else:
         raise
+
+try:
+    import plugin_plugin_manager as plugin_manager
+except ImportError:
+    import plugins.plugin_manager as plugin_manager
+
 NAME = 'plot'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
@@ -570,6 +576,14 @@ class Math:
 
 
 class Plugin(util_bot.Plugin):
+    def _latex_enabled_setting_on_load(self, channel_settings: plugin_manager.ChannelSettings):
+        is_enabled = channel_settings.get(self.latex_enabled_setting)
+        username = channel_settings.channel.last_known_username
+        if is_enabled and username not in self._latex_channels:
+            self._latex_channels.append(username)
+        elif not is_enabled and username in self._latex_channels:
+            self._latex_channels.remove(username)
+
     def __init__(self, module, source):
         super().__init__(module, source)
         self.math_help = (f'Usage: math <python code>, this command allows for usage of a restricted subset of '
@@ -578,16 +592,30 @@ class Plugin(util_bot.Plugin):
             'math',
             cooldown=util_bot.CommandCooldown(5, 0, 0, True)
         )(self.command_math)
+
+        self._latex_channels = []
         self.command_render_latex = util_bot.bot.add_command(
             'latex',
             cooldown=util_bot.CommandCooldown(5, 0, 0, True)
         )(self.command_render_latex)
+        self.command_render_latex.limit_to_channels = self._latex_channels
+
         plugin_help.create_topic('math', self.math_help,
                                  section=plugin_help.SECTION_COMMANDS,
                                  links=[
                                      'plot',
                                      'dankeval'
                                  ])
+
+        self.latex_enabled_setting = plugin_manager.Setting(
+            self,
+            'math.latex_enabled',
+            default_value=False,
+            scope=plugin_manager.SettingScope.PER_CHANNEL,
+            write_defaults=True,
+            help_='Enabled LaTeX support for this channel',
+            on_load=self._latex_enabled_setting_on_load
+        )
 
     async def upload_image(self, image):
         headers = {
@@ -646,7 +674,6 @@ class Plugin(util_bot.Plugin):
         return await self.do_math(msg, code)
 
     async def command_render_latex(self, msg: StandardizedMessage):
-
         target_user = msg.flags.get('reply-parent-user-login')  # original message text (reply route)
         target_text = msg.flags.get('reply-parent-msg-body')
 
