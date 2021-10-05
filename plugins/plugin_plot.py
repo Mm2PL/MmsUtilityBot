@@ -709,10 +709,18 @@ class Plugin(util_bot.Plugin):
             if not chunk:
                 break
             output += chunk
+        output = output.decode()
+        print(output)
 
         await proc.wait()
         if proc.returncode != 0:
-            return f'@{msg.user}, Error while rendering (exit code {proc.returncode}).'
+            error_index_start = output.find('! ')
+            error_index_end = output.find('Type  H <return>  for immediate help.')
+            error = output[error_index_start:error_index_end].replace('\n', ' ').strip()
+            while '  ' in error:
+                error = error.replace('  ', ' ')
+
+            return f'@{msg.user}, Error while rendering (exit code {proc.returncode}): {error}.'
 
         with open(os.path.join(prefix, 'output.png'), 'rb') as f:
             data = f.read()
