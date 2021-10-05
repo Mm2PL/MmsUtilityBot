@@ -750,18 +750,15 @@ class Plugin(util_bot.Plugin):
         return None
 
 
-LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
-\usepackage[utf8x]{inputenc}
-\usepackage{ucs}
-
-\begin{document}
-    %REPLACE THIS WITH MESSAGE, PLS THX
-\end{document}
-'''
-
 LATEX_MINIMAL_DOC_FORMAT = r'''\documentclass[preview]{standalone}
 \usepackage[utf8x]{inputenc}
 \usepackage{ucs}
 \usepackage{fontspec}
+\usepackage[version=4]{mhchem}
 
+'''
+
+LATEX_DOCUMENT_FORMAT = LATEX_MINIMAL_DOC_FORMAT + r'''\begin{document}
+    %REPLACE THIS WITH MESSAGE, PLS THX
+\end{document}
 '''
