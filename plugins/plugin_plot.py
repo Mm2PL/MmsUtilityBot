@@ -726,22 +726,22 @@ LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
 \usepackage{xcolor}
 \pagecolor[rgb]{0,0,0} %black
 \color[rgb]{0.5,0.5,0.5} %grey
+% dankly block stupid attackers
+\newcommand {read} {}
+\newcommand {newread} {}
+
+\newcommand {newwrite} {}
+\newcommand {write} {}
+
+\newcommand {openin} {}
+\newcommand {openout} {}
+
+\newcommand {input} {}
+\newcommand {include} {}
+
+\newcommand {immediate} {}
 
 \begin{document}
-    % dankly block stupid attackers
-    \let\read\@undefined
-    \let\newread\@undefined
-
-    \let\newwrite\@undefined
-    \let\write\@undefined
-
-    \let\openin\@undefined
-    \let\openout\@undefined
-
-    \let\input\@undefined
-    \let\include\@undefined
-
-    \let\immediate\@undefined
     %REPLACE THIS WITH MESSAGE, PLS THX
 \end{document}
 '''
