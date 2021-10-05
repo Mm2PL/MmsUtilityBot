@@ -727,21 +727,21 @@ LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
 \pagecolor[rgb]{0,0,0} %black
 \color[rgb]{0.5,0.5,0.5} %grey
 
-% dankly block stupid attackers
-\let\read\@undefined
-\let\newread\@undefined
-
-\let\newwrite\@undefined
-\let\write\@undefined
-
-\let\openin\@undefined
-\let\openout\@undefined
-
-\let\input\@undefined
-\let\include\@undefined
-
-\let\immediate\@undefined
 \begin{document}
+    % dankly block stupid attackers
+    \let\read\@undefined
+    \let\newread\@undefined
+
+    \let\newwrite\@undefined
+    \let\write\@undefined
+
+    \let\openin\@undefined
+    \let\openout\@undefined
+
+    \let\input\@undefined
+    \let\include\@undefined
+
+    \let\immediate\@undefined
     %REPLACE THIS WITH MESSAGE, PLS THX
 \end{document}
 '''
