@@ -687,10 +687,14 @@ class Plugin(util_bot.Plugin):
             if args[1].startswith('@'):
                 target_user = args[1].split(' ', 1)[0].strip('@,').lower()
                 last_messages = plugin_chat_cache.find_messages(msg.channel, target_user)
-                if len(last_messages) == 0:
+                if len(last_messages) == 0 or (target_user == msg.user and len(last_messages) < 2):
                     return (util_bot.CommandResult.OTHER_FAILED,
                             f'@{msg.user}, User has no known recent messages.')
-                last_msg = last_messages[-1]
+                if target_user == msg.user:
+                    # special case: don't render the command text
+                    last_msg = last_messages[-2]
+                else:
+                    last_msg = last_messages[-1]
                 target_text = last_msg.text
             else:
                 target_text = args[1]
