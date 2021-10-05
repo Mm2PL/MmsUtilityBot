@@ -749,7 +749,7 @@ class Plugin(util_bot.Plugin):
 
 
 LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
-\usepackage[utf8]{inputenc}
+\usepackage[utf8x]{inputenc}
 
 \begin{document}
     %REPLACE THIS WITH MESSAGE, PLS THX
