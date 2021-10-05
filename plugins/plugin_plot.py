@@ -700,7 +700,7 @@ class Plugin(util_bot.Plugin):
                                                      stdout=subprocess.PIPE)
         prefix = (await proc.stdout.readline()).decode()
         proc.stdin.write((txt + '\n').encode())
-        proc.stdin.write(b'\x04')
+        proc.stdin.close()
 
         # log output from pdflatex
         output = b''
