@@ -696,7 +696,7 @@ class Plugin(util_bot.Plugin):
                 target_text = args[1]
 
         txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
-        proc = await asyncio.create_subprocess_shell('bash ./compile_latex.sh', stdin=subprocess.PIPE,
+        proc = await asyncio.create_subprocess_shell('sudo -u nobody bash compile_latex.sh', stdin=subprocess.PIPE,
                                                      stdout=subprocess.PIPE)
         prefix = (await proc.stdout.readline()).decode().strip()
         proc.stdin.write((txt + '\n').encode())
