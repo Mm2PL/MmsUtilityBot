@@ -696,41 +696,32 @@ class Plugin(util_bot.Plugin):
                 target_text = args[1]
 
         txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
+        proc = await asyncio.create_subprocess_shell('bash ./compile_latex.sh', stdin=subprocess.PIPE,
+                                                     stdout=subprocess.PIPE)
+        prefix = (await proc.stdout.readline()).decode()
+        proc.stdin.write((txt + '\n').encode())
 
-        prefix = f'/run/user/{os.getuid()}/penis123_{msg.user}'
-        try:
-            os.mkdir(prefix)
-        except FileExistsError:
-            pass
-
-        temp_file = os.path.join(prefix, 'render_latex.tex')
-        pdf_output_file = os.path.join(prefix, f'render_latex.pdf')
-
-        with open(temp_file, 'w') as f:
-            f.write(txt)
-        print(repr(f'render_latex.tex -output-directory {shlex.quote(prefix)}'))
-        proc = await asyncio.create_subprocess_shell(
-            f'pdflatex -output-directory {shlex.quote(prefix)} render_latex.tex',
-            stdin=subprocess.DEVNULL
-        )
+        # log output from pdflatex
+        output = b''
+        while 1:
+            chunk = await proc.stdout.read(1024)
+            if not chunk:
+                break
+            output += chunk
 
         await proc.wait()
         if proc.returncode != 0:
             return f'@{msg.user}, Error while rendering (exit code {proc.returncode}).'
 
-        data = b''
-        proc = await asyncio.create_subprocess_shell(f'pdftoppm -png {shlex.quote(pdf_output_file)} -r 600',
-                                                     stdout=subprocess.PIPE)
-        while 1:
-            chunk = await proc.stdout.read(1024)
-            if not chunk:
-                break
-            data += chunk
+        with open(os.path.join(prefix, 'output.png'), 'rb') as f:
+            data = f.read()
+        shutil.rmtree(prefix)
+
         try:
             text = await self.upload_image(data)
         except FileNotFoundError:
             return f'@{msg.user}, Error while rendering, sorry no leaking things.'
-        shutil.rmtree(prefix)
+
         if target_user:
             return f'@{msg.user}, @{target_user}, {text}'
         else:
