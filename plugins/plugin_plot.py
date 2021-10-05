@@ -33,6 +33,7 @@ import typing
 import aiohttp
 import matplotlib
 
+from plugins.models.logentry import CAUSE_COMMAND
 from plugins.utils import arg_parser
 from util_bot.msg import StandardizedMessage
 
@@ -717,9 +718,14 @@ class Plugin(util_bot.Plugin):
                 break
             output += chunk
         output = output.decode()
-        print(output)
 
         await proc.wait()
+        if getattr(log, 'log', None):
+            log.log('info', f'User {msg.user}({target_user=}) rendered {target_text!r}. Exit code: {proc.returncode}. '
+                            f'PID was {proc.pid}',
+                    cause=CAUSE_COMMAND)
+            log.log('debug', f'Output for pid {proc.pid}: {output}',
+                    cause=CAUSE_COMMAND)
         if proc.returncode != 0:
             error_index_start = output.find('! ')
             error_index_end = output.find('Type  H <return>  for immediate help.')
