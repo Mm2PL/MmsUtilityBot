@@ -25,5 +25,5 @@ echo "$PREFIX"
 
 cat > "$INPUT"
 
-pdflatex -output-directory "$PREFIX" input.tex || exit 1
+xelatex -output-directory "$PREFIX" input.tex || exit 1
 pdftoppm -png "$OUTPUT" -r 600 > "$PNG_PATH" || exit 2
