@@ -585,6 +585,11 @@ class Plugin(util_bot.Plugin):
         elif not is_enabled and username in self._latex_channels:
             self._latex_channels.remove(username)
 
+    @property
+    def latex_light_mode(self):
+        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(
+            self.latex_prefers_light_mode_setting)
+
     def __init__(self, module, source):
         super().__init__(module, source)
         self.math_help = (f'Usage: math <python code>, this command allows for usage of a restricted subset of '
@@ -599,6 +604,11 @@ class Plugin(util_bot.Plugin):
             'latex',
             cooldown=util_bot.CommandCooldown(5, 0, 0, True)
         )(self.command_render_latex)
+
+        self.command_latex_light_mode = util_bot.bot.add_command(
+            'latexlight',
+            cooldown=util_bot.CommandCooldown(5, 0, 0, True)
+        )(self.command_latex_light_mode)
         self.command_render_latex.limit_to_channels = self._latex_channels
 
         plugin_help.create_topic('math', self.math_help,
@@ -616,6 +626,13 @@ class Plugin(util_bot.Plugin):
             write_defaults=True,
             help_='Enabled LaTeX support for this channel',
             on_load=self._latex_enabled_setting_on_load
+        )
+        self.latex_prefers_light_mode_setting = plugin_manager.Setting(
+            self,
+            'math.prefers_light_mode',
+            default_value=[],
+            scope=plugin_manager.SettingScope.GLOBAL,
+            help_='List of users who prefer light mode for their LaTeX renders.'
         )
 
     async def upload_image(self, image):
@@ -674,6 +691,20 @@ class Plugin(util_bot.Plugin):
         print(repr(code))
         return await self.do_math(msg, code)
 
+    async def command_latex_light_mode(self, msg: StandardizedMessage):
+        if msg.user.lower() in self.latex_light_mode:
+            self.latex_light_mode.remove(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with util_bot.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
+            return f'@{msg.user} Your LaTeX renders will now use dark mode.'
+        else:
+            self.latex_light_mode.append(msg.user.lower())
+            plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].update()
+            with util_bot.session_scope() as session:
+                session.add(plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name])
+            return f'@{msg.user}, Your LaTeX renders will now use light mode.'
+
     async def command_render_latex(self, msg: StandardizedMessage):
         target_user = msg.flags.get('reply-parent-user-login')  # original message text (reply route)
         target_text = msg.flags.get('reply-parent-msg-body')
@@ -702,6 +733,8 @@ class Plugin(util_bot.Plugin):
         if r'\begin{document}' in target_text:
             txt = LATEX_MINIMAL_DOC_FORMAT + target_text
         else:
+            if msg.user not in self.latex_light_mode:
+                target_text = fr'\darkmode{{{target_text}}}'
             txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
         proc = await asyncio.create_subprocess_shell('sudo -u nobody bash /usr/local/bin/compile_latex.sh',
                                                      stdin=subprocess.PIPE,
@@ -766,6 +799,15 @@ LATEX_MINIMAL_DOC_FORMAT = r'''\documentclass[preview]{standalone}
 \usepackage{ucs}
 \usepackage{fontspec}
 \usepackage[version=4]{mhchem}
+\usepackage{xcolor}
+
+\newcommand{\darkmode}[1]{
+    \colorbox{black}{
+        \textcolor{white} {
+           #1
+        }
+    }
+}
 
 '''
 
