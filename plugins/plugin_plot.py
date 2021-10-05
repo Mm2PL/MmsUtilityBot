@@ -682,12 +682,15 @@ class Plugin(util_bot.Plugin):
         with open(temp_file, 'w') as f:
             f.write(txt)
         print(repr(f'render_latex.tex -output-directory {shlex.quote(prefix)}'))
-        await (
-            await asyncio.create_subprocess_shell(
-                f'pdflatex -output-directory {shlex.quote(prefix)} render_latex.tex',
-                stdin=subprocess.DEVNULL
-            )
-        ).wait()
+        proc = await asyncio.create_subprocess_shell(
+            f'pdflatex -output-directory {shlex.quote(prefix)} render_latex.tex',
+            stdin=subprocess.DEVNULL
+        )
+
+        await proc.wait()
+        if proc.returncode != 0:
+            return f'@{msg.user}, Error while rendering (exit code {proc.returncode}).'
+
         data = b''
         proc = await asyncio.create_subprocess_shell(f'pdftoppm -png {shlex.quote(pdf_output_file)} -r 600',
                                                      stdout=subprocess.PIPE)
