@@ -750,6 +750,7 @@ class Plugin(util_bot.Plugin):
 
 LATEX_DOCUMENT_FORMAT = r'''\documentclass[preview]{standalone}
 \usepackage[utf8x]{inputenc}
+\usepackage{ucs}
 
 \begin{document}
     %REPLACE THIS WITH MESSAGE, PLS THX
