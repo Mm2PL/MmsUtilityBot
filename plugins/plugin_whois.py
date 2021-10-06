@@ -189,7 +189,7 @@ async def command_whois(msg: util_bot.StandardizedMessage):
                                    'User-Agent': util_bot.constants.USER_AGENT
                                }) as request:
         print(request)
-        if request.status == 401:
+        if request.status == 400:
             return f'@{msg.user} Bad username.'
         if request.status == 404:
             return f'@{msg.user} No such user found.'
