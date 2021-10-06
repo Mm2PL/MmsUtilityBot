@@ -75,6 +75,16 @@ class IVRRoles(SimpleNamespace):
         'isStaff': 'staff',
     }
 
+class IVRBadge(SimpleNamespace):
+    set_id: str
+    title: str
+    description: str
+    version: str
+
+    RENAMES = {
+        'setID': 'set_id'
+    }
+
 
 class IVRUser(SimpleNamespace):
     banned: bool
@@ -92,6 +102,7 @@ class IVRUser(SimpleNamespace):
     updated_at: str
     emote_prefix: str
     roles: IVRRoles
+    badges: typing.List[IVRBadge]
 
     RENAMES = {
         'displayName': 'display_name',
@@ -109,6 +120,8 @@ def _object_hook(json_obj):
         return IVRUser(**json_obj)
     elif 'isAffiliate' in json_obj:
         return IVRRoles(**json_obj)
+    elif 'setID' in json_obj:
+        return IVRBadge(**json_obj)
     else:
         return json_obj
 
@@ -178,9 +191,12 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         print(request)
         if request.status == 404:
             return f'@{msg.user} No such user found.'
-        data: IVRUser = await request.json(
+        users: typing.List[IVRUser] = await request.json(
             loads=lambda *largs, **kwargs: json.loads(*largs, **kwargs, object_hook=_object_hook)
         )
+        if len(users) == 0:
+            return f'@{msg.user} No such user found.'
+        data: IVRUser = users[0]
 
         roles = ''
         if data.roles.affiliate:
@@ -188,6 +204,8 @@ async def command_whois(msg: util_bot.StandardizedMessage):
         if data.roles.partner:
             roles += 'partner, '
         # rip site admin flag
+        if any(i.set_id == 'admin' for i in data.badges):
+            roles += 'site admin (badge), '
         # if data.roles.get('isSiteAdmin', False):
         #     roles += 'site admin, '
         if data.roles.staff:
@@ -225,12 +243,12 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             else:
                 last_active = ''
 
-            bot_notes = (f' Prefix: {bot["prefix"] if bot["prefix"] is not None else "<blank>"}, '
+            bot_notes = (f'Prefix: {bot["prefix"] if bot["prefix"] is not None else "<blank>"}, '
                          f'Description: {bot["description"] if bot["description"] is not None else "<blank>"}, '
                          f'Language: {bot["language"] if bot["language"] is not None else "<unknown>"}'
                          f'{last_active}')
 
-        info = (
+        info = [
             f'user {data.display_name}{login}',
             logo_warning,
             f'chat color: {data.chat_color if data.chat_color else "never set"}',
@@ -238,8 +256,13 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             f'roles: {roles}',
             f'id: {data.id}',
             f'bio: {data.bio}' if data.bio is not None else 'empty bio',
-            bot_notes
-        )
+            bot_notes,
+        ]
+        special_warnings = getattr(data, 'special_warning', '')
+        if special_warnings:
+            info.append(special_warnings)
+        if args['verbose']:
+            info.append(f'badges: {", ".join(b.set_id + "/" + b.version for b in data.badges)}')
 
         info_text = ''
         long_text = ''
