@@ -26,6 +26,6 @@ chmod 777 "$PREFIX"
 
 cat > "$INPUT"
 
-xelatex -output-directory "$PREFIX" "$INPUT" || exit 1
+lualatex -output-directory "$PREFIX" "$INPUT" || exit 1
 pdftoppm -png "$OUTPUT" -r 600 > "$PNG_PATH" || exit 2
 chmod 777 -R "$PREFIX"
