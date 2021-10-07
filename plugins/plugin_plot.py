@@ -71,6 +71,14 @@ try:
 except ImportError:
     import plugins.plugin_manager as plugin_manager
 
+util_bot.load_file('plugins/plugin_hastebin.py')
+try:
+    import plugin_hastebin
+except ImportError:
+    from plugins.plugin_hastebin import Plugin as PluginHastebin
+
+    plugin_hastebin: PluginHastebin
+
 NAME = 'plot'
 __meta_data__ = {
     'name': f'plugin_{NAME}',
@@ -765,13 +773,22 @@ class Plugin(util_bot.Plugin):
             log.log('debug', f'Output for pid {proc.pid}: {output}',
                     cause=CAUSE_COMMAND)
         if proc.returncode != 0:
-            error_index_start = output.find('! ')
-            error_index_end = output.find('Type  H <return>  for immediate help.')
-            error = output[error_index_start:error_index_end].replace('\n', ' ').strip()
-            while '  ' in error:
-                error = error.replace('  ', ' ')
-
-            return f'@{msg.user}, Error while rendering (exit code {proc.returncode}): {error}.'
+            count_errors = output.count('! ')
+            small_err_start = output.find('! ')
+            small_err_end = output.find('! Emergency stop.')
+            err = output[small_err_start:small_err_end].replace('\n', ' ').strip()
+            while '  ' in err:
+                err = err.replace('  ', ' ')
+            message_begin = f'@{msg.user}, Error while rendering (exit code {proc.returncode}): '
+            if len(err) + len(message_begin) > 500:
+                return (f'{message_begin}error is too big here is a link: '
+                        f'{plugin_hastebin.hastebin_addr}{await plugin_hastebin.upload(output)}')
+            if count_errors > 1:
+                return (
+                    f'{message_begin}{err} '
+                    f'(whole output: {plugin_hastebin.hastebin_addr}{await plugin_hastebin.upload(output)})'
+                )
+            return f'{message_begin}{err}'
 
         with open(os.path.join(prefix, 'output.png'), 'rb') as f:
             data = f.read()
