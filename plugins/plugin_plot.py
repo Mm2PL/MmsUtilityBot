@@ -786,7 +786,7 @@ class Plugin(util_bot.Plugin):
             if count_errors > 1:
                 return (
                     f'{message_begin}{err} '
-                    f'(whole output: {plugin_hastebin.hastebin_addr}{await plugin_hastebin.upload(output)})'
+                    f'{plugin_hastebin.hastebin_addr}{await plugin_hastebin.upload(output)}'
                 )
             return f'{message_begin}{err}'
 
