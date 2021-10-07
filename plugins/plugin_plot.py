@@ -618,6 +618,11 @@ class Plugin(util_bot.Plugin):
                                      'dankeval'
                                  ])
 
+        plugin_help.create_topic(
+            'latex', 'Usage: latex <latex source>. This command renders LaTeX source to a png.',
+            section=plugin_help.SECTION_COMMANDS
+        )
+
         self.latex_enabled_setting = plugin_manager.Setting(
             self,
             'math.latex_enabled',
