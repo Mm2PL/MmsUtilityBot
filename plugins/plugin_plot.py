@@ -747,7 +747,7 @@ class Plugin(util_bot.Plugin):
             txt = LATEX_MINIMAL_DOC_FORMAT + target_text
         else:
             if msg.user not in self.latex_light_mode:
-                target_text = fr'\darkmode{{{target_text}}}'
+                target_text = f'\\darkmode{{\n{target_text}\n}}'
             txt = LATEX_DOCUMENT_FORMAT.replace('%REPLACE THIS WITH MESSAGE, PLS THX', target_text)
         proc = await asyncio.create_subprocess_shell('sudo -u nobody bash /usr/local/bin/compile_latex.sh',
                                                      stdin=subprocess.PIPE,
