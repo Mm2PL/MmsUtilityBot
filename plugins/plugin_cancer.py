@@ -125,14 +125,14 @@ COOKIE_PATTERN = regex.compile(
     r'(?!you have already claimed)'
 )
 ISSUE_PATTERN = regex.compile(
-    r'(?:\b|^)([^ #:.]*[^/ ])'
+    r'(?:\s|^)([^ #:.]*[^/ ])'
     r'(?:'
     + (
         r'#(?P<issue>\d+)'
         r'|@(?P<commit>[a-zA-Z0-9~^]{4,40})'
     )
     + r')'
-    + r'(?:\b|$)'
+    + r'(?:\s|$)'
 )
 CVE_PATTERN = regex.compile(
     r'(?:\b|^)(?P<cve>CVE)-(?P<year>\d{4})-(?P<number>\d{4,})'
