@@ -23,6 +23,8 @@ from typing import List
 import regex
 from twitchirc import Event
 
+from plugins.utils import arg_parser
+
 try:
     # noinspection PyPackageRequirements
     import main
@@ -109,76 +111,65 @@ class Plugin(main.Plugin):
                         e: BlacklistEntry
                         session.delete(e)
 
-    def _parse_blacklist_args(self, text, msg):
-        kwargs = {
-            'scope': 'global',
-            'user': None,
-            'command': None,
-            'expires': None  # doesn't expire
-        }
-        for word in text.split(' '):
-            word: str
-            sword = word.split(':')
-            if len(sword) == 1:
-                return f'@{msg.user}, Invalid syntax near {word!r}, no ":" in option.'
-            if sword[0] == 'scope':
-                if sword[1].lower() == 'global':
-                    kwargs['scope'] = 'global'
-                    continue
-
-                kwargs['scope'] = []
-                for ch in sword[1].split(','):
-                    ch = ch.lstrip('#').lower()
-                    if ch not in main.bot.channels_connected:
-                        return f'@{msg.user}, Invalid `scope`: {sword[1]!r}, no such channel.'
-                    kwargs['scope'].append(ch)
-            elif sword[0] == 'user':
-                if sword[1].lower() == 'everyone':
-                    kwargs['user'] = True
-                else:
-                    kwargs['user'] = sword[1].lower()
-            elif sword[0] == 'command':
-                if sword[1].lower() == 'all':
-                    kwargs['command'] = True
-                else:
-                    cmd = None
-                    for i in main.bot.commands:
-                        if i.chat_command.lower() == sword[1].lower():
-                            cmd = i.chat_command
-                    if cmd is None:
-                        return f'@{msg.user}, Invalid `command`: {sword[1]!r}. No such command exists.'
-                    else:
-                        kwargs['command'] = cmd
-                    del cmd
-            elif sword[0] == 'expires':
-                if sword[1].lower() == 'never':
-                    kwargs['expires'] = None
-                else:
-                    match = TIMEDELTA_REGEX.match(sword[1])
-                    if match is None:
-                        return f'@{msg.user}, Invalid `expires`: {sword[1]!r}, doesn\'t match regex.'
-                    else:
-                        delta = datetime.timedelta(days=(int(match[1][:-1]) if match[1] is not None else 0),
-                                                   hours=(int(match[2][:-1]) if match[2] is not None else 0),
-                                                   minutes=(int(match[3][:-1]) if match[3] is not None else 0),
-                                                   seconds=(int(match[4][:-1]) if match[4] is not None else 0))
-                        kwargs['expires'] = (datetime.datetime.now()
-                                             + delta)
-
-        return kwargs
-
     def command_manage_blacklists(self, msg: twitchirc.ChannelMessage):
         argv = main.delete_spammer_chrs(msg.text).rstrip(' ').split(' ', 1)
         if len(argv) == 1:
             return f'@{msg.user}, {plugin_help.all_help[plugin_help.SECTION_COMMANDS]["plonk"]}'
         text = argv[1]
-        kw = self._parse_blacklist_args(text, msg)
-        if isinstance(kw, str):
-            return kw
+        try:
+            kw = arg_parser.parse_args(
+                text,
+                {
+                    'scope': str,
+                    'user': str,
+                    'command': str,
+                    'expires': datetime.timedelta
+                },
+                defaults={
+                    'scope': None,
+                    'user': None,
+                    'command': None,
+                    'expires': None
+                }
+            )
+        except arg_parser.ParserError as e:
+            return e.message
+
         if kw['command'] is None:
             return f'@{msg.user}, No `command:...` provided.'
         if kw['user'] is None:
             return f'@{msg.user}, No `user:...` provided.'
+
+        kw['user'] = kw['user'].lower()
+        if kw['user'] == 'everyone':
+            kw['user'] = True
+
+        kw['scope'] = kw['scope'].lower().strip('#')
+        if kw['scope'] != 'global':
+            sc = []
+            for ch in kw['scope'].split(','):
+                ch = ch.lstrip('#').lower()
+                if ch not in main.bot.channels_connected:
+                    return f'@{msg.user}, Invalid `scope`: {kw["scope"]!r}, no such channel.'
+                sc.append(ch)
+            kw['scope'] = sc
+        if kw['command'].lower() == 'all':
+            kw['command'] = True
+        else:
+            cmd = None
+            for i in main.bot.commands:
+                i: main.Command
+                if i.chat_command.lower() == kw['command'] or kw['command'] in i.aliases:
+                    cmd = i.chat_command
+            if cmd is None:
+                return f'@{msg.user}, Invalid `command`: {kw["command"]!r}. No such command exists.'
+            else:
+                kw['command'] = cmd
+            del cmd
+
+        if kw['expires']:
+            kw['expires'] = datetime.datetime.now() + kw['expires']
+
         with main.session_scope() as session:
             if kw['scope'] == 'global':
                 targets = main.User.get_by_name(kw['user'], session) if kw['user'] is not True else None
@@ -240,9 +231,9 @@ class BlacklistMiddleware(twitchirc.AbstractMiddleware):
             return
         message: twitchirc.ChannelMessage = event.data['message']
         command: twitchirc.Command = event.data['command']
-        for bl in blacklists.copy():
+        for bl in blacklists:
             r = bl.check(message, command)
             if r is True:
-                log('info', f'Ignored {message.user}\'s command ({command.chat_command!r}), \n'
-                            f'message: {message.text}')
+                log('info', f'Ignored {message.user}\'s command ({command.chat_command!r}) '
+                            f'because of blacklist {bl.id}, message: {message.text}')
                 event.cancel()

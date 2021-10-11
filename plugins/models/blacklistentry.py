@@ -39,8 +39,6 @@ def get(Base, session_scope, blacklists, expire_queue):
 
         def _check_expire(self):
             if self.expires_on is not None and self.expires_on <= datetime.datetime.now():
-                yasdu.dump('blacklist_testing.json',
-                           comment=f'Testing123, blacklists {blacklists=}, {self=}')
                 blacklists.remove(self)
                 expire_queue.put(self)
 
