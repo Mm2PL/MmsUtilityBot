@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
+import enum
 import re
 import typing
 
@@ -334,6 +335,24 @@ known_converters: typing.Dict[typing.Union[typing.Type, str], typing.Callable] =
 }
 
 
+def _pascal_case_to_multiple_words(word) -> str:
+    output = ''
+    for char in word:
+        if char.isupper():
+            output += ' '
+            char = char.lower()
+        output += char
+    return output
+
+
+def _enum_converter(converter, options, value):
+    for i in converter:
+        if i.name.casefold() == value.casefold():
+            return i
+    raise ParserError(f'Unknown {_pascal_case_to_multiple_words(converter.__name__)} value: {value!r} '
+                      f'Available values are: {", ".join([i.name.casefold() for i in converter])}')
+
+
 def handle_typed_argument(value: str, type_) -> typing.Any:
     converter: type = type_
     options: dict = {}
@@ -353,6 +372,8 @@ def handle_typed_argument(value: str, type_) -> typing.Any:
         return value
     elif converter in known_converters:
         return known_converters[converter](converter, options, value)
+    elif isinstance(converter, enum.EnumMeta):
+        return _enum_converter(converter, options, value)
     elif isinstance(converter, typing.Callable):  # try calling the converter directly as a last ditch effort.
         return converter(value, **options)
     else:
