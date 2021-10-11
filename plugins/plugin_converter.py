@@ -85,7 +85,7 @@ UNITS = {
 
 def create_unit(name: str, aliases: typing.Optional[typing.List[str]] = None, human_name=None):
     UNITS[name] = Unit(name, aliases, human_name)
-    log('info', f'Create unit {name} with aliases {aliases}')
+    log('debug', f'Create unit {name} with aliases {aliases}')
 
 
 create_unit('CELSIUS', aliases=['*c', '*C', 'c', 'C', '°c', '°C', 'celsius'], human_name='°C')
