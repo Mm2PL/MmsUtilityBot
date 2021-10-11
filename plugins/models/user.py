@@ -24,6 +24,8 @@ import twitchirc
 from sqlalchemy.orm import reconstructor
 from twitchirc import ChannelMessage
 
+from util_bot.utils import deprecated
+
 CACHE_EXPIRE_TIME = 15 * 60
 
 
@@ -86,7 +88,7 @@ def get(Base, session_scope, log):
         discord_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)  # unused
         last_known_username = sqlalchemy.Column(sqlalchemy.Text)
 
-        mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
+        mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)  # deprecated
         sub_in_raw = sqlalchemy.Column(sqlalchemy.Text)
 
         # last_active = sqlalchemy.Column(sqlalchemy.DateTime)
@@ -141,7 +143,7 @@ def get(Base, session_scope, log):
             return user
 
         @staticmethod
-        def get_by_message(msg: twitchirc.ChannelMessage, no_create=False, session=None):
+        def get_by_message(msg, no_create=False, session=None):
             if session is None:
                 with session_scope() as s:
                     return User._get_by_message(msg, no_create, s)
@@ -227,27 +229,6 @@ def get(Base, session_scope, log):
             has_state_change = False
             was_changed = False
 
-            if 'moderator/1' in msg.flags['badges'] or 'broadcaster/1' in msg.flags['badges']:
-                if msg.channel not in self.mod_in:
-                    self.add_mod_in(msg.channel)
-                    has_state_change = True
-                    was_changed = True
-            else:
-                if msg.channel in self.mod_in:
-                    self.remove_mod_in(msg.channel)
-                    has_state_change = True
-                    was_changed = True
-            if _is_pleb(msg):
-                if msg.channel not in self.sub_in:
-                    self.remove_sub_in(msg.channel)
-                    has_state_change = True
-                    was_changed = True
-            else:
-                if msg.channel in self.sub_in:
-                    self.add_sub_in(msg.channel)
-                    has_state_change = True
-                    was_changed = True
-
             if msg.user != self.last_known_username:
                 was_changed = True
 
@@ -264,47 +245,14 @@ def get(Base, session_scope, log):
                 }
 
         @property
+        @deprecated
         def mod_in(self):
             return [] if self.mod_in_raw == '' else self.mod_in_raw.replace(', ', ',').split(',')
 
         @property
+        @deprecated
         def sub_in(self):
             return [] if self.sub_in_raw == '' else self.sub_in_raw.replace(', ', ',').split(',')
-
-        def add_sub_in(self, channel):
-            channel = channel.lower()
-            if channel in self.sub_in:
-                return
-            sub_in = self.sub_in
-            sub_in.append(channel)
-            self.sub_in_raw = ', '.join(sub_in)
-
-        def remove_sub_in(self, channel):
-            channel = channel.lower()
-            if channel not in self.sub_in:
-                return
-            sub_in = self.sub_in
-            sub_in.remove(channel)
-            self.sub_in_raw = ', '.join(sub_in)
-
-        def remove_mod_in(self, channel):
-            # print(repr(channel))
-            channel = channel.lower()
-            if channel not in self.mod_in:
-                return
-            mod_in = self.mod_in
-            # print(mod_in)
-            mod_in.remove(channel)
-            # print(mod_in)
-            self.mod_in_raw = ', '.join(mod_in)
-
-        def add_mod_in(self, channel):
-            channel = channel.lower()
-            if channel in self.mod_in:
-                return
-            mod_in = self.mod_in
-            mod_in.append(channel)
-            self.mod_in_raw = ', '.join(mod_in)
 
         def __repr__(self):
             return f'<User {self.last_known_username}, alias {self.id}>'
