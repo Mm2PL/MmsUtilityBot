@@ -219,6 +219,6 @@ def command_convert(msg: twitchirc.ChannelMessage):
     converted = convert_unit(number, unit_from, unit_to)
     if converted == 'F':
         return (f'@{msg.user} Conversion is not possible: conversion '
-                                f'{unit_from}({unit_from.human_name}) to {unit_to}({unit_to.human_name})')
+                f'{unit_from}({unit_from.human_name}) to {unit_to}({unit_to.human_name})')
     else:
         return f'@{msg.user} {number:.2f}{unit_from.human_name} = {converted:.2f}{unit_to.human_name}'
