@@ -126,15 +126,6 @@ def get(Base, session_scope, log):
                 user: User = (session.query(User)
                               .filter(User.twitch_id == msg.flags['user-id'])
                               .first())
-            elif hasattr(msg, 'platform') and msg.platform.name == 'DISCORD':
-                for obj_id, obj_data in User.cache.items():
-                    if obj_data['obj'].discord_id == int(msg.flags['discord-user-id']):
-                        # print(f'load from cache {obj_data}')
-                        return obj_data['obj']
-
-                user: User = (session.query(User)
-                              .filter(User.discord_id == msg.flags['discord-user-id'])
-                              .first())
             else:
                 raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
 
