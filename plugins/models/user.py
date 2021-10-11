@@ -83,7 +83,7 @@ def get(Base, session_scope, log):
         __tablename__ = 'users'
         id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
         twitch_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
-        discord_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)
+        discord_id = sqlalchemy.Column(sqlalchemy.Integer, unique=True)  # unused
         last_known_username = sqlalchemy.Column(sqlalchemy.Text)
 
         mod_in_raw = sqlalchemy.Column(sqlalchemy.Text)
@@ -133,9 +133,6 @@ def get(Base, session_scope, log):
                 if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
                     user = User(twitch_id=msg.flags['user-id'], last_known_username=msg.user, mod_in_raw='',
                                 sub_in_raw='')
-                elif hasattr(msg, 'platform') and msg.platform.name == 'DISCORD':
-                    user = User(twitch_id=None, last_known_username=msg.user, mod_in_raw='',
-                                sub_in_raw='', discord_id=msg.flags['discord-user-id'])
                 else:
                     raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
                 session.add(user)
