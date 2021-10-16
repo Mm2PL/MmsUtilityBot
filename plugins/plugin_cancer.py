@@ -480,7 +480,7 @@ class Plugin(main.Plugin):
             limit_to_channels=[
                 'pajlada'
             ],
-            cooldown=main.CommandCooldown(0, 0, 60, False)
+            cooldown=main.CommandCooldown(1800, 0, 0, True)
         )(self.c_pajas)
         self.c_pajas.matcher_function = (
             lambda msg, cmd: (
