@@ -168,6 +168,8 @@ REPO_MAP = {
 ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
 COMMIT_LINK_FORMAT = 'https://github.com/{repo}/commit/{hash}'
 
+ALERT_MESSAGE = f'\x01ACTION pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} ALERT\x01'
+
 
 class Plugin(main.Plugin):
     _sneeze_cooldown: float
@@ -472,6 +474,19 @@ class Plugin(main.Plugin):
             )
         )
 
+        self.c_pajas = main.bot.add_command(
+            f'pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")}',
+            available_in_whispers=False,
+            limit_to_channels=[
+                'pajlada'
+            ],
+            cooldown=main.CommandCooldown(0, 0, 60, False)
+        )(self.c_pajas)
+        self.c_pajas.matcher_function = (
+            lambda msg, cmd: (
+                msg.text == ALERT_MESSAGE
+            )
+        )
         # endregion
         # endregion
 
@@ -583,6 +598,9 @@ class Plugin(main.Plugin):
 
     def c_asd(self, msg):
         return 'NaM !!!'
+
+    def c_pajas(self, msg: main.StandardizedMessage):
+        return f'PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA'
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         try:
