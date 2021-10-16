@@ -603,7 +603,7 @@ class Plugin(main.Plugin):
         return 'NaM !!!'
 
     def c_pajas(self, msg: main.StandardizedMessage):
-        return f'PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA'
+        return msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True)
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         try:
