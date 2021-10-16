@@ -480,14 +480,11 @@ class Plugin(main.Plugin):
             limit_to_channels=[
                 'pajlada'
             ],
-            cooldown=main.CommandCooldown(0, 0, 60, False),
-            required_permissions=[
-                'cancer.pajas'
-            ]
+            cooldown=main.CommandCooldown(0, 0, 60, False)
         )(self.c_pajas)
         self.c_pajas.matcher_function = (
             lambda msg, cmd: (
-                msg.text == ALERT_MESSAGE
+                    msg.text == ALERT_MESSAGE
             )
         )
         # endregion
@@ -603,7 +600,13 @@ class Plugin(main.Plugin):
         return 'NaM !!!'
 
     def c_pajas(self, msg: main.StandardizedMessage):
-        return msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True)
+        missing_perms = main.bot.acheck_permissions(msg, [
+            'cancer.pajas'
+        ], enable_local_bypass=False)
+        if missing_perms:
+            return None, main.CommandResult.NO_PERMISSIONS
+        return (msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True),
+                main.CommandResult.OK)
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         try:
