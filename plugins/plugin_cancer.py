@@ -604,9 +604,9 @@ class Plugin(main.Plugin):
             'cancer.pajas'
         ], enable_local_bypass=False)
         if missing_perms:
-            return None, main.CommandResult.NO_PERMISSIONS
-        return (msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True),
-                main.CommandResult.OK)
+            return main.CommandResult.NO_PERMISSIONS, None
+        return (main.CommandResult.OK,
+                msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True))
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         try:
