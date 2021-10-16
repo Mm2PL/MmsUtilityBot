@@ -599,8 +599,8 @@ class Plugin(main.Plugin):
     def c_asd(self, msg):
         return 'NaM !!!'
 
-    def c_pajas(self, msg: main.StandardizedMessage):
-        missing_perms = main.bot.acheck_permissions(msg, [
+    async def c_pajas(self, msg: main.StandardizedMessage):
+        missing_perms = await main.bot.acheck_permissions(msg, [
             'cancer.pajas'
         ], enable_local_bypass=False)
         if missing_perms:
