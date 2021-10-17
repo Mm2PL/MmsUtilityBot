@@ -126,15 +126,14 @@ def _object_hook(json_obj):
         return json_obj
 
 
-@util_bot.bot.add_command('mb.whois')
+@util_bot.bot.add_command(
+    'mb.whois',
+    cooldown=util_bot.CommandCooldown(15, 1, 0)
+)
 async def command_whois(msg: util_bot.StandardizedMessage):
     if not bots or bots_invalidates <= time.time():
         await _load_bots()
 
-    cd_state = util_bot.do_cooldown('whois', msg, global_cooldown=10,
-                                    local_cooldown=15)
-    if cd_state:
-        return
     try:
         args = arg_parser.parse_args(util_bot.delete_spammer_chrs(msg.text), {
             'id': int,
