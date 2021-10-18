@@ -817,7 +817,7 @@ class Plugin(util_bot.Plugin):
 
 
 LATEX_MINIMAL_DOC_FORMAT = r'''\documentclass[preview]{standalone}
-%\usepackage[utf8x]{inputenc}
+\usepackage[utf8x]{inputenc}
 \usepackage{ucs}
 \usepackage{fontspec}
 \usepackage[version=4]{mhchem}
