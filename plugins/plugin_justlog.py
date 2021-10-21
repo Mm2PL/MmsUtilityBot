@@ -64,6 +64,14 @@ class Stats:
     messages_processed = 0
 
 
+class JustgrepError(Exception):
+    def __init__(self, errors: List[str]):
+        self.errors = errors
+
+    def __repr__(self):
+        return f'<Justgrep error: {", ".join(self.errors)}>'
+
+
 class Plugin(util_bot.Plugin):
     _current_log_fetch: typing.Optional[asyncio.Task]
     loggers: List['JustLogApi']
@@ -412,10 +420,14 @@ class Plugin(util_bot.Plugin):
                 '-regex', regular_expr.pattern,
                 '-max', str(count)
             ]),
-            stdout=subprocess.PIPE
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
-        lines, _ = (await proc.communicate())
+        lines, stderr = (await proc.communicate())
         lines = lines.decode().split('\n')
+        stderr = stderr.decode().split('\n')
+        if stderr:
+            raise JustgrepError(stderr)
         return lines
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on):
