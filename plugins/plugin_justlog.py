@@ -426,7 +426,7 @@ class Plugin(util_bot.Plugin):
         lines, stderr = (await proc.communicate())
         lines = lines.decode().split('\n')
         stderr = stderr.decode().split('\n')
-        if stderr:
+        if len(stderr) and stderr[0]:
             raise JustgrepError(stderr)
         return lines
 
