@@ -607,11 +607,11 @@ class Plugin(main.Plugin):
             return main.CommandResult.NO_PERMISSIONS, None
 
         previous = None
-        for that_msg in reversed(plugin_chat_cache.cache.get(msg.channel)):
+        for that_msg in plugin_chat_cache.cache.get(msg.channel):
             if that_msg == msg:
                 break
             previous = msg
-        if previous:
+        if previous and '!shuffle' in previous.text:
             return (main.CommandResult.OK,
                     msg.reply(f'FeelsWeirdMan @{previous.user}', True))
         else:
