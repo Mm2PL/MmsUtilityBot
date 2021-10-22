@@ -93,7 +93,8 @@ class PromScrapeMiddleware(twitchirc.AbstractMiddleware):
             self.parent.messages_received.labels(msg.channel).inc()
 
     async def command(self, event: Event) -> None:
-        # msg: util_bot.StandardizedMessage = event.data['message']
+        if event.canceled:
+            return
         cmd: util_bot.Command = event.data['command']
         self.parent.commands_executed.labels(cmd.chat_command).inc()
 
