@@ -37,6 +37,13 @@ try:
     import plugin_plugin_manager as plugin_manager
 except ImportError:
     import plugins.plugin_manager as plugin_manager
+try:
+    import plugin_prometheus
+except ImportError:
+    plugin_prometheus = None
+    if typing.TYPE_CHECKING:
+        import plugin_prometheus as prometheus
+        plugin_prometheus: typing.Optional[prometheus.Plugin]
 
 # noinspection PyUnresolvedReferences
 import twitchirc
@@ -71,6 +78,8 @@ class Plugin(main.Plugin):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.hastebin_addr_setting)
 
     async def upload(self, data: str, expire_date: typing.Optional[datetime.datetime] = None):
+        if plugin_prometheus:
+            plugin_prometheus.hastebins_created.inc()
         params = {}
         if expire_date:
             params['expire_time'] = expire_date.isoformat()

@@ -76,6 +76,10 @@ class Plugin(util_bot.Plugin):
             'Commands executed by name',
             ['command']
         )
+        self.hastebins_created = prom.Counter(
+            'hastebins_created',
+            'Hastebins created'
+        )
 
 
 class PromScrapeMiddleware(twitchirc.AbstractMiddleware):
