@@ -412,7 +412,7 @@ class Plugin(util_bot.Plugin):
 
         proc = await asyncio.create_subprocess_exec(
             'justgrep',
-            shlex.join([
+            [
                 '-channel', channel,
                 '-start', start.strftime(DATE_FORMAT),
                 '-end', end.strftime(DATE_FORMAT),
@@ -420,7 +420,7 @@ class Plugin(util_bot.Plugin):
                 *user_arguments,
                 '-regex', regular_expr.pattern,
                 '-max', str(count)
-            ]),
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
