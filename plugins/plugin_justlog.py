@@ -18,6 +18,7 @@ import dataclasses
 import datetime
 import re
 import shlex
+import signal
 import subprocess
 import typing
 from typing import List
@@ -430,7 +431,8 @@ class Plugin(util_bot.Plugin):
             if len(stderr) and stderr[0]:
                 raise JustgrepError(stderr)
         except asyncio.CancelledError:
-            proc.kill()
+            proc.send_signal(signal.SIGKILL)
+            await proc.communicate()  # wait until it's ded
             raise
         return lines
 
