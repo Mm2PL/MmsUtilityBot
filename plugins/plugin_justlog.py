@@ -95,8 +95,8 @@ class Plugin(util_bot.Plugin):
         plugin_help.add_manual_help_using_command(
             'Searches known JustLog instances. '
             'Usage: _logs regex:"REGULAR EXPRESSION" [user:USERNAME|#USERID] '
-            '[from:DATETIME|lookback:TIMEDELTA] [to:DATETIME] [max:COUNT] '
-            '[channel:USERNAME] [expire:TIMEDELTA]',
+            '[from:DATETIME to:DATETIME|lookback:DURATION] [to:DATETIME] [max:COUNT] '
+            '[channel:USERNAME] [expire:DURATION]',
             aliases=[
                 'mb.logs'
             ]
