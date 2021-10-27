@@ -384,7 +384,7 @@ class Plugin(util_bot.Plugin):
         else:
             link = f'{plugin_hastebin.hastebin_addr}raw/{hastebin_link}'
         return (util_bot.CommandResult.OK,
-                f'Uploaded {len(matched)} filtered messages to hastebin: '
+                f'@{msg.user}, Uploaded {len(matched)} filtered messages to hastebin: '
                 f'{link}')
 
     async def _filter_messages(self, logger: 'JustLogApi', channel,
