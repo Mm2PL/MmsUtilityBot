@@ -17,7 +17,6 @@ import datetime
 import json
 import time
 import typing
-import urllib.parse
 import types
 
 import aiohttp
@@ -74,6 +73,7 @@ class IVRRoles(SimpleNamespace):
         'isPartner': 'partner',
         'isStaff': 'staff',
     }
+
 
 class IVRBadge(SimpleNamespace):
     set_id: str
