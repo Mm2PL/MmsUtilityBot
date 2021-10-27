@@ -17,7 +17,6 @@ import asyncio
 import dataclasses
 import datetime
 import re
-import shlex
 import signal
 import subprocess
 import typing
@@ -412,15 +411,13 @@ class Plugin(util_bot.Plugin):
 
         proc = await asyncio.create_subprocess_exec(
             'justgrep',
-            [
-                '-channel', channel,
-                '-start', start.strftime(DATE_FORMAT),
-                '-end', end.strftime(DATE_FORMAT),
-                '-url', logger.address,
-                *user_arguments,
-                '-regex', regular_expr.pattern,
-                '-max', str(count)
-            ],
+            '-channel', channel,
+            '-start', start.strftime(DATE_FORMAT),
+            '-end', end.strftime(DATE_FORMAT),
+            '-url', logger.address,
+            *user_arguments,
+            '-regex', regular_expr.pattern,
+            '-max', str(count),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
