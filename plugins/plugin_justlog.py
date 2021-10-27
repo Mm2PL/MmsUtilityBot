@@ -410,9 +410,9 @@ class Plugin(util_bot.Plugin):
         else:  # no users
             user_arguments = ()
 
-        proc = await asyncio.create_subprocess_shell(
+        proc = await asyncio.create_subprocess_exec(
+            'justgrep',
             shlex.join([
-                'justgrep',
                 '-channel', channel,
                 '-start', start.strftime(DATE_FORMAT),
                 '-end', end.strftime(DATE_FORMAT),
