@@ -423,11 +423,15 @@ class Plugin(util_bot.Plugin):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        lines, stderr = (await proc.communicate())
-        lines = lines.decode().split('\n')
-        stderr = stderr.decode().split('\n')
-        if len(stderr) and stderr[0]:
-            raise JustgrepError(stderr)
+        try:
+            lines, stderr = (await proc.communicate())
+            lines = lines.decode().split('\n')
+            stderr = stderr.decode().split('\n')
+            if len(stderr) and stderr[0]:
+                raise JustgrepError(stderr)
+        except asyncio.CancelledError:
+            proc.kill()
+            raise
         return lines
 
     async def _hastebin_result(self, matched: List[StandardizedMessage], args, expire_on):
