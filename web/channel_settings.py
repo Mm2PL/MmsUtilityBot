@@ -14,11 +14,15 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import json
+import textwrap
 import time
 import typing
 
 import twitchirc
 from flask import session, abort, Response, jsonify, request, render_template, flash, redirect
+from markupsafe import Markup
+
+from web import tables
 
 try:
     from plugins.models import channelsettings as settings_model
@@ -327,17 +331,40 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             if not can_use:
                 return render_template('no_perms.html')
 
-            def _(setting):
-                return (('[default]' if setting.name not in settings._settings else '')
-                        + json.dumps(settings.get(setting)))
-
-            return render_template(
-                'settings_list.html',
-                all_settings=all_settings,
-                settings=settings,
-                get_setting_value=_,
-                channel_id=channel_id
+            current_scope = 'PER_CHANNEL' if channel_id != -1 else 'GLOBAL'
+            return tables.render_table(
+                'Settings list',
+                [
+                    [
+                        Markup('<em>%s</em>') % setting.owner,
+                        setting.name,
+                        _styled_setting_value(setting, settings),
+                        Markup('<a href="%s/%s">Edit</a>') % (
+                            'global' if channel_id == -1 else channel_id, setting.name
+                        ),
+                        Markup('<br>').join(
+                            setting.help.split('\n')
+                        )
+                    ] for name, setting in all_settings.items()
+                    if setting.scope.name == current_scope
+                ],
+                header=[
+                    ('provided_by', 'Plugin'),
+                    ('name', 'Setting name'),
+                    ('value', 'Value'),
+                    ('actions', 'Actions'),
+                    ('help', 'Help'),
+                ]
             )
+
+    def _styled_setting_value(s, settings) -> Markup:
+        nice_value = (('[default]' if s.name not in settings._settings else '')
+                      + json.dumps(settings.get(s)))
+        value = settings.get(s)
+        if s.setting_type == 'bool':
+            return value
+        else:
+            return Markup('%s') % (nice_value,)
 
     @main_module.app.route('/settings/<int:channel_id>/<setting>')
     def edit_setting_ui(channel_id: int, setting: str):
@@ -370,10 +397,6 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             if not can_use:
                 return render_template('no_perms.html')
 
-            def _(setting):
-                return (('[default]' if setting.name not in settings._settings else '')
-                        + json.dumps(settings.get(setting)))
-
             setting = all_settings.get(setting)
             if setting is None:
                 abort(Response(
@@ -383,14 +406,105 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             flash_message = request.args.get('flash')
             if flash_message:
                 flash(flash_message)
-            return render_template(
-                'edit_setting.html',
-                all_settings=all_settings,
-                settings=settings,
-                get_setting_value=_,
-                setting=setting,
-                channel_id=channel_id
+
+            channel_name_or_global = f'in #{target_user.last_known_username}' if channel_id != -1 else 'global setting'
+            return tables.render_table(
+                f'Edit setting {setting.name} ({channel_name_or_global})',
+                [
+                    [
+                        'Type',
+                        setting.setting_type if setting.setting_type is not None else 'unknown (setting as JSON)'
+                    ],
+                    [
+                        'Current value',
+                        _styled_setting_value(setting, settings)
+                    ],
+                    [
+                        'Default value',
+                        Markup('%s <button onclick="unset();">Set to default</button>') % (setting.default_value,)
+                    ],
+                    [
+                        'Edit value',
+                        _edit_box_for_setting(setting, settings)
+                    ],
+                    [
+                        Markup('<button onclick="submit();">Submit</button>'),
+                        Markup('<a href="../{target}">Back to the list settings.</a>')
+                            .format(target='global' if channel_id == -1 else channel_id)
+                    ]
+                ],
+                header=[
+                    ('key', 'Name'),
+                    ('value', 'Value'),
+                ],
+                extra_markup=_make_edit_setting_js(setting, channel_id, request.args.get('return_to'))
             )
+
+    def _make_edit_setting_js(setting, channel_id, return_to) -> Markup:
+        channel_id_or_global = 'global' if channel_id == -1 else channel_id
+        code = textwrap.dedent(f"""
+        const setting_type = {json.dumps(setting.setting_type)};
+        const setting_name = {json.dumps(setting.name)};
+        const channel_id_or_global = {json.dumps(channel_id_or_global)};
+        const return_to = encodeURIComponent({json.dumps(return_to)});
+        
+        function update_background() {{
+            if (setting_type === 'bool') {{
+                const value_box = document.getElementById("set_setting_value");
+                const value = value_box.checked;
+                console.log(value);
+                if (value) {{
+                    value_box.parentElement.style.background = '#00aa00';
+                }} else {{
+                    value_box.parentElement.style.background = '#aa0000';
+                }}
+            }}
+        }}
+
+        async function submit() {{
+            const value_box = document.getElementById("set_setting_value");
+            const c_id = channel_id_or_global;
+            let value;
+            if (setting_type === 'bool') {{
+                value = value_box.checked;
+            }}
+            else {{
+                value = value_box.value;
+            }}
+            const request = await fetch(`/settings/${{c_id}}/set/${{setting_name}}?value=${{value}}`);
+            window.location = (
+                    `${{window.location.origin}}${{window.location.pathname}}?flash=Value(${{value}}) has been set`
+                    + `&return_to=${{return_to}}`
+            );
+        }}
+
+        async function unset() {{
+            const c_id = channel_id_or_global;
+
+            const request = await fetch(`/settings/${{c_id}}/unset/${{setting.name}}`);
+            window.location = (
+                    `${{window.location.origin}}${{window.location.pathname}}?flash=Value has been unset`
+            );
+        }}
+
+        update_background();
+        """)
+        return Markup('<script type=application/javascript>{}</script>'.format(code))
+
+    def _edit_box_for_setting(setting, settings):
+        if setting.setting_type in ['int', 'float']:
+            return Markup('<input id="set_setting_value" type="number" value="{value}" '
+                          'step={step}>').format(
+                value=settings.get(setting),
+                step='any' if setting.setting_type == 'float' else '1'
+            )
+        elif setting.setting_type == 'bool':
+            return (Markup('<input id="set_setting_value" type="checkbox" {checked} '
+                           'onclick="update_background();">')
+                    .format(checked='checked' if settings.get(setting) else ''))
+        else:
+            return (Markup('<input id="set_setting_value" type="text" value="{value}">')
+                    .format(value=_styled_setting_value(setting, settings)))
 
     @main_module.app.route('/settings/global')
     def _global_setting_ui():

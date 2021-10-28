@@ -50,13 +50,14 @@
     {% for row_index, row in enumerate(data) %}
     <tr>
         {% for index, cell_data in enumerate(row) %}
-        <td class="col_{{ header[index][0] }} row_{{ "even" if row_index % 2 == 0 else "odd" }}">
+        <td style="{{ _custom_style_from_cell_data(cell_data) }}"
+            class="col_{{ header[index][0] }} row_{{ "even" if row_index % 2 == 0 else "odd" }}">
             {{ _format_cell_data(cell_data)}}
-
         </td>
         {% endfor %}
     </tr>
     {% endfor %}
     </tbody>
 </table>
+{{ extra_markup }}
 {% endblock %}

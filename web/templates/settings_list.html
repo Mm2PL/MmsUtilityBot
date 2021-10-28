@@ -56,7 +56,7 @@
             <td class="setting_value">{{ get_setting_value(setting) }}</td>
         {% endif %}
         <td class="setting_edit">
-            <a href="./{{ setting.name }}">Edit</a>
+            <a href="{{ 'global' if channel_id == -1 else channel_id }}/{{ setting.name }}">Edit</a>
         </td>
         <td class="setting_help">
             {% if setting.help %}

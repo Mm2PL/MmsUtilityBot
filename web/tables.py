@@ -32,12 +32,24 @@ def _format_cell_data(value) -> str:
         return Markup(f'<div class=cell_unknown>{escape(repr(value))}</div>')
 
 
-def render_table(title: str, data: List[List[Any]], header: List[Tuple[str, str]]):
+def _custom_style_from_cell_data(value) -> str:
+    if isinstance(value, bool):
+        if value is True:
+            return 'background-color: #00aa00;'
+        else:
+            return 'background-color: #aa0000;'
+    else:
+        return ''
+
+
+def render_table(title: str, data: List[List[Any]], header: List[Tuple[str, str]], extra_markup=None):
     return render_template(
         'table_view.html',
         title=title,
         data=data,
         header=header,
         enumerate=enumerate,  # dirty hack
-        _format_cell_data=_format_cell_data
+        _format_cell_data=_format_cell_data,
+        _custom_style_from_cell_data=_custom_style_from_cell_data,
+        extra_markup=extra_markup if extra_markup else Markup()
     )

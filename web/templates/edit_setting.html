@@ -82,7 +82,7 @@
                             {{ "checked" if settings.get(setting) else "" }}
                            onclick="update_background();">
                 {% else %}
-                    <input id="set_setting_value" type="text" value="{{ settings.get(setting) }}">
+                    <input id="set_setting_value" type="text" value="{{ get_setting_value(setting) }}">
                 {% endif %}
             </td>
         </tr>
