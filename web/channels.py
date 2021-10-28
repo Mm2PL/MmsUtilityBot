@@ -18,7 +18,7 @@ import typing
 from flask import render_template, session, jsonify
 from markupsafe import Markup
 
-import tables
+from . import tables
 
 if typing.TYPE_CHECKING:
     # noinspection PyUnresolvedReferences

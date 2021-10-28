@@ -25,7 +25,7 @@ if typing.TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
     from . import app
 
-import tables
+from . import tables
 
 
 def init(register_endpoint, ipc_conn, main_module, session_scope):

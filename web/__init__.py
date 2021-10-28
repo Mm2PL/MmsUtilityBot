@@ -30,15 +30,9 @@ import typing
 import regex
 import requests
 from flask import Flask, jsonify, abort, redirect, request, Response, session, flash
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 
-try:
-    from web import ipc
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    import ipc
+import util_bot
+from web import ipc
 
 if 'DBADDR' in os.environ:
     base_address = os.environ['DBADDR']
@@ -59,9 +53,10 @@ def save_secrets():
         json.dump(secrets, f)
 
 
-Base = declarative_base()
-db_engine = create_engine(base_address)
-Session = sessionmaker(bind=db_engine)
+util_bot.init_sqlalchemy(base_address)
+Base = util_bot.Base
+Session = util_bot.Session
+
 PAGE_SIZE = 50
 app = Flask(__name__)
 api_endpoints: Dict[str, Callable[[], Union[str, Any]]] = {}
@@ -71,7 +66,7 @@ LINK_PREFIX = '/api'
 
 
 def load_model(name: str):
-    path = os.path.join('..', 'plugins', 'models', name + '.py')
+    path = os.path.join('plugins', 'models', name + '.py')
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -451,47 +446,15 @@ if 'app_id_twitch' not in secrets:
 if 'app_secret_twitch' not in secrets:
     raise RuntimeError('Missing `app_secret_twitch` key in web_secrets.json')
 
-ipc_conn = ipc.Connection('../ipc_server')
+ipc_conn = ipc.Connection('ipc_server')
 ipc_conn.max_recv = 32_768  # should capture even the biggest json message.
 time.sleep(0.5)  # wait for the welcome burst to come in fully.
 ipc_conn.receive()  # receive the welcome burst
 
 # initialize modules
-try:
-    from web import suggestions
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    import suggestions
-
-try:
-    from web import channel_settings
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    import channel_settings
-
-try:
-    from web import channels
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    import channels
-
-try:
-    from web import mailgame
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    import mailgame
-
-try:
-    import plugins.models.user as user_model
-except ImportError:
-    user_model = load_model('user')
-
-User, flush_users = user_model.get(Base, session_scope, print)
+User, flush_users = util_bot.User, util_bot.flush_users
+from web import suggestions, channel_settings, channels, mailgame
 
 this_module = sys.modules[__name__]
 for i in [suggestions, channel_settings, channels, mailgame]:
     i.init(register_endpoint, ipc_conn, this_module, session_scope)
-
-if __name__ == '__main__':
-    app.config['DEBUG'] = True
-    app.run(debug=True, port=8000)

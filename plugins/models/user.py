@@ -245,12 +245,12 @@ def get(Base, session_scope, log):
                 }
 
         @property
-        @deprecated
+        @deprecated()
         def mod_in(self):
             return [] if self.mod_in_raw == '' else self.mod_in_raw.replace(', ', ',').split(',')
 
         @property
-        @deprecated
+        @deprecated()
         def sub_in(self):
             return [] if self.sub_in_raw == '' else self.sub_in_raw.replace(', ', ',').split(',')
 
