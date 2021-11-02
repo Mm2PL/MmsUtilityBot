@@ -59,7 +59,7 @@ def init(register_endpoint, main_module, session_scope):
         global all_settings, settings_next_refresh
         if settings_next_refresh < time.time():
             settings_next_refresh = time.time() + 600
-            resp: bot_pb2.AllSettingsResponse = web.bot_rpc.get_all_settings()
+            resp: bot_pb2.AllSettingsResponse = web.bot_rpc.get_all_settings(bot_pb2.NullRequest())
             _parse_settings(resp.all_settings)
 
     def check_auth(settings: ChannelSettings, s, setting_owner: main_module.User) -> bool:
