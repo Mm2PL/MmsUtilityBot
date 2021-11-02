@@ -22,8 +22,9 @@ import twitchirc
 from flask import session, abort, Response, jsonify, request, render_template, flash, redirect
 from markupsafe import Markup
 
+from util_bot.rpc.compiled import bot_pb2
 from web import tables
-
+import web
 try:
     from plugins.models import channelsettings as settings_model
 
@@ -35,7 +36,7 @@ all_settings = {}
 settings_next_refresh = time.time()
 
 
-def init(register_endpoint, ipc_conn, main_module, session_scope):
+def init(register_endpoint, main_module, session_scope):
     # noinspection PyShadowingNames
     settings_model = main_module.load_model('channelsettings')
     # noinspection PyPep8Naming
@@ -44,30 +45,22 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
     def _prase_setting_scope(scope):
         return settings_model.SettingScope[scope]
 
-    def _parse_settings(data: typing.Dict[str, dict]):
+    def _parse_settings(data):
         for k, v in data.items():
-            setting = Setting(v['owner_name'], v['name'],
-                              v['default_value'] if v['default_value'] != '...' else ...,
-                              _prase_setting_scope(v['scope']),
-                              v['write_defaults'],
-                              v['setting_type'],
-                              help_=v['help'])
+            setting = Setting(v.owner_name, v.name,
+                              v.default_value if v.default_value != '...' else ...,
+                              _prase_setting_scope(v.scope),
+                              v.write_defaults,
+                              v.setting_type,
+                              help_=v.help)
             all_settings[k] = setting
 
     def _refetch_settings():
         global all_settings, settings_next_refresh
         if settings_next_refresh < time.time():
             settings_next_refresh = time.time() + 600
-            ipc_conn.command(b'all_settings')
-            has_received = False
-            while not has_received:
-                msgs = ipc_conn.receive(recv_until_complete=True)
-                for msg in msgs:
-                    if msg[0] == 'json' and msg[1]['source'] == 'all_settings':
-                        all_settings.clear()
-                        _parse_settings(msg[1]['data'])
-                        has_received = True
-                        break
+            resp: bot_pb2.AllSettingsResponse = web.bot_rpc.get_all_settings()
+            _parse_settings(resp.all_settings)
 
     def check_auth(settings: ChannelSettings, s, setting_owner: main_module.User) -> bool:
         uid = session.get('user_id', None)
@@ -212,7 +205,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             settings.update()
             s.add(settings)
             print(settings.channel_alias)
-            ipc_conn.command(f'reload_settings {settings.channel_alias}'.encode())
+            web.bot_rpc.reload_settings(bot_pb2.ChannelRequest(channel_id=settings.channel_alias))
             return jsonify({
                 'status': 200
             })
@@ -281,7 +274,7 @@ def init(register_endpoint, ipc_conn, main_module, session_scope):
             settings.update()
             s.add(settings)
             print(settings.channel_alias)
-            ipc_conn.command(f'reload_settings {settings.channel_alias}'.encode())
+            web.bot_rpc.reload_settings(bot_pb2.ChannelRequest(channel_id=settings.channel_alias))
             return jsonify({
                 'status': 200
             })

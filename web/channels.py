@@ -25,7 +25,7 @@ if typing.TYPE_CHECKING:
     from . import app
 
 
-def init(register_endpoint, ipc_conn, main_module, session_scope):
+def init(register_endpoint, main_module, session_scope):
     if typing.TYPE_CHECKING:
         User = app.User
     else:

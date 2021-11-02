@@ -21,12 +21,12 @@ import inspect
 import json
 import sys
 import textwrap
-import time
 import traceback
 from typing import Dict, Any, Callable, Union, List
 import os
 import typing
 
+import grpc
 import regex
 import requests
 from flask import Flask, jsonify, abort, redirect, request, Response, session, flash
@@ -446,15 +446,16 @@ if 'app_id_twitch' not in secrets:
 if 'app_secret_twitch' not in secrets:
     raise RuntimeError('Missing `app_secret_twitch` key in web_secrets.json')
 
-ipc_conn = ipc.Connection('ipc_server')
-ipc_conn.max_recv = 32_768  # should capture even the biggest json message.
-time.sleep(0.5)  # wait for the welcome burst to come in fully.
-ipc_conn.receive()  # receive the welcome burst
-
 # initialize modules
 User, flush_users = util_bot.User, util_bot.flush_users
 from web import suggestions, channel_settings, channels, mailgame
 
+with open('grpc.json', 'r') as f:
+    grpc_listen_addresses = json.load(f)
+
+from util_bot.rpc.compiled import bot_pb2_grpc
+
+bot_rpc = bot_pb2_grpc.BotStub(grpc.insecure_channel(grpc_listen_addresses[0]))
 this_module = sys.modules[__name__]
 for i in [suggestions, channel_settings, channels, mailgame]:
-    i.init(register_endpoint, ipc_conn, this_module, session_scope)
+    i.init(register_endpoint, this_module, session_scope)

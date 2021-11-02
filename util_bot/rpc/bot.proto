@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+message NullRequest {}
+message NullResponse {}
+
+// Describes the bot rpc
+service Bot {
+  // Returns all the help the bot has.
+  rpc reload_settings(ChannelRequest) returns (OptionMessage) {}
+  rpc get_all_settings(NullRequest) returns (AllSettingsResponse) {}
+}
+message ChannelRequest {
+  int64 channel_id = 1;
+}
+
+message OptionMessage {
+  bool ok = 1;
+  string message = 2;
+}
+
+message AllSettingsResponse {
+  map<string, SettingResponse> all_settings = 1;
+}
+
+message SettingResponse {
+  string owner_name = 1;
+  string name = 2;
+  string default_value = 3;
+  bool write_defaults = 4;
+  string scope = 5;
+  string setting_type = 6;
+  string help = 7;
+}
