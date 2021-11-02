@@ -46,7 +46,7 @@ def init(register_endpoint, main_module, session_scope):
         return settings_model.SettingScope[scope]
 
     def _parse_settings(data):
-        for k, v in data.items():
+        for k, v in dict(data).items():
             setting = Setting(v.owner_name, v.name,
                               v.default_value if v.default_value != '...' else ...,
                               _prase_setting_scope(v.scope),
