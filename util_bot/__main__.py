@@ -40,6 +40,7 @@ from util_bot import (bot, Plugin, reloadables, load_file, flush_users, User, us
 import util_bot
 from util_bot.msg import StandardizedMessage
 from util_bot.pubsub import init_pubsub, PubsubMiddleware
+from util_bot.rpc import init_server
 
 
 @dataclass
@@ -325,6 +326,13 @@ if not os.path.isfile('auth.json'):
 with open('auth.json', 'r') as f:
     other_platform_auth = json.load(f)
 
+try:
+    with open('grpc.json', 'r') as f:
+        grpc_listen_addresses = json.load(f)
+except FileNotFoundError:
+    log('err', 'Missing GRPC listen addresses.')
+    raise
+
 
 async def main():
     global pubsub
@@ -364,6 +372,7 @@ async def main():
             uid = util_bot.twitch_auth.new_api.get_users(login=bot.username.lower())[0].json()['data'][0]['id']
         bot.storage['self_id'] = uid
 
+    await init_server(grpc_listen_addresses)
     await bot.aconnect()
     bot.cap_reqs(False)
 
