@@ -50,6 +50,7 @@ import plugins.models.user as user_model
 from apis.supibot import ApiError, SupibotApi, SupibotAuth, SupibotEndpoint
 from .base_commands import command_join, command_perm, command_part
 from .command import Command, CommandCooldown, CommandResult
+from .languages import LanguageData
 
 
 def make_log_function(plugin_name: str):
