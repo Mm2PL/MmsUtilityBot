@@ -41,7 +41,7 @@ import util_bot
 from util_bot.msg import StandardizedMessage
 from util_bot.pubsub import init_pubsub, PubsubMiddleware
 from util_bot.rpc import init_server
-
+from util_bot import languages
 
 @dataclass
 class Args:
@@ -336,6 +336,7 @@ except FileNotFoundError:
 
 async def main():
     global pubsub
+    languages.load_data()
     auth = {
         Platform.TWITCH: (bot.storage['self_twitch_name'], 'oauth:' + util_bot.twitch_auth.json_data['access_token'])
     }
