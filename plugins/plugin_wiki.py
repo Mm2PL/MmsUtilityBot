@@ -13,10 +13,14 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import dataclasses
+from typing import List, Optional
+
 import aiohttp
 
 import util_bot.languages
 from plugins.utils import arg_parser
+
 try:
     import plugin_plugin_help as plugin_help
 except ImportError:
@@ -62,42 +66,12 @@ class Plugin(util_bot.Plugin):
             return f'@{msg.user}, Usage: wiki "<search text>" [lang:language name]'
         lang: util_bot.LanguageData = args['lang']
         assert lang.iso6391.isalpha(), 'Arbitrary url injection attempt?'
-        api_url = f'https://{lang.iso6391}.wikipedia.org/w/api.php'
+        wiki = MediaWikiAPI(f'https://{lang.iso6391}.wikipedia.org')
+        articles = await wiki.opensearch(args[1])
+        best_matching = articles[0]
+        article = await wiki.get_article(best_matching)
 
-        async with aiohttp.request(
-                'get', api_url,
-                params={
-                    'action': 'opensearch',
-                    # 'profile': 'fuzzy',
-                    'limit': 10,
-                    'search': args[1]
-                }
-        ) as req:
-            data = await req.json()
-            print(repr(data))
-            articles = data[1]
-            best_matching = articles[0]
-        async with aiohttp.request(
-                'get', api_url,
-                params={
-                    'action': 'query',
-                    'format': 'json',
-                    'prop': 'extracts',
-                    'redirects': '1',
-                    'exchars': 1200,
-                    'exintro': 0,
-                    'exlimit': 1,
-                    'explaintext': 1,
-                    'titles': best_matching
-                }
-        ) as req:
-            data = await req.json()
-            print(repr(data))
-            pages = data['query']['pages']
-            page = pages[list(pages.keys())[0]]
-            extract = page['extract']
-
-        out = f'@{msg.user}, https://{lang.iso6391}.wikipedia.org/?curid={page["pageid"]} {extract}'
+        out = f'@{msg.user}, {article.html_url()} {article.extract}'
         return self._clip_message(
             out,
             (499 - len('/w  ') - len(msg.user)) if isinstance(msg, util_bot.StandardizedWhisperMessage)
@@ -115,3 +89,72 @@ class Plugin(util_bot.Plugin):
             else:
                 output += ' ' + word
         return output
+
+
+class MediaWikiAPI:
+    def __init__(self, base_url):
+        self.base_url = base_url
+
+    @property
+    def api_url(self):
+        return self.base_url + '/w/api.php'
+
+    async def opensearch(self, search: str, limit=10) -> List[str]:
+        """
+        Search this MediaWiki instance
+
+        :return: Article names as strings
+        """
+        async with aiohttp.request(
+                'get', self.api_url,
+                params={
+                    'action': 'opensearch',
+                    # 'profile': 'fuzzy',
+                    'limit': limit,
+                    'search': search
+                }
+        ) as req:
+            data = await req.json()
+            print(repr(data))
+            articles = data[1]
+            return articles
+
+    async def get_article(self, title: str) -> 'MediaWikiArticle':
+        async with aiohttp.request(
+                'get', self.api_url,
+                params={
+                    'action': 'query',
+                    'format': 'json',
+                    'prop': 'extracts',
+                    'redirects': '1',
+                    'exchars': 1200,
+                    'exintro': 0,
+                    'exlimit': 1,
+                    'explaintext': 1,
+                    'titles': title
+                }
+        ) as req:
+            data = await req.json()
+            print(repr(data))
+            pages = data['query']['pages']
+            page = pages[list(pages.keys())[0]]
+            return MediaWikiArticle.from_json(page, self)
+
+
+@dataclasses.dataclass
+class MediaWikiArticle:
+    pageid: int
+    ns: int
+    title: str
+    extract: Optional[str]
+    wiki_api: MediaWikiAPI
+
+    @classmethod
+    def from_json(cls, data, wiki_api):
+        return cls(
+            **data,
+            wiki_api=wiki_api
+        )
+
+    def html_url(self):
+        return f'{self.wiki_api.base_url}?cuid={self.pageid}'
