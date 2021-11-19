@@ -110,7 +110,7 @@ class Plugin(util_bot.Plugin):
             if len(output) + len(word) >= length - 3:
                 output += '...'
                 break
-            if i == 1:
+            if i == 0:
                 output = word
             else:
                 output += ' ' + word
