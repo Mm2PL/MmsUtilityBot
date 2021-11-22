@@ -157,4 +157,4 @@ class MediaWikiArticle:
         )
 
     def html_url(self):
-        return f'{self.wiki_api.base_url}?cuid={self.pageid}'
+        return f'{self.wiki_api.base_url}?curid={self.pageid}'
