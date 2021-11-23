@@ -127,7 +127,7 @@ def _object_hook(json_obj):
 
 
 @util_bot.bot.add_command(
-    'mb.whois',
+    'whois',
     cooldown=util_bot.CommandCooldown(15, 1, 0)
 )
 async def command_whois(msg: util_bot.StandardizedMessage):
@@ -282,8 +282,6 @@ async def command_whois(msg: util_bot.StandardizedMessage):
             return ret_val
 
 
-command_whois_alias = plugin_manager.add_conditional_alias('whois', plugin_prefixes.condition_prefix_exists,
-                                                           return_command=True)(command_whois)
 bots: typing.List[dict] = []
 bots_invalidates = time.time()
 
