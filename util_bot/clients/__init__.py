@@ -13,10 +13,10 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from . import twitch
+from . import twitch, irc
 from ..platform import Platform
-
 
 CLIENTS = {
     Platform.TWITCH: twitch.TwitchClient,
+    Platform.IRC: irc.IrcClient,
 }

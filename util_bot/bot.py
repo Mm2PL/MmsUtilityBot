@@ -598,7 +598,17 @@ class Bot(twitchirc.Bot):
         warnings.warn('Assuming platform is Twitch!!!!')
         return twitchirc.ModerationContainer(message_id, user, channel, parent=self)
 
-    async def join(self, channel, platform=Platform.TWITCH):
+    def _parse_channel(self, name: str, platform: Platform) -> Tuple[str, Platform]:
+        if platform == Platform.TWITCH:
+            return name.lower().strip('#'), platform
+        elif platform == Platform.IRC:
+            return name.strip(), platform
+        elif name.startswith('irc:'):
+            return name.replace('irc:', ''), Platform.IRC
+        else:
+            return name.lower(), Platform.TWITCH
+
+    async def join(self, channel: str, platform=None):
         """
         Join a channel.
 
@@ -607,14 +617,16 @@ class Bot(twitchirc.Bot):
         :param channel: Channel you want to join.
         :return: nothing.
         """
-        channel = channel.lower().strip('#')
+        config_name = channel
+        channel, platform = self._parse_channel(channel, platform)
+        twitchirc.log('info', f'Joining {channel!r} on {platform}')
 
         o = await self.acall_middleware('join', dict(channel=channel), True)
         if o is False:
             return
         await self.clients[platform].join(channel)
-        if channel not in self.channels_connected:
-            self.channels_connected.append(channel)
+        if config_name not in self.channels_connected:
+            self.channels_connected.append(config_name)
 
     async def part(self, channel, platform=Platform.TWITCH):
         """

@@ -377,12 +377,11 @@ async def main():
     await bot.aconnect()
     bot.cap_reqs(False)
 
-    if 'channels' in bot.storage.data:
-        for i in bot.storage['channels']:
-            if i in bot.channels_connected:
-                log('info', f'Skipping joining channel: {i}: Already connected.')
-                continue
-            await bot.join(i)
+    for i in bot.storage['channels']:
+        if i in bot.channels_connected:
+            log('info', f'Skipping joining channel: {i}: Already connected.')
+            continue
+        await bot.join(i)
 
     if prog_args.restart_from:
         msg = twitchirc.ChannelMessage(
