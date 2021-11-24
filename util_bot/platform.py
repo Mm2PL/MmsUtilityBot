@@ -20,3 +20,4 @@ import enum
 class Platform(enum.Enum):
     TWITCH = 0
     DISCORD = 1
+    IRC = 2
