@@ -15,6 +15,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import traceback
 import typing
+from collections import defaultdict
 from typing import Dict
 
 import twitchirc
@@ -121,7 +122,7 @@ main.bot.middleware.append(CommandBlacklistMiddleware())
 all_settings: typing.Dict[str, 'Setting'] = {}
 ChannelSettings, Setting = channelsettings_model.get(main.Base, main.session_scope, all_settings)
 
-channel_settings: Dict[str, ChannelSettings] = {}
+channel_settings: Dict[str, ChannelSettings] = defaultdict(lambda: ChannelSettings())
 channel_settings_session = None
 
 
