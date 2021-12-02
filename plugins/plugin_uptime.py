@@ -33,16 +33,16 @@ except ImportError:
 import twitchirc
 
 import twitch_auth
-
+NAME = 'uptime'
 __meta_data__ = {
-    'name': 'plugin_uptime',
+    'name': NAME,
     'commands': [
         'uptime',
         'downtime',
         'title'
     ]
 }
-log = main.make_log_function('uptime')
+log = main.make_log_function(NAME)
 UPTIME_CACHE_EXPIRATION_TIME = 60
 cache_data_lock = asyncio.Lock()
 cached_stream_data: Dict[str, Dict[str, Union[float, Dict[str, str], None]]] = {
