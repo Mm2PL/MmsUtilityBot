@@ -21,7 +21,6 @@ from typing import Dict, Union
 import aiohttp
 from twitchirc import Event
 
-
 try:
     # noinspection PyPackageRequirements
     import main
@@ -46,7 +45,7 @@ __meta_data__ = {
 log = main.make_log_function('uptime')
 UPTIME_CACHE_EXPIRATION_TIME = 60
 cache_data_lock = asyncio.Lock()
-cached_stream_data: Dict[str, Dict[str, Union[float, Dict[str, str]]]] = {
+cached_stream_data: Dict[str, Dict[str, Union[float, Dict[str, str], None]]] = {
     # 'channel': {
     #     'expire': time.monotonic(),
     #     'data': {
@@ -54,13 +53,11 @@ cached_stream_data: Dict[str, Dict[str, Union[float, Dict[str, str]]]] = {
     #     }
     # }
 }
+COOLDOWN = main.CommandCooldown(15, 5, 0)
 
 
-@main.bot.add_command('title', available_in_whispers=False)
+@main.bot.add_command('title', available_in_whispers=False, cooldown=COOLDOWN)
 async def command_title(msg: twitchirc.ChannelMessage):
-    cd_state = main.do_cooldown('title', msg, global_cooldown=30, local_cooldown=60)
-    if cd_state:
-        return
     data = await _fetch_stream_data(msg.channel)
     if 'data' in data and len(data['data']):
         return f'@{msg.user}, {data["data"][0]["title"]}'
@@ -86,29 +83,31 @@ async def _fetch_stream_data(channel, no_refresh=False) -> dict:
     return data
 
 
-@main.bot.add_command('uptime', available_in_whispers=False)
-async def command_uptime(msg: twitchirc.ChannelMessage):
-    cd_state = main.do_cooldown('uptime', msg, global_cooldown=30, local_cooldown=60)
-    if cd_state:
-        return
+async def _get_stream_data(channel: str) -> dict:
     now = time.monotonic()
     async with cache_data_lock:
-        cache = cached_stream_data.get(msg.channel, {
+        cache = cached_stream_data.get(channel, {
             'expire': 0,
             'data': None
         })
 
-        cached_stream_data[msg.channel] = cache
+        cached_stream_data[channel] = cache
         if cache and cache['expire'] > now:
             data = cache['data']
         else:
-            data = await _fetch_stream_data(msg.channel)
+            data = await _fetch_stream_data(channel)
             if data:
                 data = data[0]
                 cache['data'] = data
                 cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
             else:
                 cache['data'] = None
+        return data
+
+
+@main.bot.add_command('uptime', available_in_whispers=False, cooldown=COOLDOWN)
+async def command_uptime(msg: twitchirc.ChannelMessage):
+    data = await _get_stream_data(msg.channel)
 
     if data:
         start_time = datetime.datetime(*(time.strptime(data['started_at'],
@@ -129,7 +128,8 @@ async def _fetch_last_vod_data(channel_id, no_refresh=False):
                                },
                                headers={
                                    'Authorization': f'Bearer {twitch_auth.json_data["access_token"]}',
-                                   'Client-ID': twitch_auth.json_data['client_id']
+                                   'Client-ID': twitch_auth.json_data['client_id'],
+                                   'User-Agent': main.USER_AGENT,
                                }) as video_r:
         if video_r.status == 401 and not no_refresh:
             # get a new oauth token and pray.
@@ -143,30 +143,9 @@ async def _fetch_last_vod_data(channel_id, no_refresh=False):
     return data
 
 
-@main.bot.add_command('downtime', available_in_whispers=False)
+@main.bot.add_command('downtime', available_in_whispers=False, cooldown=COOLDOWN)
 async def command_downtime(msg: twitchirc.ChannelMessage):
-    cd_state = main.do_cooldown('downtime', msg, global_cooldown=30, local_cooldown=60)
-    if cd_state:
-        return
-    now = time.monotonic()
-    async with cache_data_lock:
-        cache = cached_stream_data.get(msg.channel, {
-            'expire': 0,
-            'data': None
-        })
-
-        cached_stream_data[msg.channel] = cache
-        if cache and cache['expire'] > now:
-            data = cache['data']
-        else:
-            data = await _fetch_stream_data(msg.channel)
-            if data:
-                data = data[0]
-                cache['data'] = data
-                cache['expire'] = now + UPTIME_CACHE_EXPIRATION_TIME
-            else:
-                cache['data'] = None
-
+    data = await _get_stream_data(msg.channel)
     if data:
         return f'@{msg.user}, {msg.channel} is live.'
 
