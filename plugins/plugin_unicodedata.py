@@ -15,6 +15,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # noinspection PyUnresolvedReferences
+import typing
 import unicodedata
 
 import util_bot
@@ -45,6 +46,7 @@ class Plugin(util_bot.Plugin):
         super().__init__(module, source)
         self.command_unicode = util_bot.bot.add_command(
             'unicode',
+            cooldown=util_bot.CommandCooldown(1, 0, 0)  # prevent vip spam and that's it
         )(self.command_unicode)
 
     def _explain_char(self, ch, further):
