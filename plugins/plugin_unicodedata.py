@@ -28,6 +28,13 @@ except ImportError:
 
     plugin_hastebin: plugin_hastebin_module.Plugin
     exit(1)
+try:
+    import plugin_chat_cache
+except ImportError:
+    import plugins.plugin_chat_cache as plugin_chat_cache_module
+
+    plugin_chat_cache: plugin_chat_cache_module.Plugin
+    exit(1)
 
 NAME = 'unicodedata'
 __meta_data__ = {
@@ -103,14 +110,17 @@ class Plugin(util_bot.Plugin):
         ])
         return f'{name}: {ch!r} ({info})'
 
-    async def command_unicode(self, msg: util_bot.StandardizedMessage) -> str:
+    async def command_unicode(self, msg: util_bot.StandardizedMessage) \
+            -> typing.Union[str, typing.Tuple[util_bot.CommandResult, str]]:
         txt = msg.text.split(' ', 1)
         if len(txt) < 2:
-            return f'Usage: unicode <bunch of characters> [--verbose]'
+            return (util_bot.CommandResult.OTHER_FAILED,
+                    f'Usage: unicode <bunch of characters> [--verbose]')
         try:
             args = arg_parser.parse_args(
                 txt[1],
                 {
+                    'user': str,
                     'verbose': bool,
                     arg_parser.POSITIONAL: str,
                 },
@@ -124,7 +134,19 @@ class Plugin(util_bot.Plugin):
         except arg_parser.ParserError as e:
             return f'@{msg.user}, {e.message}'
         text = ' '.join(map(lambda pair: pair[1], filter(lambda pair: isinstance(pair[0], int), args.items())))
-        # text = msg.text.split(' ', 1)[1]
+        if args['user']:
+            last_messages = plugin_chat_cache.find_messages(
+                msg.channel,
+                user=args['user'].strip('@,').lower()
+            )
+            if len(last_messages) == 0 or (args['user'] == msg.user and len(last_messages) < 2):
+                return (util_bot.CommandResult.OTHER_FAILED,
+                        f'@{msg.user}, User has no known recent messages.')
+            if args['user'] == msg.user:
+                text = last_messages[-2].text
+            else:
+                text = last_messages[-1].text
+
         explained = [self._explain_char(i, False) for i in text]
         out = ', '.join(explained)
 
