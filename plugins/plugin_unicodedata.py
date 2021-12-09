@@ -128,7 +128,8 @@ class Plugin(util_bot.Plugin):
                 strict_quotes=False,
                 ignore_arg_zero=True,
                 defaults={
-                    'verbose': False
+                    'verbose': False,
+                    'user': None
                 }
             )
         except arg_parser.ParserError as e:
