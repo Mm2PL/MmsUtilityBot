@@ -124,49 +124,6 @@ COOKIE_PATTERN = regex.compile(
     r'(?P<name>[a-z0-9_]+) '
     r'(?!you have already claimed)'
 )
-ISSUE_PATTERN = regex.compile(
-    r'(?:\b|^)([^ #:.]*[^/ ])'
-    r'(?:'
-    + (
-        r'#(?P<issue>\d+)'
-        r'|@(?P<commit>[a-zA-Z0-9~^]{4,40})'
-    )
-    + r')'
-    + r'(?:\b|$)'
-)
-CVE_PATTERN = regex.compile(
-    r'(?:\b|^)(?P<cve>CVE)-(?P<year>\d{4})-(?P<number>\d{4,})'
-)
-REPO_MAP = {
-    'c1': 'fourtf/Chatterino',
-    'c2': 'Chatterino/Chatterino2',
-    'c2a': 'Chatterino/api',
-    'c2api': 'Chatterino/api',
-    'ch2': 'Chatterino/Chatterino2',
-    'ch1': 'fourtf/Chatterino',
-    'c2wiki': 'chatterino/wiki',
-    'ch2wiki': 'chatterino/wiki',
-    'c2w': 'chatterino/wiki',
-    'pb': 'pajbot/pajbot',
-    'pajbot': 'pajbot/pajbot',
-    'pajbot1': 'pajbot/pajbot',
-    'pajbot2': 'pajbot/pajbot2',
-    'pb2': 'pajbot/pajbot2',
-    'pb1': 'pajbot/pajbot',
-    'mm_sutilitybot': 'Mm2PL/MmsUtilityBot',
-    'mmsbot': 'Mm2PL/MmsUtilityBot',
-    'spm': 'Supinic/supibot-package-manager',
-    'supinic.com': 'Supinic/supinic.com',
-    'supi-core': 'Supinic/supi-core',
-    'supicore': 'Supinic/supi-core',
-    'supibot': 'Supinic/supibot',
-    'dankerino': 'Mm2PL/chatterino2',
-    'd2': 'Mm2PL/chatterino2',
-    'dankchat': 'flex3r/DankChat',
-    'dc': 'flex3r/DankChat',
-}
-ISSUE_LINK_FORMAT = 'https://github.com/{repo}/issues/{id}'
-COMMIT_LINK_FORMAT = 'https://github.com/{repo}/commit/{hash}'
 
 ALERT_MESSAGE = f'\x01ACTION pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} ALERT\x01'
 
@@ -187,11 +144,6 @@ class Plugin(main.Plugin):
         return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(self.cookie_optin_setting)
 
     @property
-    def issue_linker_optin(self):
-        return plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name].get(
-            self.issue_linker_optin_setting)
-
-    @property
     def status_every_frames(self):
         return (plugin_manager.channel_settings[plugin_manager.SettingScope.GLOBAL.name]
                 .get(self.status_every_frames_setting))
@@ -203,15 +155,6 @@ class Plugin(main.Plugin):
 
     def _get_pyramid_enabled(self, channel: str):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
-
-    def _issuelinker_enabled_setting_on_load(self, channel_settings: plugin_manager.ChannelSettings):
-
-        is_enabled = channel_settings.get(self.issuelinker_enabled_setting)
-        username = channel_settings.channel.last_known_username
-        if is_enabled and username not in self._issue_linker_channels:
-            self._issue_linker_channels.append(username)
-        elif not is_enabled and username in self._issue_linker_channels:
-            self._issue_linker_channels.remove(username)
 
     async def _at_detection(self, msg: main.StandardizedMessage):
         if msg.text.startswith(('!vanish', '$vanish')):
@@ -225,7 +168,6 @@ class Plugin(main.Plugin):
 
         self._sneeze_cooldown = time.time()
         self.storage = main.PluginStorage(self, main.bot.storage)
-        self._issue_linker_channels = []
 
         # region Settings
         self.timeout_setting = plugin_manager.Setting(
@@ -252,27 +194,9 @@ class Plugin(main.Plugin):
             help_='Toggles if the mb.pyramid command is enabled in the channel.'
         )
 
-        self.issuelinker_enabled_setting = plugin_manager.Setting(
-            self,
-            'cancer.issuelinker_enabled',
-            default_value=False,
-            scope=plugin_manager.SettingScope.PER_CHANNEL,
-            write_defaults=True,
-            help_='Toggles if the issue linker is enabled in the channel. Also requires user opt-in. '
-                  'See _help issuelinker.',
-            on_load=self._issuelinker_enabled_setting_on_load
-        )
-
         self.cookie_optin_setting = plugin_manager.Setting(
             self,
             'cancer.cookie_optin',
-            default_value=[],
-            scope=plugin_manager.SettingScope.GLOBAL,
-            write_defaults=True
-        )
-        self.issue_linker_optin_setting = plugin_manager.Setting(
-            self,
-            'cancer.issue_linker_optin',
             default_value=[],
             scope=plugin_manager.SettingScope.GLOBAL,
             write_defaults=True
@@ -299,11 +223,6 @@ class Plugin(main.Plugin):
             cooldown=main.CommandCooldown(10, 5, 0)
         )(self.c_cookie_optin)
 
-        self.c_issue_optin = main.bot.add_command(
-            'issuelinker',
-            cooldown=main.CommandCooldown(10, 5, 0)
-        )(self.c_issue_optin)
-        self.c_issue_optin.limit_to_channels = self._issue_linker_channels  # ref
         self.command_pyramid = main.bot.add_command(
             'mb.pyramid',
             required_permissions=['cancer.pyramid'],
@@ -384,10 +303,6 @@ class Plugin(main.Plugin):
                                  ])
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will be reminded to eat '
                                                   'cookies. Usage: cookie', None)(self.c_cookie_optin)
-        plugin_help.add_manual_help_using_command('Add yourself to the list of people who will have links issue '
-                                                  'posted when an issue is mentioned. Format is (REPO)?#NUMBER. '
-                                                  'Usage: issuelinker',
-                                                  None)(self.c_issue_optin)
         plugin_help.add_manual_help_using_command('Make a pyramid out of an emote or text. '
                                                   'Usage: pyramid <size> <text...>',
                                                   None)(self.command_pyramid)
@@ -440,17 +355,6 @@ class Plugin(main.Plugin):
             lambda msg, cmd: (msg.channel in ['supinic', 'mm2pl']
                               and msg.user in ['thepositivebot', 'mm2pl']
                               and msg.text.startswith('\x01ACTION [Cookies]'))
-        )
-        self.c_link_issue = main.bot.add_command(
-            'issue link detection',
-            cooldown=main.CommandCooldown(5, 1, 0)  # 1s channel cooldown to avoid bots triggering it
-        )(self.c_link_issue)
-        self.c_link_issue.limit_to_channels = self._issue_linker_channels  # ref
-        self.c_link_issue.matcher_function = (
-            lambda msg, cmd: (
-                    ('#' in msg.text or '@' in msg.text) and ISSUE_PATTERN.search(msg.text)
-                    or ('CVE-' and CVE_PATTERN.search(msg.text))
-            )
         )
         self._ps_sneeze = main.bot.add_command(
             '[ps sneeze integration]',
