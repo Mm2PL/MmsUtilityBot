@@ -32,7 +32,6 @@ import requests
 from flask import Flask, jsonify, abort, redirect, request, Response, session, flash
 
 import util_bot
-from web import ipc
 
 if 'DBADDR' in os.environ:
     base_address = os.environ['DBADDR']
