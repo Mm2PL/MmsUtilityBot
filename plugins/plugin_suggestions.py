@@ -49,13 +49,6 @@ except ImportError:
     import plugins.plugin_prefixes as plugin_prefixes
 
     exit(1)
-main.load_file('plugins/plugin_ipc.py')
-try:
-    import plugin_plugin_ipc as plugin_ipc
-except ImportError:
-    import plugins.plugin_ipc as plugin_ipc
-
-    exit(1)
 import plugins.models.suggestion as suggestion_model
 
 __meta_data__ = {
