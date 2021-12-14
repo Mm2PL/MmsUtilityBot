@@ -13,44 +13,21 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import typing
 
-try:
-    # noinspection PyPackageRequirements
-    import main
+import util_bot
 
-except ImportError:
-    import util_bot as main
-
-    exit()
-# noinspection PyUnresolvedReferences
-import twitchirc
 NAME = 'template_plugin'
 __meta_data__ = {
-    'name': f'plugin_{NAME}',
-    'commands': [
-    ]
+    'name': NAME,
+    'commands': []
 }
-log = main.make_log_function(NAME)
+log = util_bot.make_log_function(NAME)
 
 
-class Plugin(main.Plugin):
+class Plugin(util_bot.Plugin):
+    no_reload = False
+    name = NAME
+    commands = []
+
     def __init__(self, module, source):
         super().__init__(module, source)
-
-    @property
-    def no_reload(self):
-        return False
-
-    @property
-    def name(self) -> str:
-        return NAME
-
-    @property
-    def commands(self) -> typing.List[str]:
-        return super().commands
-
-    @property
-    def on_reload(self):
-        return super().on_reload
-
