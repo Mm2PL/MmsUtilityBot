@@ -364,3 +364,6 @@ def init_twitch_auth():
     # noinspection PyUnresolvedReferences
     import twitch_auth as _ta
     twitch_auth = _ta
+
+
+other_platform_auth = {}

@@ -324,7 +324,7 @@ if not os.path.isfile('auth.json'):
     exit(1)
 
 with open('auth.json', 'r') as f:
-    other_platform_auth = json.load(f)
+    util_bot.other_platform_auth = json.load(f)
 
 try:
     with open('grpc.json', 'r') as f:
@@ -344,8 +344,8 @@ async def main():
     for plat in Platform:
         if plat in auth:
             continue
-        if plat.name.casefold() in other_platform_auth:
-            auth[plat] = other_platform_auth[plat.name.casefold()]
+        if plat.name.casefold() in util_bot.other_platform_auth:
+            auth[plat] = util_bot.other_platform_auth[plat.name.casefold()]
         else:
             log('warn', f'Failed to load auth for {plat.name} from auth file. Key: {plat.name.casefold()!r}')
             wait = True
