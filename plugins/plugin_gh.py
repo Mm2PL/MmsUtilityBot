@@ -49,30 +49,41 @@ CVE_PATTERN = regex.compile(
     r'(?:\b|^)(?P<cve>CVE)-(?P<year>\d{4})-(?P<number>\d{4,})'
 )
 REPO_MAP = {
+    'chatterino1': 'fourtf/Chatterino',
+    'chatterino2': 'Chatterino/Chatterino2',
+
     'c1': 'fourtf/Chatterino',
     'c2': 'Chatterino/Chatterino2',
+    'ch1': 'fourtf/Chatterino',
+    'ch2': 'Chatterino/Chatterino2',
+    'd2': 'Mm2PL/chatterino2',
+
     'c2a': 'Chatterino/api',
     'c2api': 'Chatterino/api',
-    'ch2': 'Chatterino/Chatterino2',
-    'ch1': 'fourtf/Chatterino',
+
     'c2wiki': 'chatterino/wiki',
     'ch2wiki': 'chatterino/wiki',
     'c2w': 'chatterino/wiki',
-    'pb': 'pajbot/pajbot',
+
     'pajbot': 'pajbot/pajbot',
     'pajbot1': 'pajbot/pajbot',
     'pajbot2': 'pajbot/pajbot2',
-    'pb2': 'pajbot/pajbot2',
+    'pajbot3': 'pajbot/pajbot3',
+
+    'pb': 'pajbot/pajbot',
     'pb1': 'pajbot/pajbot',
+    'pb2': 'pajbot/pajbot2',
+    'pb3': 'pajbot/pajbot3',
+
     'mm_sutilitybot': 'Mm2PL/MmsUtilityBot',
     'mmsbot': 'Mm2PL/MmsUtilityBot',
+
     'spm': 'Supinic/supibot-package-manager',
     'supinic.com': 'Supinic/supinic.com',
     'supi-core': 'Supinic/supi-core',
     'supicore': 'Supinic/supi-core',
     'supibot': 'Supinic/supibot',
     'dankerino': 'Mm2PL/chatterino2',
-    'd2': 'Mm2PL/chatterino2',
     'dankchat': 'flex3r/DankChat',
     'dc': 'flex3r/DankChat',
 }
