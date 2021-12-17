@@ -137,7 +137,9 @@ class Plugin(util_bot.Plugin):
         )(self.c_issue_optin)
         self.c_issue_optin.limit_to_channels = self._issue_linker_channels  # ref
         plugin_help.add_manual_help_using_command('Add yourself to the list of people who will have links issue '
-                                                  'posted when an issue is mentioned. Format is (REPO)?#NUMBER. '
+                                                  'posted when an issue is mentioned. Format is '
+                                                  r'(owner/repo|repo_alias)#issue_number. '
+                                                  r'CVE-year-number is also linked.'
                                                   'Usage: issuelinker',
                                                   None)(self.c_issue_optin)
 
