@@ -157,7 +157,7 @@ class Plugin(main.Plugin):
         return plugin_manager.channel_settings[channel].get(self.pyramid_enabled_setting) is True
 
     async def _at_detection(self, msg: main.StandardizedMessage):
-        if msg.text.startswith(('!vanish', '$vanish')):
+        if regex.match(r'(?i)^[!$]vanish @?mm_sutilitybot$', msg.text):
             return f"{msg.text.split(' ', 1)[0]} {msg.user} :)"
         else:
             return f'{msg.user} NaM'
@@ -327,7 +327,6 @@ class Plugin(main.Plugin):
         self._at_detection.matcher_function = (
             lambda msg, cmd: (
                 msg.platform == main.Platform.TWITCH and (
-                    # implicit return here ↓
                     main.bot.clients[main.Platform.TWITCH].connection.username.casefold() in msg.text.casefold()
                 )
             )
