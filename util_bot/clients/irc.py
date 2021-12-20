@@ -29,6 +29,7 @@ from ..platform import Platform
 _BaseIrc = pydle.featurize(pydle.features.IRCv3_1Support)
 
 NETWORK_ID_KEY = 'internal-network-id'
+IRC_ORIG_MESSAGE_KEY = 'internal-orig-msg'
 
 
 def convert_irc_to_standardized(
@@ -59,6 +60,9 @@ def convert_irc_to_standardized(
                     source_message=i,
                 )
             msg.flags[NETWORK_ID_KEY] = network_id
+
+            # noinspection PyTypeChecker
+            msg.flags[IRC_ORIG_MESSAGE_KEY] = i
             output.append(msg)
     return output
 
