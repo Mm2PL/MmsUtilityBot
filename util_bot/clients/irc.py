@@ -162,7 +162,8 @@ class IrcClient(AbstractClient):
 
     def _network_id_from_msg(self, msg):
         in_reply_to = msg.flags.get('in_reply_to')
-        network_id: typing.Optional[int] = msg.flags.get(NETWORK_ID_KEY, in_reply_to and in_reply_to.flags[NETWORK_ID_KEY])
+        default = in_reply_to.flags[NETWORK_ID_KEY] if in_reply_to else None
+        network_id: typing.Optional[int] = msg.flags.get(NETWORK_ID_KEY, default)
         return network_id
 
     async def send(self, msg):
@@ -202,6 +203,6 @@ class IrcClient(AbstractClient):
                       msg: typing.Union[util_bot.StandardizedWhisperMessage, util_bot.StandardizedMessage]) -> str:
         assert msg.platform == self.platform, 'what the fuck?'
         network_id = self._network_id_from_msg(msg)
-        if not network_id:
+        if network_id is None:
             raise ValueError('channel_ident called on a message which does not have any network identification')
         return f'irc:{network_id}:#{msg.channel}'
