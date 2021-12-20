@@ -15,6 +15,9 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import abc
+import typing
+
+import util_bot
 
 
 class AbstractClient(abc.ABC):
@@ -56,3 +59,10 @@ class AbstractClient(abc.ABC):
     async def reconnect(self):
         await self.disconnect()
         await self.connect()
+
+    @abc.abstractmethod
+    def channel_ident(
+            self,
+            msg  # type: typing.Union[util_bot.StandardizedWhisperMessage, util_bot.StandardizedMessage]
+    ) -> str:
+        ...

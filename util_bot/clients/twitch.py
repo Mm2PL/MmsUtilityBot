@@ -89,6 +89,10 @@ class TwitchClient(AbstractClient):
         self.auth = (self.auth[0], 'oauth:' + util_bot.twitch_auth.json_data['access_token'])
         await self.connect()
 
+    def channel_ident(self, msg):
+        assert msg.platform == self.platform, 'what the fuck?'
+        return msg.channel
+
 
 def convert_standarized_to_twitchirc(msg: typing.Union[StandardizedMessage, StandardizedWhisperMessage]) \
         -> typing.Union[twitchirc.ChannelMessage, twitchirc.WhisperMessage]:

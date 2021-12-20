@@ -18,6 +18,7 @@ import typing
 
 import twitchirc
 
+import util_bot
 from util_bot.platform import Platform
 
 
@@ -77,6 +78,10 @@ class StandardizedMessage(twitchirc.ChannelMessage):
     def user_mention(self):
         return self.parent.clients[self.platform].format_mention(self)
 
+    @property
+    def channel_ident(self):
+        return util_bot.bot.clients[self.platform].channel_ident(self)
+
 
 class StandardizedWhisperMessage(twitchirc.WhisperMessage):
     def __init__(self, user_from, user_to, text, platform: Platform,
@@ -110,3 +115,7 @@ class StandardizedWhisperMessage(twitchirc.WhisperMessage):
                                          platform=self.platform, flags=None, outgoing=True)
         new.flags['in_reply_to'] = self
         return new
+
+    @property
+    def channel_ident(self):
+        return util_bot.bot.clients[self.platform].channel_ident(self)
