@@ -77,10 +77,10 @@ class CooldownOverrideMiddleware(twitchirc.AbstractMiddleware):
     def command(self, event: Event) -> None:
         cmd: main.Command = event.data.get('command')
         msg: main.StandardizedMessage = event.data.get('message')
-        s = plugin_manager.channel_settings[msg.channel].get('disable_channel_cooldown')
+        s = plugin_manager.channel_settings[msg.channel_ident].get('disable_channel_cooldown')
         if s:
             per_channel_key, _, _ = cmd.cooldown_keys(msg)
-            legacy_global_cooldown = f'global_{msg.channel}_{cmd.chat_command}'
+            legacy_global_cooldown = f'global_{msg.channel_ident}_{cmd.chat_command}'
             if legacy_global_cooldown in main.cooldowns:
                 del main.cooldowns[legacy_global_cooldown]
             if per_channel_key in main.cooldowns:
