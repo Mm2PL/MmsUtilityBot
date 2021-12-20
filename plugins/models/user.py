@@ -25,6 +25,7 @@ from sqlalchemy.orm import reconstructor
 from twitchirc import ChannelMessage
 
 from util_bot.utils import deprecated
+import util_bot
 
 CACHE_EXPIRE_TIME = 15 * 60
 
@@ -119,7 +120,8 @@ def get(Base, session_scope, log):
         def _get_by_message(msg, no_create, session):
             User.expire_caches()
             # print(f'get by message {msg}')
-            if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
+            # if (hasattr(msg, 'platform') and msg.platform.name == 'TWITCH') or not hasattr(msg, 'platform'):
+            if isinstance(msg, util_bot.StandardizedMessage) and msg.platform == util_bot.Platform.TWITCH:
                 for obj_id, obj_data in User.cache.items():
                     if obj_data['obj'].twitch_id == int(msg.flags['user-id']):
                         # print(f'load from cache {obj_data}')
@@ -128,6 +130,8 @@ def get(Base, session_scope, log):
                 user: User = (session.query(User)
                               .filter(User.twitch_id == msg.flags['user-id'])
                               .first())
+            elif isinstance(msg, util_bot.StandardizedMessage) and msg.platform == util_bot.Platform.IRC:
+                return None  # can't make a user on irc yet
             else:
                 raise RuntimeError('this shouldn\'t happen: bad message, fetching user')
 
