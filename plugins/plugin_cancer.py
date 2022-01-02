@@ -540,6 +540,22 @@ class Plugin(main.Plugin):
                     'sobel': bool,
                     'resize': bool
                 },
+                defaults={
+                    'resize': True,
+                    'sensitivity_r': 2,
+                    'sensitivity_g': 2,
+                    'sensitivity_b': 2,
+                    'sensitivity_a': 1,
+
+                    'url': ...,
+                    'emote': ...,
+                    'size_percent': ...,
+                    'max_y': ...,
+                    'pad_x': ...,
+                    'reverse': False,
+                    'hastebin': False,
+                    'sobel': False,
+                },
                 strict_escapes=True,
                 strict_quotes=True
             )
@@ -554,25 +570,13 @@ class Plugin(main.Plugin):
                     f'Error: You are missing the {",".join(missing_args)} '
                     f'argument{"s" if len(missing_args) > 1 else ""} to run this command.')
 
-        if args['resize'] is ...:
-            args['resize'] = True
-
         if args['url'] is not ... and args['emote'] is not ...:
             return main.CommandResult.OTHER_FAILED, f'@{msg.user}, cannot provide both an emote name and a url.'
 
-        num_defined = sum([args[f'sensitivity_{i}'] is not Ellipsis for i in 'rgb'])
-        alpha = args['sensitivity_a'] if args['sensitivity_a'] is not Ellipsis else 1
-        if num_defined == 3:
-            sens: typing.Tuple[float, float, float, float] = (args['sensitivity_r'], args['sensitivity_g'],
-                                                              args['sensitivity_b'], alpha)
-            is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
-            if is_zero:
-                return main.CommandResult.OTHER_FAILED, f'Error: Sensitivity cannot be zero. MEGADANK'
-        elif num_defined == 0:
-            sens = (2, 2, 2, 1)
-        else:
-            return (main.CommandResult.OTHER_FAILED,
-                    f'Error: you need to define either all sensitivity fields (r, g, b, a) or none.')
+        is_zero = bool(sum([args[f'sensitivity_{i}'] == 0 for i in 'rgba']))
+        if is_zero:
+            return main.CommandResult.OTHER_FAILED, f'Error: Sensitivity cannot be zero. MEGADANK'
+
         if args['size_percent'] is not ... and args['max_y'] is not ...:
             return (main.CommandResult.OTHER_FAILED,
                     f'Error: you cannot provide the size percentage and maximum height at the same time.')
@@ -620,7 +624,19 @@ class Plugin(main.Plugin):
         img = await braille.download_image(url)
         img: Image.Image
         if img.format.lower() != 'gif':
-            o = await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
+            o = await self._single_image_to_braille(
+                args,
+                img,
+                max_x,
+                max_y,
+                (
+                    args['sensitivity_r'],
+                    args['sensitivity_g'],
+                    args['sensitivity_b'],
+                    args['sensitivity_a'],
+                ),
+                size_percent
+            )
         else:
             # region gifs
             missing_permissions = await main.bot.acheck_permissions(msg, ['cancer.braille.gif'],
@@ -639,7 +655,19 @@ class Plugin(main.Plugin):
                     frame += 1
                     o += f'\nFrame {frame}\n'
                     frame_start = time.time()
-                    o += await self._single_image_to_braille(args, img, max_x, max_y, sens, size_percent)
+                    o += await self._single_image_to_braille(
+                        args,
+                        img,
+                        max_x,
+                        max_y,
+                        (
+                            args['sensitivity_r'],
+                            args['sensitivity_g'],
+                            args['sensitivity_b'],
+                            args['sensitivity_a'],
+                        ),
+                        size_percent
+                    )
                     time_taken = round(time.time() - start_time)
                     frame_time = time.time() - frame_start
                     if frame_time > 1:
@@ -659,8 +687,8 @@ class Plugin(main.Plugin):
             # endregion
 
         sendable = ' '.join(o.split('\n')[1:])
-        if args['hastebin'] is not Ellipsis or len(sendable) > 500:
-            return (f'{"This braille was too big to be posted." if not args["hastebin"] is not Ellipsis else ""} '
+        if args['hastebin'] or len(sendable) > 500:
+            return (f'{"This braille was too big to be posted." if not args["hastebin"] else ""} '
                     f'Here\'s a link to a hastebin: '
                     f'{plugin_hastebin.hastebin_addr}'
                     f'{await plugin_hastebin.upload(o)}')
@@ -680,11 +708,11 @@ class Plugin(main.Plugin):
             )
         else:
             o = ''
-        if args['sobel'] is not ... and args['sobel']:
+        if args['sobel']:
             img = img.filter(ImageFilter.FIND_EDGES)
         o += await braille.to_braille_from_image(
             img,
-            reverse=True if args['reverse'] is not Ellipsis else False,
+            reverse=args['reverse'],
             size_percent=size_percent,
             max_x=max_x,
             max_y=max_y,
