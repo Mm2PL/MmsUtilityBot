@@ -249,8 +249,11 @@ async def command_whois(msg: util_bot.StandardizedMessage):
                          f'Language: {bot["language"] if bot["language"] is not None else "<unknown>"}'
                          f'{last_active}')
 
+        user = f'user {data.display_name}{login}'
+        if ' ' in data.display_name:
+            user = f'user {data.display_name!r}{login}'
         info = [
-            f'user {data.display_name}{login}',
+            user,
             logo_warning,
             f'chat color: {data.chat_color if data.chat_color else "never set"}',
             f'account created at {created_on}',
