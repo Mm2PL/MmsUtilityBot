@@ -125,7 +125,7 @@ COOKIE_PATTERN = regex.compile(
     r'(?!you have already claimed)'
 )
 
-ALERT_MESSAGE = f'\x01ACTION pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} ALERT\x01'
+#ALERT_MESSAGE = f'\x01ACTION pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} ALERT\x01'
 
 
 class Plugin(main.Plugin):
@@ -356,19 +356,19 @@ class Plugin(main.Plugin):
             )
         )
 
-        self.c_pajas = main.bot.add_command(
-            f'pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")}',
-            available_in_whispers=False,
-            limit_to_channels=[
-                'pajlada'
-            ],
-            cooldown=main.CommandCooldown(1800, 0, 0, True)
-        )(self.c_pajas)
-        self.c_pajas.matcher_function = (
-            lambda msg, cmd: (
-                    msg.text == ALERT_MESSAGE
-            )
-        )
+        #self.c_pajas = main.bot.add_command(
+        #    f'pajaS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")}',
+        #    available_in_whispers=False,
+        #    limit_to_channels=[
+        #        'pajlada'
+        #    ],
+        #    cooldown=main.CommandCooldown(1800, 0, 0, True)
+        #)(self.c_pajas)
+        #self.c_pajas.matcher_function = (
+        #    lambda msg, cmd: (
+        #            msg.text == ALERT_MESSAGE
+        #    )
+        #)
         # endregion
         # endregion
 
@@ -481,24 +481,24 @@ class Plugin(main.Plugin):
     def c_asd(self, msg):
         return 'NaM !!!'
 
-    async def c_pajas(self, msg: main.StandardizedMessage):
-        missing_perms = await main.bot.acheck_permissions(msg, [
-            'cancer.pajas'
-        ], enable_local_bypass=False)
-        if missing_perms:
-            return main.CommandResult.NO_PERMISSIONS, None
+    #async def c_pajas(self, msg: main.StandardizedMessage):
+    #    missing_perms = await main.bot.acheck_permissions(msg, [
+    #        'cancer.pajas'
+    #    ], enable_local_bypass=False)
+    #    if missing_perms:
+    #        return main.CommandResult.NO_PERMISSIONS, None
 
-        previous = None
-        for that_msg in plugin_chat_cache.cache.get(msg.channel):
-            if that_msg == msg:
-                break
-            previous = msg
-        if previous and '!shuffle' in previous.text:
-            return (main.CommandResult.OK,
-                    msg.reply(f'FeelsWeirdMan @{previous.user}', True))
-        else:
-            return (main.CommandResult.OK,
-                    msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True))
+    #    previous = None
+    #    for that_msg in plugin_chat_cache.cache.get(msg.channel):
+    #        if that_msg == msg:
+    #            break
+    #        previous = msg
+    #    if previous and '!shuffle' in previous.text:
+    #        return (main.CommandResult.OK,
+    #                msg.reply(f'FeelsWeirdMan @{previous.user}', True))
+    #    else:
+    #        return (main.CommandResult.OK,
+    #                msg.reply(f'/me PAJAS {unicodedata.lookup("POLICE CARS REVOLVING LIGHT")} O KURWA', True))
 
     async def c_braillefy(self, msg: twitchirc.ChannelMessage):
         try:
