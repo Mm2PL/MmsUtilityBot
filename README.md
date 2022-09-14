@@ -1,3 +1,7 @@
+# Archival
+This version of the bot has been replaced with a go rewrite because the code became unmaintainable and even unrunnable on newer python versions.
+As it currently serves no real use, I'll be archiving this repo.
+
 # Mm's utility bot
 This is a code repository of the [Twitch bot](https://www.twitch.tv/mm_sutilitybot).
 
